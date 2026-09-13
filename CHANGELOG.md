@@ -12,6 +12,8 @@ before it lands in a release; the release tag simply closes an
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-13
+
 ### Added
 
 - Documentation site under `docs/` served offline by `zreview docs` and
@@ -81,4 +83,5 @@ number and date, e.g.:
 cycle. Link references live at the bottom of the file.
 -->
 
-[Unreleased]: https://github.com/shubam-disseqt/z-code-reviewer/compare/HEAD...HEAD
+[Unreleased]: https://github.com/shubam-disseqt/z-code-reviewer/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/shubam-disseqt/z-code-reviewer/releases/tag/v0.1.0

@@ -80,12 +80,14 @@ Phase 9 hardening).
 - **Pending** — v0.1.0 tagged (release step; not part of this
   branch).
 
-## Phase 11 — Pilot on a disseqt repo (planned)
+## Phase 11 — Pilot on a disseqt repo (ready to run)
 
-- Wire against one production repo (default: `disseqt-auth-service`)
-- 1 week of real PRs, tune noise/precision thresholds
-- Bug-fix release cadence
-- After the pilot: v1.0.0
+Pilot playbook is in [PILOT.md](PILOT.md). It fixes the target repo
+(default `disseqt-auth-service`), the workflow snippet to drop in,
+the metrics to track for the pilot week, the bug-fix release triggers,
+and the v1.0.0 exit criteria. Everything else about the pilot is
+execution, not code — this repo ships v0.1.0 with the pilot ready to
+kick off.
 
 ## Not planned
 
