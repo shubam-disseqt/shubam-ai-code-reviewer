@@ -1,0 +1,33 @@
+# Go
+/dist/
+/bin/
+*.test
+*.out
+coverage.out
+coverage.html
+*.prof
+
+# Node / docs site
+node_modules/
+docs/dist/
+docs/.astro/
+.pnpm-store/
+
+# npm packaging platform stubs (populated at release time)
+npm/*/bin/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local secrets and env
+.env
+.env.*
+!.env.example
+
+# Session data / local runs
+.zreview/
+zreview-session-*.jsonl

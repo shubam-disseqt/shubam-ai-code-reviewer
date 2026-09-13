@@ -1,0 +1,27 @@
+* text=auto eol=lf
+
+# Binary blobs
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.zip binary
+*.tar binary
+*.tar.gz binary
+*.gz binary
+
+# Shell scripts must stay LF regardless of platform
+*.sh text eol=lf
+install.sh text eol=lf
+
+# Windows scripts stay CRLF
+*.ps1 text eol=crlf
+install.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf

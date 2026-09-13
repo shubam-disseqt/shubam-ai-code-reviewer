@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>Architecture &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html" class="active">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Architecture</h1>
+    <p class="lede">The whole tool as one Go CLI. Deterministic engineering around a thin LLM loop. This page is the source of truth &mdash; the repo file <code>ARCHITECTURE.md</code> mirrors it.</p>
+
+    <h2 id="one-paragraph">1. What we build, in one paragraph</h2>
+    <p><code>zreview</code> is a Go CLI. It takes a git diff (or a range, or a commit), optionally consults a <strong>persistent code index</strong> for repo-wide context, optionally consults an <strong>org-level rules repo</strong> for team-specific review policy, calls an LLM through a <strong>thin agent loop</strong> with a small set of tools (file read, code search, file find, comment), snaps LLM-produced comments to real diff lines via a deterministic post-processor, and optionally scans other open PRs for overlap or merge-conflict risk. The output is a stream of comments &mdash; printed to stdout, emitted as JSON, or posted to a PR via a <code>--format github</code> writer.</p>
+    <p>There is no long-running server, no dashboard, no webhook receiver, and no persistent review history. The index and the rules are the only things that live longer than a single invocation.</p>
+
+    <h2 id="pipeline">2. Pipeline</h2>
+
+    <div class="diagram">
+      <svg viewBox="0 0 980 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="z-code-reviewer pipeline diagram">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#7dd3fc" />
+          </marker>
+          <marker id="arrow-dashed" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#8b93a1" />
+          </marker>
+          <style>
+            .box { fill: #12151a; stroke: #7dd3fc; stroke-width: 1.5; }
+            .box-det { stroke: #4ade80; }
+            .box-llm { stroke: #fbbf24; }
+            .box-side { fill: #171b21; stroke: #8b93a1; stroke-dasharray: 5,3; }
+            .lbl { fill: #e6e7eb; font-family: -apple-system, "Inter", sans-serif; font-size: 13px; }
+            .lbl-sub { fill: #8b93a1; font-size: 11px; font-family: ui-monospace, Menlo, monospace; }
+            .lbl-legend { fill: #8b93a1; font-size: 11px; font-family: -apple-system, "Inter", sans-serif; }
+            .edge { stroke: #7dd3fc; stroke-width: 1.5; fill: none; }
+            .edge-dashed { stroke: #8b93a1; stroke-width: 1.2; stroke-dasharray: 6,4; fill: none; }
+            .title { fill: #a5f3fc; font-family: -apple-system, "Inter", sans-serif; font-size: 14px; font-weight: 600; }
+          </style>
+        </defs>
+
+        <text x="20" y="24" class="title">Main review pipeline</text>
+        <text x="640" y="24" class="title">Cross-PR overlap (parallel)</text>
+
+        <!-- Row 1 -->
+        <rect x="20" y="45" width="180" height="60" rx="6" class="box box-det" />
+        <text x="110" y="72" text-anchor="middle" class="lbl">git diff / range / commit</text>
+        <text x="110" y="90" text-anchor="middle" class="lbl-sub">input</text>
+
+        <rect x="240" y="45" width="180" height="60" rx="6" class="box box-det" />
+        <text x="330" y="72" text-anchor="middle" class="lbl">deterministic</text>
+        <text x="330" y="90" text-anchor="middle" class="lbl-sub">file selection</text>
+
+        <rect x="460" y="45" width="180" height="60" rx="6" class="box box-det" />
+        <text x="550" y="72" text-anchor="middle" class="lbl">bundle related files</text>
+        <text x="550" y="90" text-anchor="middle" class="lbl-sub">group / isolate context</text>
+
+        <path class="edge" d="M200 75 L 240 75" marker-end="url(#arrow)" />
+        <path class="edge" d="M420 75 L 460 75" marker-end="url(#arrow)" />
+
+        <!-- Row 2 -->
+        <rect x="20" y="140" width="180" height="60" rx="6" class="box box-det" />
+        <text x="110" y="167" text-anchor="middle" class="lbl">load index context</text>
+        <text x="110" y="185" text-anchor="middle" class="lbl-sub">+ JIT fallback if empty</text>
+
+        <rect x="240" y="140" width="180" height="60" rx="6" class="box box-det" />
+        <text x="330" y="167" text-anchor="middle" class="lbl">load matching</text>
+        <text x="330" y="185" text-anchor="middle" class="lbl-sub">org rules (YAML)</text>
+
+        <rect x="460" y="140" width="180" height="60" rx="6" class="box box-llm" />
+        <text x="550" y="163" text-anchor="middle" class="lbl">LLM agent loop</text>
+        <text x="550" y="180" text-anchor="middle" class="lbl-sub">file_read, code_search,</text>
+        <text x="550" y="194" text-anchor="middle" class="lbl-sub">file_find, code_comment</text>
+
+        <path class="edge" d="M550 105 L 550 140" marker-end="url(#arrow)" />
+        <path class="edge" d="M200 170 L 240 170" marker-end="url(#arrow)" />
+        <path class="edge" d="M420 170 L 460 170" marker-end="url(#arrow)" />
+
+        <!-- Row 3 -->
+        <rect x="20" y="240" width="180" height="60" rx="6" class="box box-det" />
+        <text x="110" y="267" text-anchor="middle" class="lbl">comment collector</text>
+        <text x="110" y="285" text-anchor="middle" class="lbl-sub">thread-safe store</text>
+
+        <rect x="240" y="240" width="180" height="60" rx="6" class="box box-det" />
+        <text x="330" y="267" text-anchor="middle" class="lbl">line-snap positioning</text>
+        <text x="330" y="285" text-anchor="middle" class="lbl-sub">hunk match, fixes off-by-N</text>
+
+        <rect x="460" y="240" width="180" height="60" rx="6" class="box box-det" />
+        <text x="550" y="267" text-anchor="middle" class="lbl">reflection</text>
+        <text x="550" y="285" text-anchor="middle" class="lbl-sub">dedup, low-confidence filter</text>
+
+        <path class="edge" d="M550 200 L 550 240" marker-end="url(#arrow)" />
+        <path class="edge" d="M460 270 L 420 270" marker-end="url(#arrow)" />
+        <path class="edge" d="M240 270 L 200 270" marker-end="url(#arrow)" />
+
+        <!-- Row 4 -->
+        <rect x="240" y="340" width="180" height="70" rx="6" class="box box-det" />
+        <text x="330" y="365" text-anchor="middle" class="lbl">format &amp; emit</text>
+        <text x="330" y="383" text-anchor="middle" class="lbl-sub">stdout | json | github</text>
+        <text x="330" y="399" text-anchor="middle" class="lbl-sub">session .jsonl append</text>
+
+        <path class="edge" d="M110 300 L 110 350 L 240 375" marker-end="url(#arrow)" />
+
+        <!-- Overlap side pipeline -->
+        <rect x="700" y="45" width="220" height="60" rx="6" class="box-side box" />
+        <text x="810" y="72" text-anchor="middle" class="lbl">list open PRs (GitHub API)</text>
+        <text x="810" y="90" text-anchor="middle" class="lbl-sub">state=open, sorted by updated</text>
+
+        <rect x="700" y="140" width="220" height="60" rx="6" class="box-side box" />
+        <text x="810" y="163" text-anchor="middle" class="lbl">fingerprint + prefilter</text>
+        <text x="810" y="181" text-anchor="middle" class="lbl-sub">Jaccard title, symbol/file overlap</text>
+
+        <rect x="700" y="240" width="220" height="60" rx="6" class="box-side box" />
+        <text x="810" y="263" text-anchor="middle" class="lbl">LLM overlap verdict</text>
+        <text x="810" y="281" text-anchor="middle" class="lbl-sub">batched, tolerant JSON parse</text>
+
+        <path class="edge-dashed" d="M810 105 L 810 140" marker-end="url(#arrow-dashed)" />
+        <path class="edge-dashed" d="M810 200 L 810 240" marker-end="url(#arrow-dashed)" />
+        <path class="edge-dashed" d="M700 270 L 640 270 L 640 340 L 420 375" marker-end="url(#arrow-dashed)" />
+
+        <!-- Legend -->
+        <rect x="20" y="480" width="16" height="12" class="box box-det" />
+        <text x="42" y="491" class="lbl-legend">deterministic (Go)</text>
+
+        <rect x="180" y="480" width="16" height="12" class="box box-llm" />
+        <text x="202" y="491" class="lbl-legend">LLM step</text>
+
+        <rect x="300" y="480" width="16" height="12" class="box-side box" />
+        <text x="322" y="491" class="lbl-legend">parallel sub-pipeline (never blocks main)</text>
+
+        <line x1="20" y1="520" x2="60" y2="520" class="edge" marker-end="url(#arrow)" />
+        <text x="70" y="524" class="lbl-legend">flow</text>
+
+        <line x1="140" y1="520" x2="180" y2="520" class="edge-dashed" marker-end="url(#arrow-dashed)" />
+        <text x="190" y="524" class="lbl-legend">optional / degrades on error</text>
+
+        <text x="20" y="580" class="lbl-legend">Boxes with </text>
+        <text x="90" y="580" class="lbl-legend" style="fill:#4ade80;">green</text>
+        <text x="128" y="580" class="lbl-legend">borders are engineered guarantees; </text>
+        <text x="330" y="580" class="lbl-legend" style="fill:#fbbf24;">amber</text>
+        <text x="367" y="580" class="lbl-legend">is the only step where the model has creative latitude.</text>
+      </svg>
+      <div class="caption">Figure 1 &mdash; end-to-end pipeline. Rendered offline as SVG; no external dependencies.</div>
+    </div>
+
+    <h2 id="det-vs-llm">3. Deterministic vs LLM</h2>
+    <p><code>zreview</code> is not a pure agent. It is a rigid Go pipeline with an LLM loop wedged in the middle. Determinism sits on both ends because that is where the model's failure modes live.</p>
+
+    <table>
+      <thead><tr><th>Step</th><th>Owner</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Which files to review</td><td><span class="badge ok">Go</span></td><td>Coverage guaranteed &mdash; no &ldquo;agent skipped 3 files&rdquo;</td></tr>
+        <tr><td>How to bundle files</td><td><span class="badge ok">Go</span></td><td>Isolated sub-agent contexts, parallelizable, stable on large diffs</td></tr>
+        <tr><td>Which rules match a file</td><td><span class="badge ok">Go</span></td><td>Glob against YAML; more predictable than prompt-injected rules</td></tr>
+        <tr><td>Reading a file, searching code</td><td><span class="badge warn">LLM via tools</span></td><td>Dynamic context is where agents earn their keep</td></tr>
+        <tr><td>Writing comments</td><td><span class="badge warn">LLM</span></td><td>Only creative task</td></tr>
+        <tr><td>Line-number positioning</td><td><span class="badge ok">Go</span></td><td>Line-snap against real hunks fixes the off-by-N bug</td></tr>
+        <tr><td>Comment reflection / dedup</td><td><span class="badge ok">Go</span></td><td>Filters low-quality comments before they hit the user</td></tr>
+        <tr><td>Cross-PR overlap prefilter</td><td><span class="badge ok">Go</span></td><td>Jaccard on title, symbol/file intersect &mdash; cheap gate before any LLM call</td></tr>
+        <tr><td>Cross-PR overlap verdict</td><td><span class="badge warn">LLM (batched)</span></td><td>Pattern-match on intent only</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="trust">4. Trust boundaries</h2>
+    <p>The threat surface is intentionally small. This is a per-invocation CLI &mdash; no persistent process, no webhook endpoint, no bound port except when the user explicitly runs <code>zreview docs</code>.</p>
+
+    <div class="diagram">
+      <pre style="margin:0"><code>&#x250c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+&#x2502;  User machine or CI runner (Trusted Zone)                       &#x2502;
+&#x2502;                                                                 &#x2502;
+&#x2502;   &#x250c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;    &#x250c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;    &#x250c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;   &#x2502;
+&#x2502;   &#x2502; Git repo &#x2502;&#x2500;&#x2500;&#x2500;&#x25b6;&#x2502;  zreview CLI &#x2502;&#x2500;&#x2500;&#x2500;&#x25b6;&#x2502; Local output       &#x2502;   &#x2502;
+&#x2502;   &#x2502; (diffs)  &#x2502;    &#x2502;  (core)      &#x2502;    &#x2502;  stdout / json /   &#x2502;   &#x2502;
+&#x2502;   &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;    &#x2514;&#x252c;&#x2500;&#x2500;&#x2500;&#x2500;&#x252c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;    &#x2502;  session .jsonl    &#x2502;   &#x2502;
+&#x2502;                       &#x2502;         &#x2502;         &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;   &#x2502;
+&#x2502;                       &#x2502;         &#x25bc;                                &#x2502;
+&#x2502;                       &#x2502;   &#x250c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;             &#x2502;
+&#x2502;                       &#x2502;   &#x2502;  Docs server       &#x2502;             &#x2502;
+&#x2502;                       &#x2502;   &#x2502;  (opt-in, loopback&#x2502;             &#x2502;
+&#x2502;                       &#x2502;   &#x2502;   only, host       &#x2502;             &#x2502;
+&#x2502;                       &#x2502;   &#x2502;   allowlist)       &#x2502;             &#x2502;
+&#x2502;                       &#x2502;   &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;             &#x2502;
+&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x252c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
+                        TLS       TLS
+                         &#x25bc;         &#x25bc;
+    &#x250c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;   &#x250c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;   &#x250c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+    &#x2502; LLM provider    &#x2502;   &#x2502; Index database    &#x2502;   &#x2502; Org-rules repo   &#x2502;
+    &#x2502; (HTTPS)          &#x2502;   &#x2502; (Postgres/SQLite) &#x2502;   &#x2502; (git, HTTPS/SSH) &#x2502;
+    &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;   &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;   &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;</code></pre>
+      <div class="caption">Figure 2 &mdash; trust boundaries. ASCII by design: survives GitHub-web, terminal <code>less</code>, and offline docs.</div>
+    </div>
+
+    <h2 id="threats">5. Threat summary</h2>
+    <table>
+      <thead><tr><th>ID</th><th>Threat</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>T1</td><td>Command injection via crafted diff content</td><td>Only <code>git</code> exec'd; hardcoded subcommands; <code>--end-of-options</code>; no shell</td></tr>
+        <tr><td>T2</td><td>API key leakage</td><td>Env-var only; never logged; never written to session JSONL</td></tr>
+        <tr><td>T3</td><td>Path traversal via LLM-suggested paths</td><td><code>pathutil.WithinBase()</code> pre- and post-symlink resolution</td></tr>
+        <tr><td>T4</td><td>DNS rebinding against local docs server</td><td>Host-header allowlist; wildcard binds require explicit env var</td></tr>
+        <tr><td>T5</td><td>MITM on API communication</td><td>TLS 1.2+, full certificate verification, <code>InsecureSkipVerify</code> never used</td></tr>
+        <tr><td>T6</td><td>Malicious LLM response (fabricated line numbers)</td><td>JSON schema + bounds check; line-snap re-derives positions server-side</td></tr>
+        <tr><td>T7</td><td>Malicious LLM response (over-escaped JSON)</td><td>Comment-args-repair refuses partial recovery on schema drift</td></tr>
+        <tr><td>T8</td><td>Dependency vulnerabilities</td><td><code>govulncheck</code> in CI; Dependabot; <code>go.sum</code> integrity</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="non-goals">6. Non-goals</h2>
+    <p>Called out explicitly so scope creep is loud.</p>
+    <ul>
+      <li><strong>No dashboard.</strong> No web UI beyond this local docs viewer.</li>
+      <li><strong>No webhook server.</strong> CLI only. CI/CD is the delivery mechanism.</li>
+      <li><strong>No learning loop.</strong> Rules are authored by humans and reviewed via git PR on the rules repo.</li>
+      <li><strong>No vulnerability scanning.</strong> OSV / SCA is out of scope &mdash; different tool, different failure modes.</li>
+      <li><strong>No cross-repo dependency graph.</strong> Mira's <code>relationships.py</code> intentionally not ported.</li>
+      <li><strong>No fine-tuning or custom models.</strong> Wrong tool for the job.</li>
+      <li><strong>No plugin marketplace, delegation mode, MCP server, or agent skill packaging.</strong></li>
+    </ul>
+
+    <footer>
+      For the fuller version with the full package map and schema, see <code>ARCHITECTURE.md</code> in the repo root.
+      &copy; 2026 disseqt. Apache-2.0.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

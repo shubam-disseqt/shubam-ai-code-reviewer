@@ -1,0 +1,40 @@
+z-code-reviewer
+Copyright 2026 disseqt
+
+This product is licensed under the Apache License, Version 2.0
+(the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+This product is derived from and includes portions of software
+developed at the following upstream projects, both licensed under
+Apache License 2.0:
+
+  * alibaba/open-code-review
+    https://github.com/alibaba/open-code-review
+    Copyright 2026 alibaba/open-code-review Contributors
+
+    Portions of the diff-precision layer (unified-diff parsing,
+    hunk resolution, line-snapping, comment-argument repair,
+    deterministic file selection, path-traversal guards, and the
+    bounded-concurrency git runner) are copied from open-code-review
+    with attribution and minor modifications. See PORTING.md for the
+    per-file map.
+
+  * miracodeai/mira
+    https://github.com/miracodeai/mira
+    Copyright 2025 Mira Contributors
+
+    Portions of the repository indexing pipeline, JIT context builder,
+    cross-PR overlap detector, business-rules injection surface, and
+    the accompanying prompt templates are re-implemented in Go based
+    on Mira's Python source. See PORTING.md for the per-file map.
+
+Individual source files that are derived from either upstream project
+retain their original copyright header, augmented with a
+"Portions Copyright 2026 disseqt" line and, where applicable, an
+"Adapted from <upstream>@<sha>" marker per Apache-2.0 Section 4(b).
+
+Third-party Go dependencies retain their own licenses; see THIRD_PARTY.md
+(generated at release time) for the resolved list.

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>Configuration &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html" class="active">Configuration</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Configuration</h1>
+    <p class="lede">Layered: defaults &rarr; org rules repo &rarr; <code>.zreview.yaml</code> in the repo &rarr; env vars &rarr; CLI flags. Right-most wins.</p>
+
+    <h2>Environment variables</h2>
+    <table>
+      <thead><tr><th>Name</th><th>Purpose</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Anthropic provider key</td><td>&mdash;</td></tr>
+        <tr><td><code>OPENAI_API_KEY</code></td><td>OpenAI provider key</td><td>&mdash;</td></tr>
+        <tr><td><code>AWS_*</code></td><td>Bedrock via AWS credential chain</td><td>&mdash;</td></tr>
+        <tr><td><code>ZREVIEW_DB_URL</code></td><td>Index database DSN (Postgres or SQLite)</td><td>index disabled</td></tr>
+        <tr><td><code>ZREVIEW_ORG_RULES_REPO</code></td><td>Git-hosted org rules repo (<code>owner/repo</code>)</td><td>no org rules</td></tr>
+        <tr><td><code>ZREVIEW_ORG_RULES_REF</code></td><td>Git ref to pin</td><td><code>main</code></td></tr>
+        <tr><td><code>ZREVIEW_DOCS_ALLOWED_HOSTS</code></td><td>Extra Host: values accepted by <code>zreview docs</code></td><td>loopback only</td></tr>
+        <tr><td><code>ZREVIEW_TELEMETRY</code></td><td>Set to <code>1</code> to opt into anonymous usage counters</td><td>disabled</td></tr>
+        <tr><td><code>GITHUB_TOKEN</code></td><td>For <code>--format github</code> and cross-PR overlap</td><td>&mdash;</td></tr>
+      </tbody>
+    </table>
+
+    <h2><code>.zreview.yaml</code> shape (planned, Phase 9)</h2>
+    <pre><code>llm:
+  provider: anthropic
+  model: claude-sonnet-4-6
+  temperature: 0.0
+
+filter:
+  exclude_patterns:
+    - "**/*.gen.go"
+    - "**/mocks/**"
+  max_files: 50
+
+review:
+  context_lines: 3
+  include_summary: true
+  max_comments: 15
+</code></pre>
+
+    <h2>Org rules YAML shape</h2>
+    <pre><code># in your org-rules repo: rules/no-console-log.yaml
+id: no-console-log
+title: No console.log in production code
+body: |
+  Flag any console.log/warn/error left in application code.
+  Test fixtures under tests/** are exempt.
+scope: repo                     # global | repo | path
+repos: ["disseqt/z-frontend"]
+paths: ["src/**/*.ts", "src/**/*.tsx"]
+exclude_paths: ["**/*.test.ts"]
+severity: warning               # blocker | warning | suggestion | nitpick
+category: maintainability
+enabled: true</code></pre>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+    </footer>
+  </main>
+</div>
+</body>
+</html>
