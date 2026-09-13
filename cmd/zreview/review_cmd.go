@@ -43,10 +43,9 @@ type reviewOpts struct {
 	Resume      string
 	Verbose     bool
 	MinSeverity string
-	// WaitSARIF is reserved for a future polling implementation that
-	// blocks until the SARIF upload finishes processing. v1 fires the
-	// upload and returns; the flag exists so users can wire it in
-	// scripts today without a breaking change tomorrow.
+	// WaitSARIF blocks after upload until GitHub reports "complete" or
+	// "failed" (5-min ceiling inside the emitter). Off by default so
+	// review latency isn't dominated by Code Scanning processing time.
 	WaitSARIF bool
 }
 
@@ -93,7 +92,7 @@ Diff selection is mutually exclusive: pass --commit for a single commit, OR
 	f.StringVar(&opts.MinSeverity, "min-severity", opts.MinSeverity,
 		"drop findings below this bucket: LOW | MEDIUM | HIGH | CRITICAL (SUPPRESS is always dropped)")
 	f.BoolVar(&opts.WaitSARIF, "wait-sarif", false,
-		"reserved: poll GitHub for SARIF processing to finish before returning (no-op in v1)")
+		"poll GitHub until SARIF processing is complete/failed before returning (github format only)")
 
 	return cmd
 }
@@ -309,6 +308,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		Owner:        owner,
 		Repo:         repo,
 		Ref:          os.Getenv("GITHUB_REF"),
+		WaitSARIF:    opts.WaitSARIF,
 		FindingState: carry.State,
 		Summary:      summary,
 		Labels:       labels,
