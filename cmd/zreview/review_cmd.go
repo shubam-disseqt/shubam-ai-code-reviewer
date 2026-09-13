@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,6 +133,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	}
 	if store != nil {
 		defer store.Close()
+		maybeSpawnWarmer(ctx, store, opts.Repo, kept, cmd.OutOrStderr())
 	}
 
 	// 4) rules
@@ -325,13 +327,12 @@ func loadRules(ctx context.Context, kept []model.Diff) (string, error) {
 // nil, in which case reviewctx falls back to JIT extraction.
 func buildContext(ctx context.Context, repo string, kept []model.Diff, store index.Store) (string, error) {
 	newFileContent := make(map[string]string, len(kept))
-	changed := make([]string, 0, len(kept))
+	changed := changedPathsFromDiffs(kept)
 	for _, d := range kept {
 		p := d.NewPath
 		if p == "" || p == "/dev/null" {
 			p = d.OldPath
 		}
-		changed = append(changed, p)
 		if d.NewFileContent != "" {
 			newFileContent[p] = d.NewFileContent
 		}
@@ -342,6 +343,35 @@ func buildContext(ctx context.Context, repo string, kept []model.Diff, store ind
 		NewFileContent: newFileContent,
 		Store:          store,
 	})
+}
+
+// changedPathsFromDiffs extracts new (or fallback old) paths from a diff slice.
+func changedPathsFromDiffs(kept []model.Diff) []string {
+	paths := make([]string, 0, len(kept))
+	for _, d := range kept {
+		p := d.NewPath
+		if p == "" || p == "/dev/null" {
+			p = d.OldPath
+		}
+		paths = append(paths, p)
+	}
+	return paths
+}
+
+// maybeSpawnWarmer bridges the review flow to the index warmer: enumerate
+// changed paths, check the store, if any are missing spawn a detached
+// `zreview index --paths ...` and continue. The current review still uses
+// JIT for the missing files (that's reviewctx.Build's built-in fallback);
+// the NEXT review of the same files reads real summaries. All errors are
+// non-fatal.
+func maybeSpawnWarmer(ctx context.Context, store index.Store, repo string, kept []model.Diff, out io.Writer) {
+	paths := changedPathsFromDiffs(kept)
+	missing, err := missingSummaryPaths(ctx, store, paths)
+	if err != nil {
+		fmt.Fprintf(out, "[zreview] warmer: %v (skipping)\n", err)
+		return
+	}
+	spawnIndexWarmer(repo, missing, out)
 }
 
 // newSession creates (or resumes) a session file under ZREVIEW_SESSION_DIR.
