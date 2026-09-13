@@ -1,212 +1,260 @@
-# z-code-reviewer
+<div align="center">
+  <h1>z-code-reviewer</h1>
+  <p><strong>An AI-powered code review CLI &mdash; deterministic engineering wrapped around a thin agent loop.</strong></p>
+</div>
 
-> **AI-powered PR reviewer as a single Go CLI.** Deterministic file
-> selection + line-snapped comments + org-level rules + cross-PR overlap
-> detection. Five LLM providers, offline docs, SLSA-attested releases.
-
-<p>
+<p align="center">
   <a href="https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/govulncheck.yml"><img alt="govulncheck" src="https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/govulncheck.yml/badge.svg" /></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" /></a>
-  <img alt="Go 1.26+" src="https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go" />
-  <img alt="Linux" src="https://img.shields.io/badge/Linux-supported-blue.svg" />
-  <img alt="macOS" src="https://img.shields.io/badge/macOS-supported-blue.svg" />
-  <img alt="Windows" src="https://img.shields.io/badge/Windows-supported-blue.svg" />
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=flat-square" /></a>
+  <img alt="Go 1.26+" src="https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&style=flat-square" />
+  <img alt="SLSA build provenance" src="https://img.shields.io/badge/SLSA-build--provenance-D4AF37?style=flat-square" />
 </p>
+<p align="center">
+  <a href="#supported-platforms"><img alt="Windows" src="https://img.shields.io/badge/Windows-supported-blue.svg?style=flat-square" /></a>
+  <a href="#supported-platforms"><img alt="macOS" src="https://img.shields.io/badge/macOS-supported-blue.svg?style=flat-square" /></a>
+  <a href="#supported-platforms"><img alt="Linux" src="https://img.shields.io/badge/Linux-supported-blue.svg?style=flat-square" /></a>
+</p>
+<p align="center">
+  <a href="#providers"><img alt="Anthropic" src="https://img.shields.io/badge/Anthropic-supported-blueviolet.svg?style=flat-square" /></a>
+  <a href="#providers"><img alt="OpenAI" src="https://img.shields.io/badge/OpenAI-supported-blueviolet.svg?style=flat-square" /></a>
+  <a href="#providers"><img alt="AWS Bedrock" src="https://img.shields.io/badge/AWS%20Bedrock-supported-blueviolet.svg?style=flat-square" /></a>
+  <a href="#providers"><img alt="DeepSeek" src="https://img.shields.io/badge/DeepSeek-supported-blueviolet.svg?style=flat-square" /></a>
+</p>
+<p align="center">
+  English | <em>(more languages TBD)</em>
+</p>
+
+---
 
 ## What is z-code-reviewer?
 
-`z-code-reviewer` (binary: `zreview`) is a Go CLI that reads a git diff,
-sends changed files to a configurable LLM through a small agent loop
-with file-read / code-search / file-find / comment tools, and produces
-review comments that land on the correct line, in the correct file, and
-respect your team's rules.
+`z-code-reviewer` (binary: `zreview`) is an AI-powered pull request reviewer that runs as a single Go binary. It reads Git diffs, sends changed files through a small tool-using agent loop, and produces structured review comments that land on the correct file and line, respect your team's rules, and never drown a PR in noise.
 
-Beyond the diff, `zreview` can:
+Beyond diff review, `zreview` also **indexes your codebase** for repo-wide context, **runs deterministic security scanners** (Gitleaks + Semgrep + govulncheck) alongside the LLM, **scores every finding** against a configurable severity policy, and **detects cross-PR overlap** before merges collide.
 
-- consult a **persistent code index** (SQLite or Postgres) for
-  repo-wide context on files the diff touches, and
-- scan other open PRs for **overlap or merge-conflict risk** before you
-  hit merge.
+Its design philosophy is inherited from two Apache-2.0 upstream projects. The diff-precision layer, the agent tool loop, and the prompt templates are ported (with attribution) from [alibaba/open-code-review](https://github.com/alibaba/open-code-review) &mdash; battle-tested inside Alibaba Group as its official AI review assistant across tens of thousands of developers. The persistent code index, JIT context builder, and cross-PR overlap detector are re-implemented in Go from [miracodeai/mira](https://github.com/miracodeai/mira). Full port map: [docs/PORTING.md](docs/PORTING.md) and [NOTICE](NOTICE).
 
-There is no dashboard, no webhook server, no long-running service. One
-binary, run locally or in CI.
+![Highlights](docs/architecture.html)
 
-## Why
+## Why z-code-reviewer?
 
-If you've asked a general-purpose coding agent to review a PR, you've
-likely hit three problems:
+### The problem with general-purpose agents
 
-- **Incomplete coverage** — on larger changesets the agent quietly
-  drops files.
-- **Position drift** — the comment says "line 42" but the issue is
-  actually on line 47.
-- **Unstable quality** — a small prompt tweak changes the review.
+If you've asked a general-purpose coding agent (Claude Code, Cursor, Copilot) to review a pull request, you've likely hit three problems:
 
-`zreview` treats those as engineering problems, not prompt problems.
+- **Incomplete coverage** &mdash; on larger changesets, agents cut corners and quietly drop files.
+- **Position drift** &mdash; the reported line number often doesn't match where the issue actually lives.
+- **Unstable quality** &mdash; small prompt changes swing review output; there are no hard constraints.
 
-### Deterministic engineering × agent
+The root cause: a purely language-driven architecture has no hard guarantees around the review process.
 
-The parts that *must not go wrong* are done by code, not by the model:
+### Core design: deterministic engineering &times; agent hybrid
 
-- **File selection** — a deterministic selector decides which changed
-  files enter review and which are filtered (vendored code,
-  generated code, size caps, path filters).
-- **Line snapping** — every LLM-produced comment is post-processed
-  against the actual hunk. Comments that can't be snapped to a real
-  changed line are dropped rather than left drifting.
-- **Rule matching** — org-level rules from a YAML repo are filtered by
-  glob scope *before* the prompt is built, so the model sees a
-  focused rule set instead of hundreds of irrelevant lines.
-- **Comment repair** — malformed JSON tool calls from the model are
-  repaired deterministically instead of triggering another round trip.
+`zreview` treats these as engineering problems, not prompt problems. Steps that *must not go wrong* are done by code. Steps that need adaptive judgement are done by the LLM. Neither can replace the other.
 
-The **agent** does what only agents do well:
+**Deterministic engineering &mdash; hard constraints**
 
-- decide which tool to call next (file read / code search / file find);
-- pull just-in-time context when the index has no coverage;
-- write the actual review comment.
+- **Precise file selection.** A deterministic selector decides which files enter review and which are filtered (vendored code, generated code, size caps, path filters). No agent-driven "I'll skip this one."
+- **Line snapping.** Every LLM-produced comment is post-processed against the actual diff hunk. Comments that can't be snapped to a real changed line are dropped rather than shipped drifting.
+- **Rule matching.** Org-level YAML rules are filtered by glob scope *before* the prompt is built. The model sees a focused rule set, not hundreds of irrelevant lines.
+- **Comment repair.** Malformed JSON tool calls from the model are repaired deterministically instead of triggering another round trip.
+- **Fingerprinting + incremental re-review.** Findings persist across pushes to the same PR. Files whose findings are already fixed drop out. Only affected scope is re-reviewed.
+- **Severity scoring.** A deterministic YAML policy assigns `CRITICAL / HIGH / MEDIUM / LOW / SUPPRESS` from confidence &times; impact &times; category. Not the LLM's opinion.
 
-The full pipeline, package map, and threat model live in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The same content is embedded in the
-binary — run `zreview docs` for the offline copy.
+**Agent &mdash; dynamic decision-making**
 
-Historical debt: the deterministic-engineering pieces and prompts are
-ported (with attribution) from
-[alibaba/open-code-review](https://github.com/alibaba/open-code-review);
-the index + overlap layers come from
-[miracodeai/mira](https://github.com/miracodeai/mira). Full port map in
-[docs/PORTING.md](docs/PORTING.md) and [NOTICE](NOTICE).
+- **Scenario-tuned prompts.** Distilled from Alibaba OCR's production traces; not a generic assistant prompt.
+- **Purpose-built toolset.** `file_read`, `file_read_diff`, `file_find`, `code_search`, `code_comment`, `task_done`. That's it &mdash; a small tool surface tuned specifically for code review, not a full agent toolkit.
 
-## Features
+## Supported platforms
 
-| | |
-|---|---|
-| **Precise per-diff comments** | deterministic file selector, line-snap post-processor, comment repair, dedup pass |
-| **Repo-wide context** | `zreview index` builds a SQLite/Postgres code index; JIT context when the index is empty |
-| **Org rules** | YAML in a git-hosted rules repo, filtered by glob scope, injected into the prompt |
-| **Overlap detection** | `zreview overlap` finds other open PRs touching the same files/symbols |
-| **Session log + resume** | append-only JSONL under `~/.zreview/sessions/`, resume with `--resume` |
-| **5 LLM providers** | Anthropic, OpenAI (Chat Completions + Responses), AWS Bedrock, DeepSeek |
-| **Output formats** | `stdout`, `json`, `github` (posts inline PR comments) |
-| **Offline docs** | `zreview docs` serves 14 hand-written pages from `//go:embed`, strict CSP, loopback bind |
-| **SLSA-attested releases** | matrix binaries + SHA-256 sums + [SLSA build provenance](https://slsa.dev/) |
-| **Distribution** | install script (POSIX + PowerShell), npm platform-stub packages, Docker image, GitHub Action |
-| **Doctor** | `zreview doctor` fails fast on misconfig in CI |
-| **Threat-modelled** | see [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for assets, boundaries, threats, mitigations |
+| Platform | Architecture | Install |
+|---|---|---|
+| Linux | amd64, arm64 | install.sh, Docker, npm |
+| macOS | amd64, arm64 | install.sh, Homebrew (TBD), npm |
+| Windows | amd64, arm64 | install.ps1, npm |
 
-## Install
+Every release ships with SHA-256 checksums and [SLSA build-provenance](https://slsa.dev/) attestation.
 
-Pick one:
+## Providers
 
-```sh
-# POSIX (Linux + macOS)
+Five LLM providers wired end-to-end. Any one works &mdash; pick the one your team already pays for.
+
+| Provider | Env var | Notes |
+|---|---|---|
+| Anthropic Claude | `ANTHROPIC_API_KEY` | Sonnet-class recommended for the reviewer tier |
+| OpenAI Chat Completions | `OPENAI_API_KEY` | GPT-5.x family |
+| OpenAI Responses | `OPENAI_RESPONSES_API_KEY` | GPT-5.6 family |
+| AWS Bedrock (Anthropic models) | *ambient AWS creds* | SigV4, no static key |
+| DeepSeek | `DEEPSEEK_API_KEY` | Cheapest of the four |
+
+**Two-tier routing.** Set `ZREVIEW_CHEAP_MODEL` (and optionally `ZREVIEW_CHEAP_PROVIDER`) to route the summarizer and labeler to a smaller model while keeping the reviewer on your Sonnet-class model. Measured savings: 30&ndash;40% per review.
+
+## How to use
+
+### Prerequisites
+
+- **Git &ge; 2.41** &mdash; `zreview` relies on git for diff generation and repository operations.
+- A provider credential from the table above.
+- Optional but recommended: `gitleaks`, `semgrep`, `govulncheck` in `$PATH` for the deterministic security-scanner tier.
+
+### Install
+
+```bash
+# npm (Linux / macOS / Windows)
+npm install -g zreview
+
+# Homebrew (macOS)  (TBD)
+brew install zreview
+
+# POSIX install script
 curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/scripts/install.sh | sh
 
 # Windows PowerShell
 iwr https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/scripts/install.ps1 -useb | iex
 
-# npm (Linux / macOS / Windows)
-npm install -g zreview
-
 # Docker
 docker run --rm -v "$PWD:/repo" ghcr.io/shubam-disseqt/z-code-reviewer:latest review --repo /repo
 ```
 
-For the GitHub Action, see [docs/github-action.html](docs/github-action.html)
-for a ready-to-paste workflow.
+After installation, the `zreview` command is available globally.
 
-## Quick Start
+### Quick start
 
-```sh
-# 1. Configure a provider (pick one)
+**1. Configure a provider**
+
+```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 # or OPENAI_API_KEY, DEEPSEEK_API_KEY, or ambient AWS creds for Bedrock
+zreview doctor          # verifies provider + git + scanners in one line
+```
 
-# 2. Sanity check
-zreview doctor
+**2. Review**
 
-# 3. Review the current diff
+```bash
 cd your-project
-zreview review --from main --to HEAD                    # stdout
-zreview review --from main --to HEAD --format json      # machine-readable
-zreview review --pr 42 --format github                  # post inline on PR
 
-# 4. Build a repo index (optional, better context on larger repos)
-zreview index --repo . --backend sqlite --path .zreview/index.db
+# Workspace mode — review the current uncommitted diff
+zreview review
 
-# 5. Detect PR overlap
+# Branch range — reviews feature-branch's changes since it diverged from main
+zreview review --from main --to feature-branch
+
+# Single commit
+zreview review --commit abc123
+
+# Post inline comments on a real PR
+zreview review --pr 42 --format github
+
+# Machine-readable JSON output (recommended for host agents / dashboards)
+zreview review --format json --output result.json
+
+# SARIF output for GitHub Code Scanning (security findings)
+zreview review --format sarif --output findings.sarif
+
+# Resume an interrupted session
+zreview review --resume <session-id>
+```
+
+**3. Build an index (optional &mdash; better context on large repos)**
+
+```bash
+export ZREVIEW_DB_URL=sqlite:///.zreview/index.db
+zreview index --repo .
+```
+
+**4. Detect cross-PR overlap**
+
+```bash
+export GITHUB_TOKEN=ghp_...
 zreview overlap --pr 42
+```
 
-# 6. Sync org rules
+**5. Sync org rules**
+
+```bash
 export ZREVIEW_ORG_RULES_REPO=git@github.com:your-org/zreview-rules.git
 zreview rules sync
 zreview rules list
-
-# 7. Read the offline docs
-zreview docs
 ```
 
-The docs viewer opens on a random loopback port with a strict CSP —
-nothing calls out to the internet.
+**6. Read the docs**
+
+```bash
+zreview docs        # serves the offline site on a random loopback port
+```
+
+### GitHub Action
+
+Drop the composite action into a workflow to review every pull request automatically:
+
+```yaml
+name: AI review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: shubam-disseqt/z-code-reviewer@v0
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+Full setup, including Code Scanning SARIF upload and custom rules, in [docs/github-action.html](docs/github-action.html).
 
 ## Documentation
 
-Full documentation is available offline via `zreview docs`, or read the
-raw HTML in [`docs/`](docs/):
+Full documentation is bundled with the binary &mdash; run `zreview docs` to browse offline. The raw HTML lives in [`docs/`](docs/):
 
-- [Quickstart](docs/quickstart.html) — install and run your first review
-- [Installation](docs/installation.html) — every platform and package
-  manager
-- [Configuration](docs/configuration.html) — every env var and config
-  key
-- [CLI Reference](docs/cli-reference.html) — every command and flag
-- [Providers](docs/providers.html) — the 5 supported LLM providers,
-  model IDs, cost notes
-- [Index and context](docs/index-and-context.html) — SQLite vs
-  Postgres, JIT context
-- [Review rules](docs/review-rules.html) — org rules layer, glob scope,
-  YAML schema
-- [Overlap](docs/overlap.html) — cross-PR overlap detection
-- [Session log](docs/session-log.html) — JSONL format, `--resume`
-  semantics
-- [GitHub Action](docs/github-action.html) — drop the composite action
-  into a workflow
-- [Architecture](docs/architecture.html) — pipeline, package map,
-  trust boundaries (mirrors [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md))
-- [Security](docs/security.html) — mirrors [SECURITY.md](SECURITY.md)
-  and [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
-- [Troubleshooting](docs/troubleshooting.html) — the top hits
+- [Quickstart](docs/quickstart.html) &mdash; install and run your first review
+- [Installation](docs/installation.html) &mdash; every platform and package manager
+- [Configuration](docs/configuration.html) &mdash; every env var and config key
+- [CLI reference](docs/cli-reference.html) &mdash; every command and flag
+- [Providers](docs/providers.html) &mdash; model IDs, tier routing, cost notes
+- [Index and context](docs/index-and-context.html) &mdash; SQLite / Postgres index; JIT context
+- [Review rules](docs/review-rules.html) &mdash; YAML schema, glob scoping, injection
+- [Overlap](docs/overlap.html) &mdash; cross-PR overlap detection
+- [Scanners](docs/scanners.html) &mdash; Gitleaks / Semgrep / govulncheck integration
+- [SARIF output](docs/sarif.html) &mdash; GitHub Code Scanning upload
+- [Session log](docs/session-log.html) &mdash; JSONL format, `--resume`, redaction
+- [Reliability](docs/reliability.html) &mdash; retry policy, rate limiting, env-var knobs
+- [GitHub Action](docs/github-action.html) &mdash; drop-in composite action
+- [Testing](docs/testing.html) &mdash; running the e2e test manually
+- [Troubleshooting](docs/troubleshooting.html) &mdash; the top hits, structured logging, metrics
+- [Architecture](docs/architecture.html) &mdash; pipeline, package map, trust boundaries
+- [Security](docs/security.html) &mdash; mirrors [SECURITY.md](SECURITY.md) and [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
-## Build from source
+## Development
 
-```sh
+```bash
 git clone https://github.com/shubam-disseqt/z-code-reviewer.git
 cd z-code-reviewer
-make build
+make build              # builds bin/zreview
 ./bin/zreview version
 ./bin/zreview docs
 ```
 
-## Development
-
 - Go 1.26.2+
-- `make check` runs the same battery as CI: tidy + gofmt + vet + race
-  test suite
-- `make coverage` targets ≥80% per package (currently 88–100% except
-  `cmd/zreview` at 62%)
-- `make vuln` runs `govulncheck` locally (weekly cron in CI)
+- `make check` runs the CI battery: tidy + gofmt + vet + race test suite
+- `make coverage` &mdash; per-package coverage; ships 88&ndash;100% on all business logic
+- `make vuln` &mdash; runs `govulncheck` locally (weekly cron in CI)
 - LF line endings enforced via `.gitattributes`
-- See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) —
-  the latter is the contribution policy for AI-assisted PRs
-  (mandatory: disclose the model, no attribution trailers, no
-  fixup-fixup-fixup histories).
+- See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) &mdash; the latter is the contribution policy for AI-assisted PRs (mandatory: disclose the model, no attribution trailers, no fixup-fixup-fixup histories)
 
 ## Roadmap
 
-`v0.1.0` ships the full feature set. `v1.0.0` follows after a one-week
-pilot on a real repo — remaining items and phase-by-phase history in
-[ROADMAP.md](ROADMAP.md).
+`v0.1.0` ships the full feature set including scanners, scoring, SARIF, and incremental re-review. `v1.0.0` follows after a one-week pilot on a real repo. Remaining items and phase-by-phase history live in [ROADMAP.md](ROADMAP.md).
 
 ## License
 
@@ -214,6 +262,13 @@ Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 ## Security
 
-Vulnerabilities → private disclosure via GitHub Security Advisories on
-this repo. See [SECURITY.md](SECURITY.md). The threat model lives in
-[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+Vulnerabilities: private disclosure via GitHub Security Advisories on this repo. See [SECURITY.md](SECURITY.md) for the reporting policy and [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for the shipped mitigations.
+
+## Acknowledgements
+
+`zreview` would not exist without the work of two upstream open-source projects, both under Apache-2.0:
+
+- [alibaba/open-code-review](https://github.com/alibaba/open-code-review) &mdash; the diff-precision layer, tool loop, prompt templates, and comment-args-repair logic.
+- [miracodeai/mira](https://github.com/miracodeai/mira) &mdash; the persistent code index, JIT cross-file context, cross-PR overlap detector, and business-rules injection surface.
+
+Per-file attribution: [NOTICE](NOTICE). Detailed port map: [docs/PORTING.md](docs/PORTING.md).
