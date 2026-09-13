@@ -49,16 +49,19 @@ func (s *gitleaksScanner) Run(ctx context.Context, repoRoot string, _ []string) 
 	// --no-git makes gitleaks scan the working tree directly rather than
 	// the git history. --exit-code 0 stops it from returning non-zero
 	// when findings exist (we treat findings as data, not an error).
-	//nolint:gosec // args are all constants except the paths, which we control
-	cmd := exec.CommandContext(ctx, "gitleaks", "detect",
-		"--source", repoRoot,
-		"--report-format", "json",
-		"--report-path", tmp.Name(),
-		"--no-git",
-		"--exit-code", "0",
-	)
-	cmd.Stderr = s.stderr
-	if err := cmd.Run(); err != nil {
+	err = execAttempt(ctx, func() error {
+		//nolint:gosec // args are all constants except the paths, which we control
+		cmd := exec.CommandContext(ctx, "gitleaks", "detect",
+			"--source", repoRoot,
+			"--report-format", "json",
+			"--report-path", tmp.Name(),
+			"--no-git",
+			"--exit-code", "0",
+		)
+		cmd.Stderr = s.stderr
+		return cmd.Run()
+	})
+	if err != nil {
 		return nil, fmt.Errorf("gitleaks exec: %w", err)
 	}
 
