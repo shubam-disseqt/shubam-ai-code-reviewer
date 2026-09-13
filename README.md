@@ -68,7 +68,7 @@ The **agent** does what only agents do well:
 - write the actual review comment.
 
 The full pipeline, package map, and threat model live in
-[ARCHITECTURE.md](ARCHITECTURE.md). The same content is embedded in the
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The same content is embedded in the
 binary — run `zreview docs` for the offline copy.
 
 Historical debt: the deterministic-engineering pieces and prompts are
@@ -76,7 +76,7 @@ ported (with attribution) from
 [alibaba/open-code-review](https://github.com/alibaba/open-code-review);
 the index + overlap layers come from
 [miracodeai/mira](https://github.com/miracodeai/mira). Full port map in
-[PORTING.md](PORTING.md) and [NOTICE](NOTICE).
+[docs/PORTING.md](docs/PORTING.md) and [NOTICE](NOTICE).
 
 ## Features
 
@@ -93,7 +93,7 @@ the index + overlap layers come from
 | **SLSA-attested releases** | matrix binaries + SHA-256 sums + [SLSA build provenance](https://slsa.dev/) |
 | **Distribution** | install script (POSIX + PowerShell), npm platform-stub packages, Docker image, GitHub Action |
 | **Doctor** | `zreview doctor` fails fast on misconfig in CI |
-| **Threat-modelled** | see [THREAT_MODEL.md](THREAT_MODEL.md) for assets, boundaries, threats, mitigations |
+| **Threat-modelled** | see [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for assets, boundaries, threats, mitigations |
 
 ## Install
 
@@ -101,10 +101,10 @@ Pick one:
 
 ```sh
 # POSIX (Linux + macOS)
-curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/scripts/install.sh | sh
 
 # Windows PowerShell
-iwr https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/install.ps1 -useb | iex
+iwr https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/scripts/install.ps1 -useb | iex
 
 # npm (Linux / macOS / Windows)
 npm install -g zreview
@@ -173,9 +173,9 @@ raw HTML in [`docs/`](docs/):
 - [GitHub Action](docs/github-action.html) — drop the composite action
   into a workflow
 - [Architecture](docs/architecture.html) — pipeline, package map,
-  trust boundaries (mirrors [ARCHITECTURE.md](ARCHITECTURE.md))
+  trust boundaries (mirrors [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md))
 - [Security](docs/security.html) — mirrors [SECURITY.md](SECURITY.md)
-  and [THREAT_MODEL.md](THREAT_MODEL.md)
+  and [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 - [Troubleshooting](docs/troubleshooting.html) — the top hits
 
 ## Build from source
@@ -216,4 +216,4 @@ Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 Vulnerabilities → private disclosure via GitHub Security Advisories on
 this repo. See [SECURITY.md](SECURITY.md). The threat model lives in
-[THREAT_MODEL.md](THREAT_MODEL.md).
+[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).

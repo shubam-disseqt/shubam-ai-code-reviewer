@@ -19,7 +19,7 @@ Apache License 2.0:
     hunk resolution, line-snapping, comment-argument repair,
     deterministic file selection, path-traversal guards, and the
     bounded-concurrency git runner) are copied from open-code-review
-    with attribution and minor modifications. See PORTING.md for the
+    with attribution and minor modifications. See docs/PORTING.md for the
     per-file map.
 
   * miracodeai/mira
@@ -29,7 +29,7 @@ Apache License 2.0:
     Portions of the repository indexing pipeline, JIT context builder,
     cross-PR overlap detector, business-rules injection surface, and
     the accompanying prompt templates are re-implemented in Go based
-    on Mira's Python source. See PORTING.md for the per-file map.
+    on Mira's Python source. See docs/PORTING.md for the per-file map.
 
 Individual source files that are derived from either upstream project
 retain their original copyright header, augmented with a

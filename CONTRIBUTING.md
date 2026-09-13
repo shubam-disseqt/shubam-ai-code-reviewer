@@ -5,9 +5,9 @@ and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before opening a PR.
 
 ## Before you start
 
-- The scope of this project is fixed — see [ARCHITECTURE.md § 9. Non-goals](ARCHITECTURE.md#9-non-goals).
+- The scope of this project is fixed — see [docs/ARCHITECTURE.md § 9. Non-goals](docs/ARCHITECTURE.md#9-non-goals).
   If your contribution expands scope, open an issue for discussion first.
-- Read [PORTING.md](PORTING.md) if you are lifting code from
+- Read [docs/PORTING.md](docs/PORTING.md) if you are lifting code from
   `alibaba/open-code-review` or `miracodeai/mira`. Attribution rules are
   non-negotiable.
 - Big new features go through the roadmap process — see [ROADMAP.md](ROADMAP.md)
@@ -79,7 +79,7 @@ Before requesting review, confirm:
 - [ ] Test coverage for changed packages is ≥ 80% (or unchanged)
 - [ ] New Go source files have SPDX headers
 - [ ] If any file was lifted or ported from OCR or Mira, attribution
-      header is in place per [NOTICE](NOTICE) and [PORTING.md § 2](PORTING.md#2-attribution-model-per-file-header)
+      header is in place per [NOTICE](NOTICE) and [docs/PORTING.md § 2](docs/PORTING.md#2-attribution-model-per-file-header)
 - [ ] Docs updated when behavior or config changes
 - [ ] AI use disclosed in the PR body if applicable (see AGENTS.md)
 

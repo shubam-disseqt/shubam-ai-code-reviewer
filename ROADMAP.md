@@ -48,7 +48,7 @@ Phase 9 hardening).
   the JSONL append log; `--format stdout | json | github` supported;
   GitHub PR comment poster via `internal/gh`.
 - **Phase 9 (partial)** — matrix release with SHA-256 sums and SLSA
-  build-provenance attestation, `install.sh` / `install.ps1`,
+  build-provenance attestation, `scripts/install.sh` / `scripts/install.ps1`,
   `action.yml`, Dockerfile, and `zreview doctor` are in place.
 
 ## Phase 9 — Production hardening (remaining)
@@ -57,7 +57,7 @@ Phase 9 hardening).
   (see `npm/` and the `npm-publish` job in `.github/workflows/release.yml`)
 - [x] `govulncheck` in CI (`.github/workflows/govulncheck.yml`, plus a
   local `make vuln` target)
-- [x] Threat-model doc finalized (`THREAT_MODEL.md`)
+- [x] Threat-model doc finalized (`docs/THREAT_MODEL.md`)
 - [x] `llm` / `llmloop` coverage lifted back above 80% (89.3% / 88.5%)
 
 ## Phase 10 — Docs and launch prep (in progress)

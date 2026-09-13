@@ -41,7 +41,7 @@ autonomous AI agents opening PRs directly.
   submission. CI will run it again — that is not a substitute for a
   local pass.
 - If the AI's output touches attribution, licensing, or the porting
-  map in [PORTING.md](PORTING.md), flag it explicitly in the PR body.
+  map in [docs/PORTING.md](docs/PORTING.md), flag it explicitly in the PR body.
 - The project uses `zreview review` on itself when v1 ships. Until
   then, AI-generated PRs receive extra scrutiny by convention.
 

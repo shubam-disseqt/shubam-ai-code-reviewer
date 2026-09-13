@@ -51,7 +51,7 @@ To verify a downloaded binary:
 gh attestation verify --owner shubam-disseqt ./zreview-linux-amd64
 ```
 
-The `install.sh` script performs a SHA-256 checksum check against a
+The `scripts/install.sh` script performs a SHA-256 checksum check against a
 `sha256sum.txt` published alongside each release. Users who need
 supply-chain verification beyond checksums should run the `gh
 attestation verify` step manually — do not skip it in production
@@ -60,7 +60,7 @@ provisioning.
 ## Threat model
 
 The full threat model, actors, and trust boundaries live in
-[ARCHITECTURE.md § 5. Trust boundaries and threats](ARCHITECTURE.md#5-trust-boundaries-and-threats).
+[docs/ARCHITECTURE.md § 5. Trust boundaries and threats](docs/ARCHITECTURE.md#5-trust-boundaries-and-threats).
 Top summary:
 
 | ID | Threat | Mitigation |
@@ -80,7 +80,7 @@ Top summary:
 In scope:
 
 - The `zreview` binary and its Go source.
-- The `install.sh` and `install.ps1` scripts.
+- The `scripts/install.sh` and `scripts/install.ps1` scripts.
 - The GitHub Action wrapper (`action.yml`).
 - The embedded docs served by `zreview docs`.
 

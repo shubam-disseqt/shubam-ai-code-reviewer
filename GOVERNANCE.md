@@ -10,7 +10,7 @@
 
 ## Scope
 
-Fixed by [ARCHITECTURE.md § 9. Non-goals](ARCHITECTURE.md#9-non-goals).
+Fixed by [docs/ARCHITECTURE.md § 9. Non-goals](docs/ARCHITECTURE.md#9-non-goals).
 Scope changes go through a design issue with maintainer approval.
 
 ## Values
@@ -73,7 +73,7 @@ not count.
   approvals and a review from the security-listed contact in
   [SECURITY.md](SECURITY.md).
 - Attribution-touching PRs (new lifts from OCR or Mira, or changes to
-  [NOTICE](NOTICE) or [PORTING.md](PORTING.md)) need approval from a
+  [NOTICE](NOTICE) or [docs/PORTING.md](docs/PORTING.md)) need approval from a
   maintainer who has read the upstream license.
 - No self-merge on non-trivial changes.
 

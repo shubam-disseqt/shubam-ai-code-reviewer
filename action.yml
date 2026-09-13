@@ -48,7 +48,7 @@ runs:
   steps:
     - name: Install zreview
       shell: bash
-      run: curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/install.sh | ZREVIEW_VERSION=${{ inputs.version }} sh
+      run: curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/scripts/install.sh | ZREVIEW_VERSION=${{ inputs.version }} sh
     - name: Run review
       shell: bash
       env:
