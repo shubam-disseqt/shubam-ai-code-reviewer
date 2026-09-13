@@ -1,0 +1,17 @@
+{
+  "name": "zreview-win32-arm64",
+  "version": "0.0.0",
+  "description": "Windows/arm64 native binary for zreview. Installed automatically as an optional dependency of the zreview package.",
+  "homepage": "https://github.com/shubam-disseqt/z-code-reviewer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shubam-disseqt/z-code-reviewer.git"
+  },
+  "license": "Apache-2.0",
+  "os": ["win32"],
+  "cpu": ["arm64"],
+  "files": ["bin/zreview.exe", "README.md"],
+  "engines": {
+    "node": ">=18"
+  }
+}

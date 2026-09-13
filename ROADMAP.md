@@ -52,9 +52,11 @@ Phase 9 hardening).
 
 ## Phase 9 — Production hardening (remaining)
 
-- npm publishing via platform-stub packages + `bin/zreview.js` launcher
-- `govulncheck` in CI
-- Threat-model doc finalized
+- [x] npm publishing via platform-stub packages + `bin/zreview.js` launcher
+  (see `npm/` and the `npm-publish` job in `.github/workflows/release.yml`)
+- [x] `govulncheck` in CI (`.github/workflows/govulncheck.yml`, plus a
+  local `make vuln` target)
+- [x] Threat-model doc finalized (`THREAT_MODEL.md`)
 - `llm` / `llmloop` coverage lifted back above 80%
 
 ## Phase 10 — Docs and launch prep (planned)
