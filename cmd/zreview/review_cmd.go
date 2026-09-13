@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/comment"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/diff"
@@ -143,6 +144,15 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	scannerFindings := runScanners(ctx, opts.Repo, kept, cmd.OutOrStderr())
 	scannerByPath := groupScannerFindingsByPath(scannerFindings)
 
+	// 3.6) summarizer + labeler (parallel, cheap tier). Best-effort — a
+	// failure here logs and continues with zero values. We resolve tiers
+	// early so the errgroup can dispatch alongside the main LLM setup.
+	tiers, err := newLLMTiers()
+	if err != nil {
+		return fmt.Errorf("llm: %w", err)
+	}
+	summary, labels := runCheapAgents(ctx, tiers, kept, opts.Verbose, cmd.OutOrStderr())
+
 	// 4) rules
 	rulesBlock, err := loadRules(ctx, kept)
 	if err != nil {
@@ -165,15 +175,10 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	}
 	defer sess.Close()
 
-	// 7) llm tiers. Main drives the reviewer loop; Cheap is threaded through
-	// for Phase 15's summarizer/labeler and falls back to Main until then.
-	tiers, err := newLLMTiers()
-	if err != nil {
-		return fmt.Errorf("llm: %w", err)
-	}
+	// 7) llm tiers. Main drives the reviewer loop; Cheap already served the
+	// Phase 15 summarizer/labeler above.
 	llmClient := tiers.Main
 	modelName := tiers.MainModel
-	_ = tiers.Cheap // reserved for Phase 15
 
 	// 8) prompts + tool defs
 	sysPrompt, err := loadPrompt("main_task_system.md")
@@ -270,6 +275,8 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		Owner:        owner,
 		Repo:         repo,
 		FindingState: carry.State,
+		Summary:      summary,
+		Labels:       labels,
 	})
 	if err != nil {
 		return err
@@ -531,6 +538,43 @@ func ownerRepoFromEnv() (string, string) {
 		return "", ""
 	}
 	return parts[0], parts[1]
+}
+
+// runCheapAgents fires the summarizer and labeler in parallel against the
+// cheap tier. Both are best-effort: any error logs and yields a zero value,
+// so the main review path never blocks on them. errgroup.Wait always returns
+// nil here because the closures swallow errors after logging — the group is
+// used purely for parallel dispatch, not error propagation.
+func runCheapAgents(ctx context.Context, tiers llm.Tiers, kept []model.Diff, verbose bool, out io.Writer) (model.Summary, model.Labels) {
+	var summary model.Summary
+	var labels model.Labels
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		s, err := RunSummarizer(gctx, tiers.Cheap, tiers.CheapModel, kept)
+		if err != nil {
+			fmt.Fprintf(out, "[zreview] summarizer: %v (continuing without)\n", err)
+			return nil
+		}
+		summary = s
+		if verbose {
+			fmt.Fprintf(out, "[zreview] summarizer: risk=%q groups=%d\n", s.Risk, len(s.ChangeGroups))
+		}
+		return nil
+	})
+	g.Go(func() error {
+		l, err := RunLabeler(gctx, tiers.Cheap, tiers.CheapModel, kept)
+		if err != nil {
+			fmt.Fprintf(out, "[zreview] labeler: %v (continuing without)\n", err)
+			return nil
+		}
+		labels = l
+		if verbose {
+			fmt.Fprintf(out, "[zreview] labeler: type=%q risk_tag=%q\n", l.PRType, l.RiskTag)
+		}
+		return nil
+	})
+	_ = g.Wait()
+	return summary, labels
 }
 
 // newGithubClient returns a gh.Client if GITHUB_TOKEN is set, else (nil,nil).
