@@ -43,6 +43,11 @@ type reviewOpts struct {
 	Resume      string
 	Verbose     bool
 	MinSeverity string
+	// WaitSARIF is reserved for a future polling implementation that
+	// blocks until the SARIF upload finishes processing. v1 fires the
+	// upload and returns; the flag exists so users can wire it in
+	// scripts today without a breaking change tomorrow.
+	WaitSARIF bool
 }
 
 // defaultMaxTokens is the token budget assumed for the model's context window
@@ -80,13 +85,15 @@ Diff selection is mutually exclusive: pass --commit for a single commit, OR
 	f.StringVar(&opts.To, "to", "", "head ref (range mode; default HEAD)")
 	f.StringVar(&opts.Commit, "commit", "", "single-commit mode; mutually exclusive with --from/--to")
 	f.StringVar(&opts.Repo, "repo", ".", "working directory")
-	f.StringVar(&opts.Format, "format", formatStdout, "output format: stdout | json | github")
-	f.StringVar(&opts.Output, "output", "-", "output path (json format; \"-\" for stdout)")
+	f.StringVar(&opts.Format, "format", formatStdout, "output format: stdout | json | github | sarif")
+	f.StringVar(&opts.Output, "output", "-", "output path (json/sarif formats; \"-\" for stdout)")
 	f.IntVar(&opts.PR, "pr", 0, "PR number (github format)")
 	f.StringVar(&opts.Resume, "resume", "", "resume an interrupted session by id")
 	f.BoolVar(&opts.Verbose, "verbose", false, "log more")
 	f.StringVar(&opts.MinSeverity, "min-severity", opts.MinSeverity,
 		"drop findings below this bucket: LOW | MEDIUM | HIGH | CRITICAL (SUPPRESS is always dropped)")
+	f.BoolVar(&opts.WaitSARIF, "wait-sarif", false,
+		"reserved: poll GitHub for SARIF processing to finish before returning (no-op in v1)")
 
 	return cmd
 }
@@ -96,7 +103,7 @@ func (o *reviewOpts) validate() error {
 		return fmt.Errorf("--commit is mutually exclusive with --from/--to")
 	}
 	if !validFormat(o.Format) {
-		return fmt.Errorf("--format must be one of stdout|json|github (got %q)", o.Format)
+		return fmt.Errorf("--format must be one of stdout|json|github|sarif (got %q)", o.Format)
 	}
 	if o.Format == formatGithub && o.PR == 0 {
 		return fmt.Errorf("--format=github requires --pr")
@@ -301,6 +308,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		Stdout:       cmd.OutOrStdout(),
 		Owner:        owner,
 		Repo:         repo,
+		Ref:          os.Getenv("GITHUB_REF"),
 		FindingState: carry.State,
 		Summary:      summary,
 		Labels:       labels,
