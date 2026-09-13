@@ -1,6 +1,7 @@
 # Go
 /dist/
 /bin/
+/zreview
 *.test
 *.out
 coverage.out
