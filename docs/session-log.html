@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>Session log &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+      <li><a href="/cli-reference.html">CLI reference</a></li>
+      <li><a href="/providers.html">Providers</a></li>
+      <li><a href="/index-and-context.html">Index and context</a></li>
+      <li><a href="/review-rules.html">Review rules</a></li>
+      <li><a href="/overlap.html">Overlap</a></li>
+      <li><a href="/session-log.html" class="active">Session log</a></li>
+      <li><a href="/github-action.html">GitHub Action</a></li>
+      <li><a href="/troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="/security.html">Security</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Session log</h1>
+    <p class="lede">Every review run appends a JSONL log to <code>~/.zreview/sessions/&lt;uuid&gt;.jsonl</code>. It's the audit trail, the resume input, and the debug artifact &mdash; one file, one run.</p>
+
+    <h2 id="location">Where the log lives</h2>
+    <p>Default: <code>$HOME/.zreview/sessions/&lt;session-id&gt;.jsonl</code>. Override with <code>ZREVIEW_SESSION_DIR</code>.</p>
+    <p>The session ID is a UUIDv4 minted at run start. It's printed at the end of every review so CI logs are searchable back to the JSONL file.</p>
+
+    <h2 id="format">The JSONL shape</h2>
+    <p>One JSON object per line. Every record shares a base header:</p>
+    <table>
+      <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>uuid</code></td><td>Unique record ID (UUIDv4).</td></tr>
+        <tr><td><code>parent_uuid</code></td><td>UUID of the record before it, forming a chain. <code>session_start</code> has no parent.</td></tr>
+        <tr><td><code>type</code></td><td>Record kind. See table below.</td></tr>
+        <tr><td><code>session_id</code></td><td>The overall run ID &mdash; the same for every record in the file.</td></tr>
+        <tr><td><code>timestamp</code></td><td>UTC RFC-3339 timestamp of when the record was written.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Record types</h3>
+    <table>
+      <thead><tr><th>Type</th><th>When emitted</th><th>Extra fields</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>session_start</code></td>
+          <td>Once at run open.</td>
+          <td>&mdash;</td>
+        </tr>
+        <tr>
+          <td><code>llm_request</code></td>
+          <td>Each LLM call: main task, memory compression, overlap batch.</td>
+          <td>task_key, model, request payload, token estimate.</td>
+        </tr>
+        <tr>
+          <td><code>llm_response</code></td>
+          <td>Each successful response.</td>
+          <td>content, stop reason, usage tokens.</td>
+        </tr>
+        <tr>
+          <td><code>llm_failure</code></td>
+          <td>Any LLM call that surfaces an error after retries.</td>
+          <td>error message, attempt count.</td>
+        </tr>
+        <tr>
+          <td><code>tool_call</code></td>
+          <td>Each tool invocation (<code>file_read</code>, <code>code_search</code>, etc.).</td>
+          <td>tool name, arguments, truncated result.</td>
+        </tr>
+        <tr>
+          <td><code>comment_produced</code></td>
+          <td>Each finding the LLM emits, before dedup and line-snap.</td>
+          <td>path, start_line, end_line, severity, category, body.</td>
+        </tr>
+        <tr>
+          <td><code>session_end</code></td>
+          <td>Once at run close (even on error, if the loop reaches Close).</td>
+          <td>files_reviewed, duration_seconds, llm_failures.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="append-only">Append-only, flushed per record</h2>
+    <p>The log is append-only. Every record is flushed to disk immediately after write. A crash mid-run leaves at most one truncated line at the tail &mdash; every prior record is intact and parseable. Never edit the file in place.</p>
+
+    <div class="note">
+      <strong>Concurrency.</strong> One <code>Session</code> per run, one file per <code>Session</code>. The writer is guarded by a mutex &mdash; you can run <code>zreview review</code> in parallel, but each instance owns its own JSONL file. Never point two processes at the same session ID.
+    </div>
+
+    <h2 id="resume">Resume semantics</h2>
+    <p><code>zreview review --resume &lt;session-id&gt;</code> re-opens an existing JSONL file and appends new records to the tail. What survives across the resume:</p>
+    <ul>
+      <li><strong>Comments already produced.</strong> The collector reads every <code>comment_produced</code> record from the existing log before doing any new work. Successful comments are not re-generated.</li>
+      <li><strong>Failed sub-tasks are retried.</strong> Any file whose main-task chain ended in <code>llm_failure</code> is re-dispatched.</li>
+      <li><strong>Tool cache is warm.</strong> Deterministic tool results are effectively free on the second pass because the LLM is unlikely to ask for the exact same thing again after a successful first pass.</li>
+    </ul>
+    <p>Resume is for interrupted runs (CI timed out, network flake), not for editing history. It has no effect if the log has a <code>session_end</code> record &mdash; the run already completed and there is nothing to redo.</p>
+
+    <h2 id="reading">Reading the log</h2>
+    <p>The JSONL is designed to be greppable with standard tools.</p>
+    <pre><code># count LLM calls
+grep -c '"type":"llm_request"' ~/.zreview/sessions/&lt;id&gt;.jsonl
+
+# every comment produced
+jq -c 'select(.type == "comment_produced") | {path, start_line, severity, body}' \
+  ~/.zreview/sessions/&lt;id&gt;.jsonl
+
+# any LLM failures
+jq -c 'select(.type == "llm_failure")' ~/.zreview/sessions/&lt;id&gt;.jsonl
+
+# session-end summary
+jq -c 'select(.type == "session_end")' ~/.zreview/sessions/&lt;id&gt;.jsonl</code></pre>
+
+    <h2 id="retention">Retention</h2>
+    <p><code>zreview</code> does not auto-prune. Old session files sit under <code>~/.zreview/sessions/</code> until you clean them up. Sensible retention:</p>
+    <ul>
+      <li><strong>Local dev.</strong> Prune on a weekly cron. Anything older than 30 days is post-mortem material at best.</li>
+      <li><strong>CI runners.</strong> Emit the JSONL as a build artifact and expire with the build. Keeps the runner disk clean.</li>
+      <li><strong>Auditing.</strong> If session logs are part of your compliance story, ship them off-box to your log platform. The file is already JSONL; most ingestion pipelines take it as-is.</li>
+    </ul>
+
+    <h2 id="secrets">Secrets in logs</h2>
+    <p>The log records tool inputs and outputs verbatim. Anything the LLM read via <code>file_read</code> ends up as a snippet in the JSONL. If a changed file contains a secret, the secret will be in the log.</p>
+    <p>The reviewer flags secret-like content in comments (see the sample <code>no-committed-secrets</code> rule) but does <strong>not</strong> redact them from the JSONL. Treat the session dir as sensitive.</p>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+      Adapted from OCR's session persistence layer &mdash; see <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/PORTING.md">PORTING.md</a>.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

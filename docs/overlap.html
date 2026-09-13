@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>Overlap &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+      <li><a href="/cli-reference.html">CLI reference</a></li>
+      <li><a href="/providers.html">Providers</a></li>
+      <li><a href="/index-and-context.html">Index and context</a></li>
+      <li><a href="/review-rules.html">Review rules</a></li>
+      <li><a href="/overlap.html" class="active">Overlap</a></li>
+      <li><a href="/session-log.html">Session log</a></li>
+      <li><a href="/github-action.html">GitHub Action</a></li>
+      <li><a href="/troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="/security.html">Security</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Overlap</h1>
+    <p class="lede">Detect other open pull requests that touch the same code &mdash; scope collision, merge-conflict risk, or duplicated work &mdash; before you merge.</p>
+
+    <h2 id="why">Why this exists</h2>
+    <p>Two engineers refactoring the same package in parallel is the most expensive kind of merge conflict: not because the diff is hard to resolve, but because one of the two efforts is usually wasted. Overlap detection surfaces those collisions <em>while</em> the second PR is still in review, when it's still cheap to coordinate.</p>
+    <p>It runs alongside the main review by default. You can also invoke it standalone via <code>zreview overlap</code>.</p>
+
+    <h2 id="how">How it works</h2>
+    <ol>
+      <li><strong>Fetch open PRs.</strong> Query the GitHub API for open PRs in the same repo, up to the configured concurrency limit.</li>
+      <li><strong>Deterministic prefilter.</strong> For each candidate, score against the current PR using two cheap signals:
+        <ul>
+          <li><strong>Title Jaccard.</strong> Tokenized title overlap. Catches &ldquo;refactor storage layer&rdquo; on both sides.</li>
+          <li><strong>File / symbol intersection.</strong> Any file or exported symbol both PRs touch is a strong signal.</li>
+        </ul>
+        Candidates below the prefilter threshold are dropped without any LLM cost.
+      </li>
+      <li><strong>Batched LLM verdict.</strong> Survivors are sent to the LLM as one batch call. The model returns a verdict per candidate (<code>overlap</code>, <code>conflict-risk</code>, <code>no-overlap</code>) with a one-line rationale.</li>
+      <li><strong>Render.</strong> A short markdown block goes into the review output. If <code>--format github</code>, it's posted as a top-level PR comment.</li>
+    </ol>
+
+    <h2 id="usage">Usage</h2>
+    <p>Automatic during a normal review, when a <code>GITHUB_TOKEN</code> and <code>--pr</code> are both present:</p>
+    <pre><code>export GITHUB_TOKEN=...
+zreview review --from origin/main --to HEAD --pr 42 --format github</code></pre>
+
+    <p>Standalone, without running a full review:</p>
+    <pre><code>zreview overlap --owner disseqt --repo z-code-reviewer --pr 42</code></pre>
+
+    <h2 id="output">Output shape</h2>
+    <p>Standalone output is markdown by default. If no overlap is found, the command prints <code>No overlap detected.</code> and exits 0.</p>
+    <pre><code>## Cross-PR overlap
+
+- **#38 &mdash; &ldquo;Refactor storage adapter to use pgx v5&rdquo;**
+  - conflict-risk: both PRs edit `internal/store/store.go` and `internal/store/pg.go`.
+  - Coordinate with @alice before merging.
+
+- **#41 &mdash; &ldquo;Add retry to storage.Insert&rdquo;**
+  - overlap: touches the same `Insert` function this PR refactors.
+  - Consider merging #41 first and rebasing this PR on top.</code></pre>
+
+    <h2 id="tokens">GitHub token requirements</h2>
+    <p>Overlap detection requires a <code>GITHUB_TOKEN</code> with:</p>
+    <ul>
+      <li><strong>Repository contents: read</strong> &mdash; to list open PRs.</li>
+      <li><strong>Pull requests: read</strong> &mdash; to fetch title, files, and metadata.</li>
+      <li><strong>Pull requests: write</strong> &mdash; only if <code>--format github</code> is used and you want the overlap block posted as a comment.</li>
+    </ul>
+    <p>In GitHub Actions, the built-in <code>secrets.GITHUB_TOKEN</code> already has these scopes for the current repo. For cross-repo use, mint a fine-grained PAT.</p>
+
+    <h2 id="config">Config knobs</h2>
+    <table>
+      <thead><tr><th>Env</th><th>Purpose</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>ZREVIEW_OVERLAP_ENABLED</code></td>
+          <td>Set to <code>0</code> to disable the automatic overlap pass during <code>zreview review</code>.</td>
+          <td>enabled</td>
+        </tr>
+        <tr>
+          <td><code>GITHUB_TOKEN</code></td>
+          <td>Auth for PR listing. If unset, overlap silently skips.</td>
+          <td>&mdash;</td>
+        </tr>
+        <tr>
+          <td><code>GITHUB_REPOSITORY</code></td>
+          <td>Owner/repo the current PR belongs to. GH Actions sets this automatically.</td>
+          <td>&mdash;</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="failure">Failure semantics</h2>
+    <p>Overlap is best-effort. It <strong>never</strong> blocks the main review output:</p>
+    <ul>
+      <li>No GitHub token &rarr; skipped silently.</li>
+      <li>GitHub API error &rarr; skipped, one-line warning to stderr, review proceeds.</li>
+      <li>LLM batch call fails &rarr; the deterministic prefilter results are still printed (weaker, but non-zero signal).</li>
+      <li>No candidate PRs &rarr; nothing printed at all.</li>
+    </ul>
+    <p>This is deliberate. A flaky GitHub API or a slow model must not swallow the review comments you actually came for.</p>
+
+    <h2 id="limits">Limits</h2>
+    <ul>
+      <li><strong>Same-repo only.</strong> No cross-repo overlap detection. Coordinating storage-layer refactors that span multiple services is out of scope by design &mdash; that's what design docs are for.</li>
+      <li><strong>Open PRs only.</strong> Recently-merged PRs are not surveyed. If you're rebasing on top of a PR that just landed, the review's diff already reflects it.</li>
+      <li><strong>Draft PRs.</strong> Included by default. Set the API filter if you want to skip them.</li>
+      <li><strong>Rate limits.</strong> The client backs off on 429 and stops after the configured retry budget. On heavily-scaled orgs, provide an app token with a higher secondary rate limit.</li>
+    </ul>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+      Adapted from Mira's cross-PR analysis &mdash; see <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/PORTING.md">PORTING.md</a> for provenance.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

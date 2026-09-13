@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>Index and context &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+      <li><a href="/cli-reference.html">CLI reference</a></li>
+      <li><a href="/providers.html">Providers</a></li>
+      <li><a href="/index-and-context.html" class="active">Index and context</a></li>
+      <li><a href="/review-rules.html">Review rules</a></li>
+      <li><a href="/overlap.html">Overlap</a></li>
+      <li><a href="/session-log.html">Session log</a></li>
+      <li><a href="/github-action.html">GitHub Action</a></li>
+      <li><a href="/troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="/security.html">Security</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Index and context</h1>
+    <p class="lede">How <code>zreview</code> assembles the &ldquo;codebase context&rdquo; block that goes into every review prompt. Two modes: indexed (fast, cross-file signal) and JIT (no dependency).</p>
+
+    <h2 id="two-modes">Two modes, one output</h2>
+    <p>The reviewer needs to know more than the diff: what does the changed function call, who calls it, what conventions does the repo enforce. That signal comes from one of two paths:</p>
+    <ul>
+      <li><strong>Indexed mode.</strong> <code>ZREVIEW_DB_URL</code> is set. A persistent database holds per-file summaries, symbol maps, and conventions extracted from a previous <code>zreview index</code> run. The reviewer pulls the relevant rows and stitches them into the prompt in milliseconds.</li>
+      <li><strong>JIT (just-in-time) mode.</strong> No <code>ZREVIEW_DB_URL</code>. The reviewer's tool loop uses <code>file_read</code>, <code>file_find</code>, and <code>code_search</code> to fetch context on demand while the LLM is running. Fewer moving parts, higher token cost per run, weaker cross-file signal.</li>
+    </ul>
+    <p>The prompt shape is identical in both modes &mdash; the review loop cannot tell them apart. Indexed mode is preferred for anything ongoing; JIT is fine for one-shot local runs.</p>
+
+    <h2 id="what-goes-in">What gets indexed</h2>
+    <p>Not every file. The indexer walks the repo with the same filter used by the review selector, so generated files, vendor dirs, lockfiles, and binary blobs are skipped.</p>
+    <ul>
+      <li><strong>Per-file summary.</strong> One LLM call per eligible file: exports, key types, dependencies, one-paragraph purpose. Cached by content hash &mdash; unchanged files skip on the next incremental pass.</li>
+      <li><strong>Symbol map.</strong> Cheap heuristic extraction of top-level declarations (functions, types, constants) per language. Used for the &ldquo;who else touches this symbol&rdquo; lookup during review.</li>
+      <li><strong>Conventions.</strong> A short list of repo-scoped idioms detected from the codebase &mdash; error style, logger of choice, testing framework. Injected into the review prompt to keep suggestions consistent with what the repo already does.</li>
+      <li><strong>Manifests.</strong> <code>go.mod</code>, <code>package.json</code>, <code>Cargo.toml</code>, and similar dependency files, so the reviewer knows what's in scope without re-parsing them.</li>
+    </ul>
+
+    <h2 id="storage">SQLite vs Postgres</h2>
+    <p><code>ZREVIEW_DB_URL</code> accepts two DSN shapes:</p>
+    <table>
+      <thead><tr><th>DSN</th><th>Backend</th><th>When to use</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>sqlite:///path/to/index.db</code></td>
+          <td>Local SQLite file</td>
+          <td>Single-machine, one-repo case. CI runners that keep a persistent cache volume. The default choice.</td>
+        </tr>
+        <tr>
+          <td><code>postgres://user:pass@host:5432/db?sslmode=require</code></td>
+          <td>Postgres</td>
+          <td>Shared index across many reviewers &mdash; team CI where every runner should reuse the same summaries. Higher operational cost.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The schema is identical either way. Migration paths from SQLite to Postgres are one-shot dumps and imports; there is no built-in migration tool because most teams settle on one or the other and stay there.</p>
+
+    <div class="note">
+      <strong>Postgres note.</strong> Point every reviewer at the same database. Concurrent <code>zreview index</code> runs are safe &mdash; the indexer uses row-level insert-or-update, not table locks &mdash; but you'll pay the LLM cost multiple times if two reviewers race on the same fresh file. In practice, run <code>zreview index --repo .</code> from one scheduled job and let reviews only read from the shared DB.
+    </div>
+
+    <h2 id="indexing">Running the indexer</h2>
+    <pre><code># first time — index everything
+export ZREVIEW_DB_URL="sqlite:///$HOME/.zreview/index.db"
+zreview index --repo .
+
+# subsequent runs — incremental (only re-summarizes changed files)
+zreview index --repo .
+
+# force full re-index (schema bump, embedding-model change, etc.)
+zreview index --repo . --full</code></pre>
+
+    <p>Incremental indexing keys off the content hash of each file. If the file bytes haven't changed since the last successful summary, the row is reused. This is what makes a scheduled indexer cheap after the first run.</p>
+
+    <h2 id="jit-mode">JIT context in practice</h2>
+    <p>When <code>ZREVIEW_DB_URL</code> is unset, <code>zreview review</code> still works. The reviewer's tool loop:</p>
+    <ol>
+      <li>Sees the diff first &mdash; nothing else.</li>
+      <li>Calls <code>file_read</code> to inspect files the diff references, or <code>code_search</code> to find callers.</li>
+      <li>Iterates until it has enough context to comment, or hits the tool-call budget (<code>MaxToolRequestTimes</code>, default 100).</li>
+    </ol>
+    <p>JIT mode is genuinely useful for exploratory runs and for repos too small to justify a database. On large repos, expect noticeably higher token cost per review and less consistent cross-file findings &mdash; the reviewer only sees what it thought to fetch.</p>
+
+    <h2 id="cost">Cost model</h2>
+    <p>Two distinct model roles, priced separately:</p>
+    <table>
+      <thead><tr><th>Env</th><th>Called when</th><th>Sensitivity</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>ZREVIEW_MODEL</code></td>
+          <td>Every review invocation, once per changed file (main task loop).</td>
+          <td>High. This is where quality lives. Use a capable model.</td>
+        </tr>
+        <tr>
+          <td><code>ZREVIEW_INDEX_MODEL</code></td>
+          <td>Once per file at index time (per-file summary + embedding). Cached until content changes.</td>
+          <td>Low. A cheap embedding-class model is usually fine.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="troubleshooting">Common issues</h2>
+    <ul>
+      <li><strong>Index looks empty after a run.</strong> Check that the walker's filters didn't skip everything. <code>zreview index -v</code> logs per-file decisions.</li>
+      <li><strong>Cross-file suggestions still weak.</strong> The symbol map is heuristic and language-specific. If a repo uses non-standard extensions, extend the file-type detector.</li>
+      <li><strong>Review is slow without an index.</strong> Expected &mdash; JIT mode does more tool calls. Set up an index and re-run.</li>
+      <li><strong>Postgres connection errors.</strong> Verify <code>sslmode</code> matches what your Postgres server expects. Most managed Postgres accepts <code>sslmode=require</code>.</li>
+    </ul>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+      Adapted from the Mira project's index/context layer &mdash; see <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/PORTING.md">PORTING.md</a> for provenance.
+    </footer>
+  </main>
+</div>
+</body>
+</html>
