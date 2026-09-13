@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/shubam-disseqt/z-code-reviewer/internal/findings"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/overlap"
@@ -35,9 +36,17 @@ func validFormat(f string) bool {
 
 // emitResult is the JSON output shape when --format=json.
 type emitResult struct {
-	SessionID string             `json:"session_id"`
-	Comments  []model.LlmComment `json:"comments"`
-	Overlap   []overlap.Finding  `json:"overlap,omitempty"`
+	SessionID string            `json:"session_id"`
+	Comments  []emittedComment  `json:"comments"`
+	Overlap   []overlap.Finding `json:"overlap,omitempty"`
+}
+
+// emittedComment wraps LlmComment with the reconciled state (new, keep,
+// carried). Downstream posters read `state` to decide whether to create a
+// new PR comment or update an existing one (Phase 17 concern).
+type emittedComment struct {
+	model.LlmComment
+	State findings.State `json:"state,omitempty"`
 }
 
 // emit writes the comments in the chosen format. For "github" it posts each
@@ -63,6 +72,10 @@ type emitConfig struct {
 	Comments  []model.LlmComment
 	Overlap   []overlap.Finding
 
+	// FindingState maps a comment's fingerprint to its reconciled state
+	// (new, keep, carried). Empty when carry-over is disabled (--pr unset).
+	FindingState map[string]findings.State
+
 	// GitHub-specific:
 	GHClient  *gh.Client
 	Owner     string
@@ -71,6 +84,15 @@ type emitConfig struct {
 	CommitSHA string
 
 	Stdout io.Writer
+}
+
+// commentState returns the reconciled state for a comment, or "" if none is
+// known. Uses the same fingerprint function the carry-over stage used.
+func (cfg *emitConfig) commentState(c model.LlmComment) findings.State {
+	if len(cfg.FindingState) == 0 {
+		return ""
+	}
+	return cfg.FindingState[commentFingerprint(cfg.Owner, cfg.Repo, c)]
 }
 
 // emitStdout prints a human-readable block per comment.
@@ -105,9 +127,13 @@ func emitStdout(w io.Writer, comments []model.LlmComment, findings []overlap.Fin
 
 // emitJSON writes the structured envelope to Output (- means stdout).
 func emitJSON(cfg emitConfig) error {
+	wrapped := make([]emittedComment, 0, len(cfg.Comments))
+	for _, c := range cfg.Comments {
+		wrapped = append(wrapped, emittedComment{LlmComment: c, State: cfg.commentState(c)})
+	}
 	res := emitResult{
 		SessionID: cfg.SessionID,
-		Comments:  cfg.Comments,
+		Comments:  wrapped,
 		Overlap:   cfg.Overlap,
 	}
 	data, err := json.MarshalIndent(res, "", "  ")

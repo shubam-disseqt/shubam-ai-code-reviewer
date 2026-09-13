@@ -245,20 +245,31 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	comments := runner.CollectPendingComments()
 	comments = filterResolved(comments)
 
+	// 11.5) fingerprint + carry-over (best-effort, PR-gated).
+	// Reconciles fresh comments against persisted findings for this
+	// (owner, repo, pr); unchanged file → carry, matching fp → keep,
+	// touched file with no match → resolved (dropped).
+	owner, repo := ownerRepoFromEnv()
+	carry := runCarryover(comments, changedPathsFromDiffs(kept), owner, repo, opts.PR, cmd.OutOrStderr())
+	comments = carry.Comments
+
 	// 12) overlap (best-effort)
 	overlapFindings := maybeDetectOverlap(ctx, opts, kept, llmClient)
 
 	// 13) emit
 	ghClient, _ := newGithubClient()
 	err = emit(ctx, emitConfig{
-		Format:    opts.Format,
-		Output:    opts.Output,
-		SessionID: sess.SessionID(),
-		Comments:  comments,
-		Overlap:   overlapFindings,
-		GHClient:  ghClient,
-		PRNumber:  opts.PR,
-		Stdout:    cmd.OutOrStdout(),
+		Format:       opts.Format,
+		Output:       opts.Output,
+		SessionID:    sess.SessionID(),
+		Comments:     comments,
+		Overlap:      overlapFindings,
+		GHClient:     ghClient,
+		PRNumber:     opts.PR,
+		Stdout:       cmd.OutOrStdout(),
+		Owner:        owner,
+		Repo:         repo,
+		FindingState: carry.State,
 	})
 	if err != nil {
 		return err
