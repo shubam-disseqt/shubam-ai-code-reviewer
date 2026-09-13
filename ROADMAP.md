@@ -5,40 +5,45 @@ checkpoint before the next starts. The plan below is the source of
 truth — issues and milestones track work within a phase, not phase
 sequencing itself.
 
-## Current state — Phase 2 (skeleton) shipped
+## Current state — Phase 3 + Phase 4a shipped
 
-- Repository scaffold, meta files, license, attribution
-- `cmd/zreview` Cobra CLI with working `version` and `docs` commands
-- Embedded docs viewer (localhost, host-allowlisted, DNS-rebinding safe)
-- CI: build + vet + test on every push
-- `ARCHITECTURE.md` and `PORTING.md` published — the design contract
-  we execute against for the remaining phases
+Fifteen packages under `internal/`, ~100 Go files, full test suite green
+(`go test ./... -race`), 62.8% overall coverage.
 
-## Phase 3 — OCR diff-precision layer (planned)
+- **Phase 2** — Skeleton, CLI, docs viewer, governance, CI (initial commit)
+- **Phase 3** — OCR diff-precision layer copied with Apache-2.0
+  attribution. All packages build and their retained tests pass:
+  - `internal/pathutil`, `internal/gitcmd`, `internal/model` — foundation
+  - `internal/diff/*` (18 files, incl. OCR's 880-LOC resolver regression harness) — **93.8% coverage**
+  - `internal/tool/*` (definitions, file_read/find/search, filereader, tools.json embed) — **93.2% coverage**
+  - `internal/comment/*` (parse, args_repair, collector) — **99.5% coverage**
+  - `internal/llm/*` — providers trimmed to 5 (Anthropic, OpenAI,
+    Bedrock, OpenAI-Responses, DeepSeek); retry-report ledger dropped.
+    Coverage 40% because agent dropped tests that depended on removed
+    providers — will come back up as we exercise the retained code.
+  - `internal/llmloop/*` (loop, pool, compression) — retry-ledger
+    dropped; a small local `Session` interface stands in until
+    `internal/session` lands. Coverage 22% for the same reason as `llm`.
+  - `internal/prompts/*.md` — main_task + memory_compression templates
+    embedded
+- **Phase 4a** — Independent Mira leaf packages ported Python → Go,
+  stdlib-only, all with 91–100% coverage:
+  - `internal/filetype/` (100%), `internal/filter/` (94.6%),
+    `internal/chunker/` (100%), `internal/conventions/` (91.9%)
 
-Copy-with-attribution from `alibaba/open-code-review`. All Apache-2.0 Go.
+**What is not yet wired.** Packages exist and each test suite passes,
+but end-to-end orchestration (`zreview review` producing real output)
+needs Phase 8's wire-up. The `Session` interface, the index store,
+overlap, rules, and the review command itself are still ahead.
 
-- `internal/pathutil`, `internal/gitcmd`, `internal/diff/*`
-- `internal/comment/{parse,args_repair,collector}.go`
-- `internal/tool/*` — file_read, code_search, file_find, task_done, tool schema JSON
-- `internal/llm/*` — trimmed to 5 providers (Anthropic, OpenAI, Bedrock, Gemini, DeepSeek)
-- `internal/llmloop/{loop,compression,pool}.go` — retry-report ledger dropped
-- `internal/prompts/*.md` — main_task and memory_compression prompts
+## Phase 4 continued — Mira index core (planned)
 
-Deliverable: `zreview diff-parse <file>` prints a parsed unified diff
-and its resolved hunks. `internal/diff/resolver_test.go` (OCR's 880-LOC
-regression harness) passes.
-
-## Phase 4 — Mira index port (planned)
-
-Python → Go. Biggest phase.
+Biggest single remaining chunk. Python → Go.
 
 - `internal/index/{indexer,batch,summarize,store,sqlite_store,postgres_store,schema,types,status}.go`
 - `internal/context/{jit,review,imports,hunk}.go`
 - `internal/manifests/*.go` — go.mod, package.json, pyproject.toml, Dockerfile, composer.json, lockfiles
 - `internal/extract/extract.go`
-- `internal/conventions/conventions.go`
-- `internal/filetype`, `internal/filter`, `internal/chunker`
 
 Deliverable: `zreview index --repo .` produces an index in a local
 SQLite file or an external Postgres. `zreview index-inspect <path>`

@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: Apache-2.0
+// Portions Copyright 2026 disseqt
+// Copyright 2026 alibaba/open-code-review Contributors
+//
+// Adapted from alibaba/open-code-review internal/config/toolsconfig/toolsconfig_test.go
+
+package tool
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestLoadToolsConfig_Default(t *testing.T) {
+	tools, err := LoadToolsConfig("")
+	if err != nil {
+		t.Fatalf("LoadToolsConfig default: %v", err)
+	}
+	if len(tools) == 0 {
+		t.Fatal("expected at least one tool from embedded config")
+	}
+	first := tools[0]
+	if first.Name == "" {
+		t.Error("expected non-empty tool name")
+	}
+	if first.Definition == nil {
+		t.Error("expected non-nil definition")
+	}
+}
+
+func TestLoadToolsConfig_CustomFile(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "tools.json")
+	data := `[
+		{"name": "test_tool", "plan_task": true, "main_task": false, "definition": {"name": "test_tool"}}
+	]`
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		t.Fatalf("write tools.json: %v", err)
+	}
+
+	tools, err := LoadToolsConfig(path)
+	if err != nil {
+		t.Fatalf("LoadToolsConfig custom file: %v", err)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(tools))
+	}
+	if tools[0].Name != "test_tool" {
+		t.Errorf("expected name=test_tool, got %s", tools[0].Name)
+	}
+	if !tools[0].PlanTask {
+		t.Error("expected PlanTask=true")
+	}
+	if tools[0].MainTask {
+		t.Error("expected MainTask=false")
+	}
+}
+
+func TestLoadToolsConfig_FileNotFound(t *testing.T) {
+	_, err := LoadToolsConfig("/nonexistent/tools.json")
+	if err == nil {
+		t.Error("expected error for nonexistent file")
+	}
+}
+
+func TestLoadToolsConfig_InvalidJSON(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "tools.json")
+	if err := os.WriteFile(path, []byte("not json"), 0644); err != nil {
+		t.Fatalf("write tools.json: %v", err)
+	}
+
+	_, err := LoadToolsConfig(path)
+	if err == nil {
+		t.Error("expected error for invalid JSON")
+	}
+}
+
+func TestToolDefsByPhase(t *testing.T) {
+	def := json.RawMessage(`{"name": "test"}`)
+	tests := []struct {
+		name     string
+		entry    ToolConfigEntry
+		planOnly bool
+		wantOk   bool
+	}{
+		{"plan_task and planOnly=true", ToolConfigEntry{PlanTask: true, MainTask: false, Definition: def}, true, true},
+		{"plan_task and planOnly=false", ToolConfigEntry{PlanTask: true, MainTask: false, Definition: def}, false, false},
+		{"main_task and planOnly=false", ToolConfigEntry{PlanTask: false, MainTask: true, Definition: def}, false, true},
+		{"main_task and planOnly=true", ToolConfigEntry{PlanTask: false, MainTask: true, Definition: def}, true, false},
+		{"both and planOnly=true", ToolConfigEntry{PlanTask: true, MainTask: true, Definition: def}, true, true},
+		{"both and planOnly=false", ToolConfigEntry{PlanTask: true, MainTask: true, Definition: def}, false, true},
+		{"neither", ToolConfigEntry{PlanTask: false, MainTask: false, Definition: def}, true, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := tc.entry.ToolDefsByPhase(tc.planOnly)
+			if ok != tc.wantOk {
+				t.Errorf("ToolDefsByPhase(planOnly=%v) ok=%v, want %v", tc.planOnly, ok, tc.wantOk)
+			}
+			if tc.wantOk && got == nil {
+				t.Error("expected non-nil definition when ok=true")
+			}
+			if !tc.wantOk && got != nil {
+				t.Error("expected nil definition when ok=false")
+			}
+		})
+	}
+}

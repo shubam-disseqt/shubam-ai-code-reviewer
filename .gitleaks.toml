@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 disseqt
+#
+# gitleaks configuration for z-code-reviewer.
+# We extend the default ruleset and add narrow allowlists for known
+# false positives in test fixtures. Do NOT broaden the allowlist to
+# cover real source files without a security review.
+
+title = "z-code-reviewer gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Narrow allowlist for test fixtures that resemble secrets"
+
+# Test fixtures that hard-code fake UUIDs / example session keys to
+# exercise formatting and truncation logic. These are literal test
+# inputs — not real credentials — and every string on the allowlist
+# either matches the fixed test-fixture pattern or lives in a *_test.go
+# file whose fingerprint we've verified.
+paths = [
+    '''internal/llm/sessionkey_test\.go''',
+]
+
+# UUID-shaped literals hard-coded as example session identifiers.
+# Matches only the canonical 8-4-4-4-12 hex UUID pattern used in tests.
+regexes = [
+    '''(?i)"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"''',
+]
