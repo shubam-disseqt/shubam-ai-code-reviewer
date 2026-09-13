@@ -39,6 +39,8 @@ type emitResult struct {
 	SessionID string            `json:"session_id"`
 	Comments  []emittedComment  `json:"comments"`
 	Overlap   []overlap.Finding `json:"overlap,omitempty"`
+	Summary   *model.Summary    `json:"summary,omitempty"`
+	Labels    *model.Labels     `json:"labels,omitempty"`
 }
 
 // emittedComment wraps LlmComment with the reconciled state (new, keep,
@@ -75,6 +77,12 @@ type emitConfig struct {
 	// FindingState maps a comment's fingerprint to its reconciled state
 	// (new, keep, carried). Empty when carry-over is disabled (--pr unset).
 	FindingState map[string]findings.State
+
+	// Summary and Labels come from the Phase 15 cheap-tier calls. Only the
+	// JSON emitter surfaces them today; stdout/github ignore them until
+	// Phase 17 consumes them for the PR description block.
+	Summary model.Summary
+	Labels  model.Labels
 
 	// GitHub-specific:
 	GHClient  *gh.Client
@@ -135,6 +143,14 @@ func emitJSON(cfg emitConfig) error {
 		SessionID: cfg.SessionID,
 		Comments:  wrapped,
 		Overlap:   cfg.Overlap,
+	}
+	if !isZeroSummary(cfg.Summary) {
+		s := cfg.Summary
+		res.Summary = &s
+	}
+	if !isZeroLabels(cfg.Labels) {
+		l := cfg.Labels
+		res.Labels = &l
 	}
 	data, err := json.MarshalIndent(res, "", "  ")
 	if err != nil {
@@ -205,6 +221,18 @@ func formatGithubBody(c model.LlmComment) string {
 		b.WriteString("```")
 	}
 	return b.String()
+}
+
+// isZeroSummary reports whether a Summary carries no signal — used so the
+// JSON emitter omits an all-empty Phase 15 payload instead of writing
+// `"summary": {}`.
+func isZeroSummary(s model.Summary) bool {
+	return s.Walkthrough == "" && len(s.ChangeGroups) == 0 && s.TestingNotes == "" && s.Risk == ""
+}
+
+// isZeroLabels mirrors isZeroSummary for the labeler payload.
+func isZeroLabels(l model.Labels) bool {
+	return l.PRType == "" && len(l.Domains) == 0 && l.RiskTag == "" && len(l.OwnershipHints) == 0
 }
 
 // exitCodeForComments returns 3 when any comment carries a critical/blocker
