@@ -117,7 +117,7 @@ func TestRunScannersNoBinariesIsNonFatal(t *testing.T) {
 	// line via the logger. This is the property the review pipeline
 	// relies on to keep working on runners that ship without scanners.
 	var buf bytes.Buffer
-	got := runScanners(context.Background(), t.TempDir(), []model.Diff{{NewPath: "a.go"}}, &buf)
+	got := runScanners(context.Background(), t.TempDir(), []model.Diff{{NewPath: "a.go"}}, testLogger(&buf))
 	if got != nil && len(got) != 0 {
 		// If a scanner IS installed on the test machine it may return
 		// zero findings on an empty tempdir; we accept either.

@@ -7,8 +7,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
+	"github.com/shubam-disseqt/z-code-reviewer/internal/logutil"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/scanner"
 )
@@ -17,21 +19,29 @@ import (
 // A total failure at the runner level (only ctx cancellation triggers it)
 // is treated as non-fatal — the review continues without scanner findings.
 // The per-scanner best-effort semantics live inside internal/scanner.
-func runScanners(ctx context.Context, repo string, kept []model.Diff, out io.Writer) []scanner.ScannerFinding {
+func runScanners(ctx context.Context, repo string, kept []model.Diff, logger *slog.Logger) []scanner.ScannerFinding {
 	paths := scannerPathsFromDiffs(kept)
+	// Two stages: "scanner" for the per-adapter chatter (Debug — noisy on a
+	// full run), "scanners" for the pipeline summary (Info — must show up).
+	adapterLog := logutil.WithStage(logger, "scanner")
+	pipelineLog := logutil.WithStage(logger, "scanners")
 	findings, err := scanner.Run(ctx, repo, paths, scanner.Options{
 		Disabled: scanner.EnvDisabled(),
 		Stderr:   io.Discard,
 		Log: func(format string, args ...any) {
-			fmt.Fprintf(out, "[zreview] scanner: "+format+"\n", args...)
+			adapterLog.Debug(fmt.Sprintf(format, args...))
 		},
 	})
 	if err != nil {
-		fmt.Fprintf(out, "[zreview] scanners: %v (continuing without)\n", err)
+		pipelineLog.Warn("continuing without scanner findings", "err", err.Error())
 		return nil
 	}
-	fmt.Fprintf(out, "[zreview] scanners: %d findings from %s\n",
-		len(findings), scanner.TallyByTool(findings))
+	tally := scanner.TallyByTool(findings)
+	pipelineLog.Info(
+		fmt.Sprintf("%d findings from %s", len(findings), tally),
+		"count", len(findings),
+		"by_tool", tally,
+	)
 	return findings
 }
 

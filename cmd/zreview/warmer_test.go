@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,7 +17,14 @@ import (
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/filetype"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/index"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/logutil"
 )
+
+// testLogger returns a text-mode logger writing to buf so existing substring
+// assertions ("warmer:", "1 new", ...) keep working under the slog migration.
+func testLogger(buf *bytes.Buffer) *slog.Logger {
+	return logutil.New(buf, logutil.FormatText, slog.LevelDebug)
+}
 
 // helper: fresh in-memory store, optionally pre-populated with rows for the
 // listed paths.
@@ -129,7 +137,7 @@ func TestWarmerLogDirFallsBackToHome(t *testing.T) {
 
 func TestSpawnIndexWarmerNoMissingIsNoOp(t *testing.T) {
 	var buf bytes.Buffer
-	spawnIndexWarmer("/tmp/anywhere", nil, &buf)
+	spawnIndexWarmer("/tmp/anywhere", nil, testLogger(&buf))
 	if buf.Len() != 0 {
 		t.Errorf("expected silent no-op, got %q", buf.String())
 	}
@@ -152,7 +160,7 @@ func TestSpawnIndexWarmerLogsPidAndPath(t *testing.T) {
 	t.Setenv("ZREVIEW_DB_URL", "")
 
 	var buf bytes.Buffer
-	spawnIndexWarmer(tmp, []string{"a.go", "b.go"}, &buf)
+	spawnIndexWarmer(tmp, []string{"a.go", "b.go"}, testLogger(&buf))
 
 	msg := buf.String()
 	if !strings.Contains(msg, "warmer:") {
@@ -161,7 +169,9 @@ func TestSpawnIndexWarmerLogsPidAndPath(t *testing.T) {
 	if !strings.Contains(msg, "2 file(s) missing") {
 		t.Errorf("expected count in log, got %q", msg)
 	}
-	if !strings.Contains(msg, "pid ") {
+	// Legacy grep pattern "pid <N>" is preserved by the slog line message;
+	// the structured attr also ships as pid=<N>. Accept either.
+	if !strings.Contains(msg, "pid ") && !strings.Contains(msg, "pid=") {
 		t.Errorf("expected pid in log, got %q", msg)
 	}
 	if !strings.Contains(msg, filepath.Join(tmp, "warmer.log")) {

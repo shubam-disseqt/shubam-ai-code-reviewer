@@ -6,13 +6,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/index"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/logutil"
 )
 
 // warmerLogDir names the directory that holds the warmer's stdout/stderr
@@ -61,29 +62,30 @@ func missingSummaryPaths(ctx context.Context, store index.Store, changed []strin
 //
 // The child continues after this process exits: Go's exec.Cmd doesn't Wait
 // unless we call Wait, and the child's stdio is redirected off any terminal.
-func spawnIndexWarmer(repo string, paths []string, out io.Writer) {
+func spawnIndexWarmer(repo string, paths []string, logger *slog.Logger) {
 	if len(paths) == 0 {
 		return
 	}
+	log := logutil.WithStage(logger, "warmer")
 	self, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(out, "[zreview] warmer: resolve self: %v (skipping)\n", err)
+		log.Warn("resolve self, skipping", "err", err.Error())
 		return
 	}
 	dir, err := warmerLogDir()
 	if err != nil {
-		fmt.Fprintf(out, "[zreview] warmer: resolve log dir: %v (skipping)\n", err)
+		log.Warn("resolve log dir, skipping", "err", err.Error())
 		return
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		fmt.Fprintf(out, "[zreview] warmer: mkdir %s: %v (skipping)\n", dir, err)
+		log.Warn("mkdir failed, skipping", "dir", dir, "err", err.Error())
 		return
 	}
 	logPath := filepath.Join(dir, "warmer.log")
 	// Append so successive warms build one log. Line count grows slowly.
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		fmt.Fprintf(out, "[zreview] warmer: open %s: %v (skipping)\n", logPath, err)
+		log.Warn("open log failed, skipping", "path", logPath, "err", err.Error())
 		return
 	}
 	// Do NOT defer f.Close() — the child needs the fd. The kernel closes it
@@ -96,7 +98,7 @@ func spawnIndexWarmer(repo string, paths []string, out io.Writer) {
 	// Env inherits by default when Env is nil.
 
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(out, "[zreview] warmer: start: %v (skipping)\n", err)
+		log.Warn("start failed, skipping", "err", err.Error())
 		_ = f.Close()
 		return
 	}
@@ -104,7 +106,13 @@ func spawnIndexWarmer(repo string, paths []string, out io.Writer) {
 	// so long as the OS reaps orphaned children (init on Unix).
 	_ = cmd.Process.Release()
 
-	fmt.Fprintf(out,
-		"[zreview] warmer: %d file(s) missing from index — spawned zreview index (pid %d, log %s)\n",
-		len(paths), cmd.Process.Pid, logPath)
+	// Legacy-compat: text-mode line reads "warmer: N file(s) missing from
+	// index — spawned zreview index (pid P, log LOG)" so operators grep the
+	// same way as pre-slog. JSON mode surfaces the same as structured attrs.
+	log.Info(
+		fmt.Sprintf("%d file(s) missing from index — spawned zreview index", len(paths)),
+		"count", len(paths),
+		"pid", cmd.Process.Pid,
+		"log", logPath,
+	)
 }
