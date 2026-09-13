@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/scoring"
 )
 
 func sampleComment() model.LlmComment {
@@ -143,10 +144,57 @@ func TestExitCodeForBlockerFindings(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := exitCodeForComments(tt.cms); got != tt.want {
+			if got := exitCodeForComments(tt.cms, nil); got != tt.want {
 				t.Errorf("got %d, want %d", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestEmitJSONAttachesScoreFields(t *testing.T) {
+	var buf bytes.Buffer
+	c := sampleComment()
+	scores := map[string]scoring.Score{
+		commentKey(c): {
+			Severity:   scoring.SeverityHigh,
+			Confidence: 0.87,
+			Impact:     0.55,
+			Rationale:  "bug",
+		},
+	}
+	err := emit(context.Background(), emitConfig{
+		Format:   formatJSON,
+		Output:   "-",
+		Comments: []model.LlmComment{c},
+		Scores:   scores,
+		Stdout:   &buf,
+	})
+	if err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	// Assert the JSON envelope carries severity/confidence/impact/rationale
+	// as top-level fields on each comment.
+	var res struct {
+		Comments []map[string]any `json:"comments"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &res); err != nil {
+		t.Fatalf("unmarshal: %v (out=%s)", err, buf.String())
+	}
+	if len(res.Comments) != 1 {
+		t.Fatalf("want 1 comment, got %d", len(res.Comments))
+	}
+	got := res.Comments[0]
+	if got["severity"] != "HIGH" {
+		t.Errorf("severity: got %v want HIGH", got["severity"])
+	}
+	if got["confidence"].(float64) != 0.87 {
+		t.Errorf("confidence: got %v", got["confidence"])
+	}
+	if got["impact"].(float64) != 0.55 {
+		t.Errorf("impact: got %v", got["impact"])
+	}
+	if got["rationale"] != "bug" {
+		t.Errorf("rationale: got %v", got["rationale"])
 	}
 }
 

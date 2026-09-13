@@ -24,6 +24,7 @@ import (
 	"github.com/shubam-disseqt/z-code-reviewer/internal/overlap"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/reviewctx"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/rules"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/scoring"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/selector"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/session"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/tool"
@@ -31,15 +32,16 @@ import (
 
 // reviewOpts is the parsed CLI surface for `zreview review`.
 type reviewOpts struct {
-	From    string
-	To      string
-	Commit  string
-	Repo    string
-	Format  string
-	Output  string
-	PR      int
-	Resume  string
-	Verbose bool
+	From        string
+	To          string
+	Commit      string
+	Repo        string
+	Format      string
+	Output      string
+	PR          int
+	Resume      string
+	Verbose     bool
+	MinSeverity string
 }
 
 // defaultMaxTokens is the token budget assumed for the model's context window
@@ -51,9 +53,10 @@ const defaultMaxTokens = 200_000
 
 func newReviewCmd() *cobra.Command {
 	opts := &reviewOpts{
-		Repo:   ".",
-		Format: formatStdout,
-		Output: "-",
+		Repo:        ".",
+		Format:      formatStdout,
+		Output:      "-",
+		MinSeverity: string(scoring.SeverityMedium),
 	}
 	cmd := &cobra.Command{
 		Use:   "review",
@@ -81,6 +84,8 @@ Diff selection is mutually exclusive: pass --commit for a single commit, OR
 	f.IntVar(&opts.PR, "pr", 0, "PR number (github format)")
 	f.StringVar(&opts.Resume, "resume", "", "resume an interrupted session by id")
 	f.BoolVar(&opts.Verbose, "verbose", false, "log more")
+	f.StringVar(&opts.MinSeverity, "min-severity", opts.MinSeverity,
+		"drop findings below this bucket: LOW | MEDIUM | HIGH | CRITICAL (SUPPRESS is always dropped)")
 
 	return cmd
 }
@@ -95,6 +100,13 @@ func (o *reviewOpts) validate() error {
 	if o.Format == formatGithub && o.PR == 0 {
 		return fmt.Errorf("--format=github requires --pr")
 	}
+	sev, ok := scoring.ParseSeverity(o.MinSeverity)
+	if !ok {
+		return fmt.Errorf("--min-severity must be one of LOW|MEDIUM|HIGH|CRITICAL (got %q)", o.MinSeverity)
+	}
+	if sev == scoring.SeveritySuppress {
+		return fmt.Errorf("--min-severity=SUPPRESS is invalid (SUPPRESS is always dropped)")
+	}
 	return nil
 }
 
@@ -104,6 +116,18 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
+	// 0) scoring policy — loaded early so a bad override fails fast
+	// before we spend tokens. Repo-local overrides log so users know
+	// which policy is in play.
+	policy, err := scoring.LoadPolicy(opts.Repo)
+	if err != nil {
+		return fmt.Errorf("scoring: %w", err)
+	}
+	if opts.Verbose || policy.Source() != "embedded" {
+		fmt.Fprintf(cmd.OutOrStderr(), "[zreview] scoring policy: %s\n", policy.Source())
+	}
+	minSev, _ := scoring.ParseSeverity(opts.MinSeverity) // validated in opts.validate()
 
 	// 1) diff
 	diffs, err := resolveDiffs(ctx, opts)
@@ -241,9 +265,12 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 
 	// 11) post-process — deduped & line-snapped by llmloop already. Keep
 	// only comments that resolved to a line, so the emitter never posts
-	// unlocated findings to GitHub.
+	// unlocated findings to GitHub. Then apply the scoring policy: SUPPRESS
+	// is always dropped, anything below --min-severity is dropped, and the
+	// surviving scores are handed to emit for JSON envelope enrichment.
 	comments := runner.CollectPendingComments()
 	comments = filterResolved(comments)
+	comments, scoreMap := filterByScore(comments, policy, minSev)
 
 	// 11.5) fingerprint + carry-over (best-effort, PR-gated).
 	// Reconciles fresh comments against persisted findings for this
@@ -270,12 +297,13 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		Owner:        owner,
 		Repo:         repo,
 		FindingState: carry.State,
+		Scores:       scoreMap,
 	})
 	if err != nil {
 		return err
 	}
 
-	if code := exitCodeForComments(comments); code != 0 {
+	if code := exitCodeForComments(comments, scoreMap); code != 0 {
 		// Return a typed error so main.go can pick up the special exit code.
 		return &blockerExitError{code: code}
 	}
@@ -484,6 +512,32 @@ func filterResolved(comments []model.LlmComment) []model.LlmComment {
 		out = append(out, c)
 	}
 	return out
+}
+
+// filterByScore applies the deterministic scoring policy: SUPPRESS
+// findings are always dropped; findings below minSev are dropped;
+// survivors are returned along with a map of commentKey → Score so the
+// emitter can attach severity/confidence/impact/rationale to the JSON
+// envelope.
+func filterByScore(comments []model.LlmComment, p scoring.Policy, minSev scoring.Severity) ([]model.LlmComment, map[string]scoring.Score) {
+	if len(comments) == 0 {
+		return comments, nil
+	}
+	minRank := scoring.Rank(minSev)
+	out := comments[:0]
+	scores := make(map[string]scoring.Score, len(comments))
+	for _, c := range comments {
+		sc := scoring.ScoreOne(c, p)
+		if sc.Score.Severity == scoring.SeveritySuppress {
+			continue
+		}
+		if scoring.Rank(sc.Score.Severity) < minRank {
+			continue
+		}
+		out = append(out, c)
+		scores[commentKey(c)] = sc.Score
+	}
+	return out, scores
 }
 
 // maybeDetectOverlap runs cross-PR overlap detection when a GITHUB_TOKEN is

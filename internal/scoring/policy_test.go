@@ -170,10 +170,10 @@ func TestEmbeddedPolicyPDFExamples(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 	cases := []struct {
-		name     string
-		comment  model.LlmComment
-		wantSev  Severity
-		wantRat  string
+		name    string
+		comment model.LlmComment
+		wantSev Severity
+		wantRat string
 	}{
 		{
 			name:    "hardcoded credential → CRITICAL",
