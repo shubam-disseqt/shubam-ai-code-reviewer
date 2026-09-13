@@ -1,0 +1,41 @@
+{
+  "name": "zreview",
+  "version": "0.0.0",
+  "description": "z-code-reviewer (zreview) — Go CLI for AI-assisted code review. Distributed as a native binary via platform sub-packages.",
+  "homepage": "https://github.com/shubam-disseqt/z-code-reviewer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shubam-disseqt/z-code-reviewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shubam-disseqt/z-code-reviewer/issues"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "zreview",
+    "z-code-reviewer",
+    "code-review",
+    "llm",
+    "ai",
+    "static-analysis",
+    "cli"
+  ],
+  "bin": {
+    "zreview": "bin/zreview.js"
+  },
+  "files": [
+    "bin/zreview.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "zreview-linux-x64": "0.0.0",
+    "zreview-linux-arm64": "0.0.0",
+    "zreview-darwin-x64": "0.0.0",
+    "zreview-darwin-arm64": "0.0.0",
+    "zreview-win32-x64": "0.0.0",
+    "zreview-win32-arm64": "0.0.0"
+  }
+}

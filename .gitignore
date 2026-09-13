@@ -14,8 +14,9 @@ docs/dist/
 docs/.astro/
 .pnpm-store/
 
-# npm packaging platform stubs (populated at release time)
-npm/*/bin/
+# npm packaging platform stubs (native binaries populated at release time).
+# The launcher script npm/zreview/bin/zreview.js IS source and must be tracked.
+npm/zreview-*/bin/
 
 # Editor / OS
 .DS_Store

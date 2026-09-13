@@ -147,3 +147,95 @@ jobs:
             dist/zreview-*
             dist/sha256sum.txt
           fail_on_unmatched_files: true
+
+  npm-publish:
+    name: publish npm packages
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Stage platform binaries into npm/
+        run: |
+          set -euo pipefail
+          # Map Go GOOS/GOARCH to npm platform/cpu.
+          declare -A PAIRS=(
+            [zreview-linux-amd64]="zreview-linux-x64/bin/zreview"
+            [zreview-linux-arm64]="zreview-linux-arm64/bin/zreview"
+            [zreview-darwin-amd64]="zreview-darwin-x64/bin/zreview"
+            [zreview-darwin-arm64]="zreview-darwin-arm64/bin/zreview"
+            [zreview-windows-amd64.exe]="zreview-win32-x64/bin/zreview.exe"
+            [zreview-windows-arm64.exe]="zreview-win32-arm64/bin/zreview.exe"
+          )
+          for src in "${!PAIRS[@]}"; do
+            dst="npm/${PAIRS[$src]}"
+            mkdir -p "$(dirname "$dst")"
+            cp "dist/$src" "$dst"
+            chmod +x "$dst" || true
+          done
+          ls -R npm/*/bin
+
+      - name: Set version on every package
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Strip a leading 'v' from the tag ("v0.1.0" -> "0.1.0"). npm rejects
+          # a leading 'v' in package.json versions.
+          VERSION="${TAG#v}"
+          export VERSION
+          for pkg in npm/zreview-linux-x64 npm/zreview-linux-arm64 \
+                     npm/zreview-darwin-x64 npm/zreview-darwin-arm64 \
+                     npm/zreview-win32-x64 npm/zreview-win32-arm64 \
+                     npm/zreview; do
+            (
+              cd "$pkg"
+              npm version "$VERSION" --no-git-tag-version --allow-same-version
+            )
+          done
+          # Meta package's optionalDependencies must pin the same VERSION.
+          node -e '
+            const fs = require("fs");
+            const path = "npm/zreview/package.json";
+            const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+            for (const name of Object.keys(pkg.optionalDependencies || {})) {
+              pkg.optionalDependencies[name] = process.env.VERSION;
+            }
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+          '
+
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          for pkg in npm/zreview-linux-x64 npm/zreview-linux-arm64 \
+                     npm/zreview-darwin-x64 npm/zreview-darwin-arm64 \
+                     npm/zreview-win32-x64 npm/zreview-win32-arm64; do
+            echo ">>> publishing $pkg"
+            (cd "$pkg" && npm publish --provenance --access public)
+          done
+
+      - name: Publish meta package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd npm/zreview
+          npm publish --provenance --access public
