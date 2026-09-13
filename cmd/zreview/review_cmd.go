@@ -316,6 +316,11 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 
 	// 13) emit
 	ghClient, _ := newGithubClient()
+	// GitHub's PR-comment API rejects an empty commit_id. Resolve the head
+	// SHA locally from the range's --to ref (or HEAD if unset). This
+	// assumes the operator pushed the same commit to the PR head — true
+	// for CI runs and for the doc-recommended local workflow.
+	commitSHA := resolveHeadSHA(opts)
 	err = emit(ctx, emitConfig{
 		Format:       opts.Format,
 		Output:       opts.Output,
@@ -327,6 +332,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		Stdout:       cmd.OutOrStdout(),
 		Owner:        owner,
 		Repo:         repo,
+		CommitSHA:    commitSHA,
 		Ref:          os.Getenv("GITHUB_REF"),
 		WaitSARIF:    opts.WaitSARIF,
 		FindingState: carry.State,
@@ -496,6 +502,24 @@ func newLLMTiers() (llm.Tiers, error) {
 		Provider: os.Getenv("ZREVIEW_PROVIDER"),
 		Model:    os.Getenv("ZREVIEW_MODEL"),
 	})
+}
+
+// resolveHeadSHA returns the git SHA of the "to" ref for --format=github
+// posting. Falls back to HEAD when --to is empty (workspace / commit modes).
+// Best-effort: an unresolvable ref returns "" and the poster surfaces a
+// clearer error at the API boundary than an empty commit_id would.
+func resolveHeadSHA(opts *reviewOpts) string {
+	ref := "HEAD"
+	if opts.To != "" {
+		ref = opts.To
+	} else if opts.Commit != "" {
+		ref = opts.Commit
+	}
+	out, err := gitcmd.New(0).Run(context.Background(), opts.Repo, "rev-parse", ref)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
 }
 
 // buildToolRegistry wires the context-gathering tools the LLM can call

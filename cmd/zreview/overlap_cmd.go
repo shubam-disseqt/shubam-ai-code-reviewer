@@ -51,7 +51,15 @@ func runOverlap(ctx context.Context, cmd *cobra.Command, owner, repoName string,
 	}
 	llmc := tiers.Main
 
-	cur := overlap.PR{Owner: owner, Repo: repoName, Number: number}
+	// Fetch the current PR's file list so the prefilter has non-empty
+	// current.Paths to intersect against candidates. Without this the
+	// prefilter compared [] vs candidate paths and silently rejected
+	// every candidate — overlap was a no-op on real repos.
+	paths, err := ghc.GetPRFiles(ctx, owner, repoName, number, 300)
+	if err != nil {
+		return fmt.Errorf("fetch PR files: %w", err)
+	}
+	cur := overlap.PR{Owner: owner, Repo: repoName, Number: number, Paths: paths}
 	findings, err := overlap.Detect(ctx, overlap.DefaultConfig(), cur, ghc, llmc)
 	if err != nil {
 		return fmt.Errorf("detect overlap: %w", err)

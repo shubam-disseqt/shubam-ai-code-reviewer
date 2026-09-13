@@ -784,7 +784,20 @@ func (c *OpenAIClient) buildOpenAIParams(model string, req ChatRequest) openai.C
 		}
 	}
 	if req.MaxTokens > 0 {
-		params.MaxCompletionTokens = openai.Int(int64(req.MaxTokens))
+		// Callers pass Template.MaxTokens (the context-window budget used
+		// by compression thresholds). OpenAI's `max_completion_tokens`
+		// field is the OUTPUT cap, and every model has its own ceiling
+		// (gpt-4o-mini 16384, gpt-4o 16384, o1 100k, gpt-5.x 128k). Clamp
+		// so a 200k context budget doesn't become a 200k output request
+		// that OpenAI rejects with 400 invalid_value.
+		// ponytail: single conservative cap, upgrade path is per-model
+		// config keyed on ep.Model.
+		const openAIOutputCap = 16384
+		out := req.MaxTokens
+		if out > openAIOutputCap {
+			out = openAIOutputCap
+		}
+		params.MaxCompletionTokens = openai.Int(int64(out))
 	}
 	if req.Temperature != nil {
 		params.Temperature = openai.Float(*req.Temperature)
