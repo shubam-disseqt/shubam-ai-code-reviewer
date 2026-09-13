@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>Troubleshooting &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+      <li><a href="/cli-reference.html">CLI reference</a></li>
+      <li><a href="/review-rules.html">Review rules</a></li>
+      <li><a href="/troubleshooting.html" class="active">Troubleshooting</a></li>
+      <li><a href="/security.html">Security</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Troubleshooting</h1>
+    <p class="lede">Symptoms, causes, and fixes. If none of these match, please <a href="https://github.com/shubam-disseqt/z-code-reviewer/issues">open an issue</a> with the exact command line and (redacted) output.</p>
+
+    <h2 id="docs-no-connect"><code>zreview docs</code> prints <em>listening at&hellip;</em> but the browser can't connect</h2>
+    <p><strong>Cause.</strong> The server binds to loopback by default (<code>127.0.0.1</code>). If you're running <code>zreview docs</code> inside a container, remote VM, or SSH session, your browser is on a different host and can't reach loopback.</p>
+    <p><strong>Fix.</strong> Bind to a routable address and add the reachable host to the allowlist:</p>
+    <div class="diagram">
+<pre><code>ZREVIEW_DOCS_ALLOWED_HOSTS=devbox.local,10.0.0.7 \
+  zreview docs --addr 0.0.0.0:7777</code></pre>
+    </div>
+    <p>If a firewall between your machine and the docs host is dropping traffic, no allowlist change will help &mdash; open the port on the firewall first.</p>
+
+    <h2 id="docs-403"><code>403 forbidden host</code> when hitting the docs server</h2>
+    <p><strong>Cause.</strong> The <code>Host:</code> header on the request is not on the allowlist. This is intentional &mdash; it defends against DNS rebinding (see <a href="/architecture.html#threats">T4</a>).</p>
+    <p><strong>Fix.</strong> Add the exact <code>Host:</code> value your browser sends (usually the hostname, sometimes with a port) to <code>ZREVIEW_DOCS_ALLOWED_HOSTS</code>:</p>
+    <div class="diagram">
+<pre><code>ZREVIEW_DOCS_ALLOWED_HOSTS=devbox.local,devbox.local:7777 \
+  zreview docs --addr 0.0.0.0:7777</code></pre>
+    </div>
+    <p>Loopback names (<code>localhost</code>, <code>127.0.0.1</code>, <code>[::1]</code>) are always accepted &mdash; you never need to list them.</p>
+
+    <h2 id="no-api-key">CI complains about <em>no provider API key</em></h2>
+    <p><strong>Cause.</strong> <code>zreview review</code> could not resolve any LLM provider credential. Nothing in the env, no AWS credential chain reachable.</p>
+    <p><strong>Fix.</strong> Set exactly one of these in the job:</p>
+    <table>
+      <thead><tr><th>Provider</th><th>Variable</th></tr></thead>
+      <tbody>
+        <tr><td>Anthropic</td><td><code>ANTHROPIC_API_KEY</code></td></tr>
+        <tr><td>OpenAI</td><td><code>OPENAI_API_KEY</code></td></tr>
+        <tr><td>AWS Bedrock</td><td>Standard AWS credential chain: <code>AWS_ACCESS_KEY_ID</code> + <code>AWS_SECRET_ACCESS_KEY</code>, or an IAM role attached to the runner.</td></tr>
+      </tbody>
+    </table>
+    <p>Then run <code>zreview doctor</code> in your CI pipeline before <code>zreview review</code> so misconfigurations fail fast. See <a href="/cli-reference.html#doctor">CLI reference &sect; doctor</a>.</p>
+
+    <h2 id="index-slow">Index build is slow or expensive</h2>
+    <p><strong>Cause.</strong> By default <code>zreview index</code> uses the same LLM/embedding model as review. Review-grade models are overkill for chunk embeddings.</p>
+    <p><strong>Fix.</strong> Point indexing at a cheaper embedding model separately from the review model. Configure the indexing model via <code>ZREVIEW_INDEX_MODEL</code> in your <code>.zreview.yaml</code> or environment &mdash; see <a href="/configuration.html">Configuration</a>. On very large repos, also prefer incremental over full rebuilds: run <code>zreview index</code> without <code>--full</code> so only changed files are re-embedded.</p>
+
+    <h2 id="wrong-line">Review comment lands on the wrong line</h2>
+    <p><strong>Cause.</strong> The LLM produced a line number that didn't match any hunk in the diff. Line-snapping tried to relocate the comment to the nearest changed line and either landed off-by-one or too far away to snap safely.</p>
+    <p><strong>Fix.</strong> This is a bug on our side, not a config problem. Please file it with:</p>
+    <ul>
+      <li>the diff (<code>git diff --unified=3 &lt;from&gt;..&lt;to&gt;</code>),</li>
+      <li>the produced comment (from <code>--format json</code>),</li>
+      <li>the session <code>.jsonl</code> if available &mdash; it captures the pre-snap position and helps us reproduce.</li>
+    </ul>
+    <p>Redact source content if it's sensitive; the diff structure alone is often enough.</p>
+
+    <h2 id="overlap-empty">Overlap section is empty</h2>
+    <p><strong>Cause.</strong> <code>zreview overlap</code> could not enumerate open PRs. Most often: <code>GITHUB_TOKEN</code> is unset, or the token lacks pull-request read scope on the repo.</p>
+    <p><strong>Fix.</strong></p>
+    <ul>
+      <li>Confirm <code>GITHUB_TOKEN</code> is exported in the shell / job.</li>
+      <li>For fine-grained tokens, ensure <em>Pull requests: Read</em> is granted for the target repo.</li>
+      <li>For classic PATs, <code>repo</code> scope is sufficient. For public repos, <code>public_repo</code>.</li>
+      <li>Re-run with <code>-vv</code> to see the exact GitHub API error.</li>
+    </ul>
+    <p>If the prefilter yields no candidates that is a legitimate empty result &mdash; there really are no overlapping PRs. That is different from &ldquo;the overlap step didn't run&rdquo;: the latter prints a diagnostic to stderr.</p>
+
+    <h2 id="rules-not-injected">Org rules not injected</h2>
+    <p><strong>Cause.</strong> Either the rules repo is not configured, unreachable, or the YAML doesn't parse.</p>
+    <p><strong>Fix.</strong></p>
+    <ol>
+      <li>Confirm <code>ZREVIEW_ORG_RULES_REPO</code> is set: <code>echo $ZREVIEW_ORG_RULES_REPO</code>.</li>
+      <li>Run <code>zreview rules sync</code>. This fetches the repo and prints load errors up-front.</li>
+      <li>Run <code>zreview rules list</code>. Every rule expected to apply must appear here. If it doesn't:
+        <ul>
+          <li>Check <code>enabled: true</code> on the rule file.</li>
+          <li>Check <code>repos:</code> matches the current repo's <code>owner/name</code>.</li>
+          <li>For <code>scope: path</code>, verify at least one <code>paths</code> glob matches a changed file.</li>
+        </ul>
+      </li>
+      <li>See <a href="/review-rules.html#selection">Review rules &sect; How selection works</a> for the full precedence.</li>
+    </ol>
+
+    <h2 id="internal-llm-coverage">Test coverage on <code>internal/llm</code> is 40%</h2>
+    <p><strong>Not a bug.</strong> After the OCR provider trim, <code>internal/llm</code> is smaller than the original upstream code but a lot of retained provider glue is only exercised end-to-end &mdash; not by unit tests yet. Coverage rises as Phase 6+ wires the retained providers into the review path. Track progress on the <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/ROADMAP.md">roadmap</a>.</p>
+
+    <h2 id="file-a-bug">How to file a bug</h2>
+    <p>For everything except security issues:</p>
+    <ul>
+      <li>Open a ticket at <a href="https://github.com/shubam-disseqt/z-code-reviewer/issues">github.com/shubam-disseqt/z-code-reviewer/issues</a>.</li>
+      <li>Include: <code>zreview version --json</code> output, the exact command, and the first ~50 lines of stderr with <code>-vv</code>.</li>
+      <li>Redact any real diff content that isn't necessary to reproduce.</li>
+    </ul>
+    <p>For security-relevant issues (credential leak paths, path traversal, RCE), do <em>not</em> use public Issues. See <a href="/security.html">Security</a> and the repo's <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/SECURITY.md">SECURITY.md</a> for private disclosure.</p>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

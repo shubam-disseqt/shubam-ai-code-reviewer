@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>Review rules &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+      <li><a href="/cli-reference.html">CLI reference</a></li>
+      <li><a href="/review-rules.html" class="active">Review rules</a></li>
+      <li><a href="/troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="/security.html">Security</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Review rules</h1>
+    <p class="lede">Team-specific review policy, expressed as YAML in a git repo, versioned like any other code. Human-authored, human-reviewed via PR &mdash; there is no learning loop.</p>
+
+    <h2 id="what">What are rules</h2>
+    <p>Rules are prompt-injected constraints, not enforced code. When <code>zreview review</code> runs, it selects the rules whose scope matches the diff, splices them into the review prompt, and lets the LLM apply them alongside its general review discipline. There is no rules-engine or AST match &mdash; they are policy statements the model reads before it starts commenting.</p>
+
+    <div class="note">
+      <strong>This shapes how you write them.</strong> A rule that says <em>&ldquo;flag any call to <code>fmt.Println</code> in production code&rdquo;</em> works &mdash; concrete, verifiable, tied to a string the model can pattern-match. A rule that says <em>&ldquo;code should be maintainable&rdquo;</em> does nothing &mdash; too abstract to survive prompt-length compression. See <a href="#best-practices">Best practices</a>.
+    </div>
+
+    <h2 id="schema">The YAML schema</h2>
+    <p>One rule per file under <code>rules/</code>. All fields listed; only the ones marked required must be present.</p>
+
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>id</code></td><td>string</td><td>yes</td><td>Stable identifier, kebab-case. Must be globally unique within the rules repo. Never rename &mdash; downstream comments reference the id.</td></tr>
+        <tr><td><code>title</code></td><td>string</td><td>yes</td><td>One-line human summary. Appears in <code>zreview rules list</code> output.</td></tr>
+        <tr><td><code>body</code></td><td>string (multi-line)</td><td>yes</td><td>The rule text as injected into the prompt. Concrete, imperative, second person. Under 400 chars per rule keeps the composite prompt lean.</td></tr>
+        <tr><td><code>scope</code></td><td>enum</td><td>yes</td><td><code>global</code>, <code>repo</code>, or <code>path</code>. See <a href="#scoping">Scoping</a>.</td></tr>
+        <tr><td><code>repos</code></td><td>list&lt;string&gt;</td><td>when <code>scope=repo</code> or <code>scope=path</code></td><td><code>owner/name</code> matchers. Supports <code>*</code> as a suffix (e.g., <code>disseqt/z-*</code>).</td></tr>
+        <tr><td><code>paths</code></td><td>list&lt;glob&gt;</td><td>when <code>scope=path</code></td><td>Doublestar globs matched against the file path relative to repo root.</td></tr>
+        <tr><td><code>exclude_paths</code></td><td>list&lt;glob&gt;</td><td>no</td><td>Applied after <code>paths</code>. A file matching any exclude glob is dropped from the rule's file set.</td></tr>
+        <tr><td><code>severity</code></td><td>enum</td><td>yes</td><td><code>blocker</code>, <code>warning</code>, <code>suggestion</code>, or <code>nitpick</code>. Only <code>blocker</code> affects the review exit code.</td></tr>
+        <tr><td><code>category</code></td><td>string</td><td>no</td><td>Free-form tag for grouping in output (<code>security</code>, <code>testing</code>, <code>maintainability</code>&hellip;).</td></tr>
+        <tr><td><code>enabled</code></td><td>bool</td><td>no</td><td>Default <code>true</code>. Set <code>false</code> to disable a rule without deleting the file.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>A valid <code>global</code> rule</h3>
+    <div class="diagram">
+<pre><code># rules/no-committed-secrets.yaml
+id: no-committed-secrets
+title: No secrets in source
+body: |
+  If a changed line contains a plausible API key, token, private key,
+  or connection string with an inline password, flag it as a blocker
+  and recommend rotation. Do not quote the secret in your comment.
+scope: global
+severity: blocker
+category: security
+enabled: true</code></pre>
+    </div>
+
+    <h3>An invalid <code>global</code> rule</h3>
+    <div class="diagram">
+<pre><code># rules/be-nice.yaml         # BAD &mdash; too abstract to survive prompt compression
+id: be-nice
+title: Write maintainable code
+body: |
+  Code should be clean, maintainable, and easy to read.
+scope: global
+severity: suggestion
+enabled: true</code></pre>
+    </div>
+    <p>Nothing here for the model to match against. It will either ignore the rule or produce vague comments that clutter the review.</p>
+
+    <h2 id="scoping">Scoping</h2>
+    <p>Every rule declares which files it applies to. Selection is deterministic and runs in Go before the prompt is built &mdash; there is no LLM judgment involved in <em>whether</em> a rule matches.</p>
+
+    <h3><code>scope: global</code></h3>
+    <p>Applies to every diff, every repo, every file. Reserve for cross-cutting concerns like secret hygiene, PII leaks, or license headers.</p>
+
+    <h3><code>scope: repo</code></h3>
+    <p>Applies to every file inside a matching repo. Use for repo-specific conventions that don't vary by path.</p>
+    <div class="diagram">
+<pre><code>id: apperr-codes-only
+title: Errors go through apperr.New
+body: |
+  In this backend, all returned errors must be constructed via
+  apperr.New(code, ...). Flag any bare fmt.Errorf, errors.New,
+  or errors.Wrap in changed code as a warning.
+scope: repo
+repos:
+  - "disseqt/disseqt-ai-admin-backend"
+  - "disseqt/disseqt-auth-service"
+severity: warning
+category: consistency
+enabled: true</code></pre>
+    </div>
+
+    <h3><code>scope: path</code></h3>
+    <p>Applies only to files whose path matches at least one glob in <code>paths</code> and none in <code>exclude_paths</code>. The most common scope in practice.</p>
+    <div class="diagram">
+<pre><code>id: phi-in-logs
+title: No PHI in logs
+body: |
+  In files under internal/handlers/**, flag any zap or fmt log call
+  whose argument list plausibly contains a patient identifier,
+  MRN, DOB, or free-text clinical field. Suggest using the
+  redacted-logger helper from internal/log/redact.go.
+scope: path
+repos: ["disseqt/disseqt-dataset-backend-service"]
+paths:
+  - "internal/handlers/**/*.go"
+  - "internal/services/**/*.go"
+exclude_paths:
+  - "**/*_test.go"
+severity: blocker
+category: compliance
+enabled: true</code></pre>
+    </div>
+
+    <h2 id="best-practices">Best practices</h2>
+    <p>Rules travel through a lossy channel: they are compressed into a prompt alongside diff, context, and general review guidance. Concrete rules survive. Philosophical ones don't.</p>
+
+    <h3>Cite what to do, not what to be</h3>
+    <table>
+      <thead><tr><th>Weak</th><th>Strong</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>&ldquo;Tests should have good coverage.&rdquo;</td>
+          <td>&ldquo;Any changed function in <code>internal/handlers/</code> must have a matching test in <code>_test.go</code> in the same package. If the diff adds a handler without a test, flag as a warning.&rdquo;</td>
+        </tr>
+        <tr>
+          <td>&ldquo;Avoid tight coupling.&rdquo;</td>
+          <td>&ldquo;Files under <code>internal/domain/</code> must not import from <code>internal/handlers/</code>. Flag any such import as a blocker.&rdquo;</td>
+        </tr>
+        <tr>
+          <td>&ldquo;Errors should be handled properly.&rdquo;</td>
+          <td>&ldquo;A return value of type <code>error</code> must not be assigned to <code>_</code>. Flag any <code>_, _ := f()</code> or <code>_ = f()</code> as a warning.&rdquo;</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Keep bodies short</h3>
+    <p>Every character in <code>body</code> costs shared prompt budget. Aim for one paragraph, one behaviour. If you need three sentences of nuance, you probably need three rules.</p>
+
+    <h3>One concern per file</h3>
+    <p>File-per-rule keeps <code>git blame</code> and code review honest. When a rule needs to change, the PR touches exactly one file and the reason is legible from the filename.</p>
+
+    <h3>Use <code>enabled: false</code> before deleting</h3>
+    <p>If a rule turns out to be noisy, disable it and observe the next few reviews. Deleting loses history; disabling keeps the file so the next author sees why it was tried and shelved.</p>
+
+    <h2 id="layout">Layout of an org rules repo</h2>
+    <p>A rules repo is an ordinary git repo. Recommended layout:</p>
+
+    <div class="diagram">
+<pre><code>z-review-rules/
+&#x251c;&#x2500;&#x2500; README.md
+&#x251c;&#x2500;&#x2500; rules/
+&#x2502;   &#x251c;&#x2500;&#x2500; no-committed-secrets.yaml     # scope: global
+&#x2502;   &#x251c;&#x2500;&#x2500; apperr-codes-only.yaml         # scope: repo
+&#x2502;   &#x251c;&#x2500;&#x2500; phi-in-logs.yaml               # scope: path
+&#x2502;   &#x251c;&#x2500;&#x2500; missing-tests-handlers.yaml    # scope: path
+&#x2502;   &#x2514;&#x2500;&#x2500; no-todo-in-blocker-paths.yaml  # scope: path
+&#x2514;&#x2500;&#x2500; CODEOWNERS</code></pre>
+    </div>
+
+    <p>Point <code>ZREVIEW_ORG_RULES_REPO</code> at <code>owner/name</code> and, if you're pinning, <code>ZREVIEW_ORG_RULES_REF</code> at a tag or commit. Because it's git, every rule change is a PR &mdash; the same review discipline the tool enforces on code applies to the policy authoring itself.</p>
+
+    <h2 id="selection">How selection works</h2>
+    <p>Every step happens deterministically in Go before any LLM call. See <a href="/architecture.html#det-vs-llm">Architecture &sect; Deterministic vs LLM</a>.</p>
+    <ol>
+      <li><strong>Load.</strong> Read every <code>*.yaml</code> under <code>rules/</code> in the org rules repo. Skip files with <code>enabled: false</code>. Fail the run if any file fails schema validation &mdash; better than silently ignoring a typo.</li>
+      <li><strong>Repo filter.</strong> Discard rules whose <code>repos</code> list is present and does not match the current repo's <code>owner/name</code>. <code>scope: global</code> rules skip this step.</li>
+      <li><strong>For each changed file, path filter.</strong> A rule applies to a file if: (a) <code>scope</code> is <code>global</code> or <code>repo</code>, or (b) <code>scope: path</code> and any <code>paths</code> glob matches and no <code>exclude_paths</code> glob matches.</li>
+      <li><strong>Dedupe by id.</strong> If two files somehow ship the same <code>id</code>, the loader errors &mdash; ids must be unique.</li>
+      <li><strong>Inject.</strong> The surviving rules for a file become a section in that file's review prompt, alongside the diff and any index context. See <a href="/architecture.html#pipeline">Architecture &sect; Pipeline</a> for where in the pipeline this happens.</li>
+    </ol>
+
+    <h2 id="gallery">Sample rules gallery</h2>
+    <p>Concrete rules, borrowed shapes across categories. Use as starting points.</p>
+
+    <h3>PHI in logs (compliance, blocker)</h3>
+    <div class="diagram">
+<pre><code>id: phi-in-logs
+title: No PHI in logs
+body: |
+  Under internal/handlers/** and internal/services/**, flag any log
+  call whose argument list plausibly contains a patient identifier,
+  MRN, DOB, or free-text clinical field. Suggest the redacted-logger
+  helper.
+scope: path
+repos: ["disseqt/disseqt-dataset-backend-service"]
+paths:
+  - "internal/handlers/**/*.go"
+  - "internal/services/**/*.go"
+exclude_paths: ["**/*_test.go"]
+severity: blocker
+category: compliance
+enabled: true</code></pre>
+    </div>
+
+    <h3>Missing tests for handlers (testing, warning)</h3>
+    <div class="diagram">
+<pre><code>id: missing-tests-handlers
+title: New handler needs a test
+body: |
+  If the diff adds a new exported function in internal/handlers/,
+  a corresponding _test.go file in the same package must also be
+  present in the diff. Flag as warning otherwise.
+scope: path
+paths: ["internal/handlers/**/*.go"]
+exclude_paths: ["**/*_test.go"]
+severity: warning
+category: testing
+enabled: true</code></pre>
+    </div>
+
+    <h3>apperr codes only (consistency, warning)</h3>
+    <div class="diagram">
+<pre><code>id: apperr-codes-only
+title: Errors go through apperr.New
+body: |
+  All returned errors must be constructed via apperr.New(code, ...).
+  Flag any bare fmt.Errorf, errors.New, or errors.Wrap in changed
+  code.
+scope: repo
+repos:
+  - "disseqt/disseqt-ai-admin-backend"
+  - "disseqt/disseqt-auth-service"
+  - "disseqt/disseqt-dataset-backend-service"
+severity: warning
+category: consistency
+enabled: true</code></pre>
+    </div>
+
+    <h3>No TODO in blocker paths (hygiene, warning)</h3>
+    <div class="diagram">
+<pre><code>id: no-todo-in-blocker-paths
+title: No TODO in production paths
+body: |
+  Under internal/billing/** and internal/auth/**, flag any newly
+  added TODO, FIXME, or XXX comment. These paths must ship with the
+  work done, not deferred.
+scope: path
+paths:
+  - "internal/billing/**/*.go"
+  - "internal/auth/**/*.go"
+severity: warning
+category: hygiene
+enabled: true</code></pre>
+    </div>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+      Sample rules are illustrative &mdash; adapt to your codebase.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

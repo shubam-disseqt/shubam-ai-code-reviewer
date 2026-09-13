@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>CLI reference &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+      <li><a href="/cli-reference.html" class="active">CLI reference</a></li>
+      <li><a href="/review-rules.html">Review rules</a></li>
+      <li><a href="/troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="/security.html">Security</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>CLI reference</h1>
+    <p class="lede">Every subcommand, every flag, every exit code. Order matches roughly the order you'll reach for them.</p>
+
+    <div class="note">
+      <strong>Not every command is wired yet.</strong> Only <code>zreview version</code> and <code>zreview docs</code> ship end-to-end today. Every other subcommand below is documented against its target UX &mdash; the flag names and exit codes are locked, the implementations land in later phases. See the phase tag next to each heading and <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/ROADMAP.md">ROADMAP.md</a>.
+    </div>
+
+    <h2 id="global">Global flags</h2>
+    <p>Available on every subcommand.</p>
+    <table>
+      <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>-v</code>, <code>--verbose</code></td><td>Verbose logs to stderr. Repeat (<code>-vv</code>) for debug-level tool traces.</td></tr>
+        <tr><td><code>-h</code>, <code>--help</code></td><td>Print usage for the subcommand and exit 0.</td></tr>
+        <tr><td><code>--version</code></td><td>Print the version string and exit 0. Equivalent to <code>zreview version</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="version"><code>zreview version</code> <span class="badge ok">shipped</span></h2>
+    <p>Prints the build identity. Machine-readable with <code>--json</code>.</p>
+    <table>
+      <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>--json</code></td><td>Emit a JSON object instead of the human line.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Output shape</h3>
+    <div class="diagram">
+<pre><code>$ zreview version
+zreview 0.2.0 (commit deadbeef, go1.23.4, darwin/arm64)
+
+$ zreview version --json
+{
+  "version":   "0.2.0",
+  "commit":    "deadbeef",
+  "goVersion": "go1.23.4",
+  "os":        "darwin",
+  "arch":      "arm64"
+}</code></pre>
+    </div>
+
+    <h3>Exit codes</h3>
+    <p>Always <code>0</code>. If <code>zreview version</code> is failing, the binary itself is broken.</p>
+
+    <h2 id="docs"><code>zreview docs</code> <span class="badge ok">shipped</span></h2>
+    <p>Serves this documentation on a local loopback HTTP server. Content is embedded in the binary; no network calls.</p>
+
+    <table>
+      <thead><tr><th>Flag</th><th>Meaning</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>--addr</code></td><td>TCP address to bind. Use <code>127.0.0.1:0</code> to pick a free port. Non-loopback binds require the host allowlist below.</td><td><code>127.0.0.1:0</code></td></tr>
+        <tr><td><code>--open</code></td><td><code>auto</code>: open the browser only when a TTY is attached and <code>$CI</code> is unset. <code>always</code>: always try. <code>never</code>: never try.</td><td><code>auto</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Environment</h3>
+    <table>
+      <thead><tr><th>Variable</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>ZREVIEW_DOCS_ALLOWED_HOSTS</code></td><td>Comma-separated list of <code>Host:</code> header values the server will accept in addition to <code>localhost</code>, <code>127.0.0.1</code>, and <code>[::1]</code>. Required when <code>--addr</code> binds a non-loopback interface.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Security posture</h3>
+    <ul>
+      <li>Loopback-only by default. Non-loopback binds require an explicit <code>ZREVIEW_DOCS_ALLOWED_HOSTS</code> entry &mdash; guards against DNS rebinding (T4 in <a href="/architecture.html#threats">Architecture &sect; Threats</a>).</li>
+      <li>All responses ship a strict CSP: <code>default-src 'self'; script-src 'none'; frame-ancestors 'none'</code>.</li>
+      <li>No third-party fonts, scripts, or images. Every asset is under the embedded FS.</li>
+    </ul>
+
+    <h3>Exit codes</h3>
+    <table>
+      <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>0</code></td><td>Server started, shut down cleanly on SIGINT.</td></tr>
+        <tr><td><code>1</code></td><td>Bind failed or an unexpected runtime error occurred.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="review"><code>zreview review</code> <span class="badge warn">Phase 8</span></h2>
+    <p>The main event. Runs the review pipeline over a diff and emits comments in the chosen format.</p>
+
+    <div class="note">
+      <strong>Phase 8 deliverable.</strong> Flag names below are the target UX and are considered stable. Implementation lands in Phase 8 &mdash; see <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/ROADMAP.md">ROADMAP.md</a>.
+    </div>
+
+    <h3>Diff selection (pick one)</h3>
+    <table>
+      <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>--from &lt;ref&gt; --to &lt;ref&gt;</code></td><td>Review the diff <code>from..to</code>. Typical PR usage: <code>--from origin/main --to HEAD</code>.</td></tr>
+        <tr><td><code>--commit &lt;sha&gt;</code></td><td>Review a single commit (equivalent to <code>--from &lt;sha&gt;^ --to &lt;sha&gt;</code>).</td></tr>
+        <tr><td><code>--pr &lt;number&gt;</code></td><td>Fetch the PR from the current repo's <code>origin</code> and review it. Requires <code>GITHUB_TOKEN</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Output</h3>
+    <table>
+      <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>--format &lt;fmt&gt;</code></td><td><code>stdout</code> (default): human-readable. <code>json</code>: one JSON array of comments. <code>github</code>: post inline review comments back to the PR (requires <code>--pr</code> and <code>GITHUB_TOKEN</code>).</td></tr>
+        <tr><td><code>--output &lt;path&gt;</code></td><td>Write to a file instead of stdout. Only meaningful with <code>--format stdout</code> or <code>--format json</code>.</td></tr>
+        <tr><td><code>--resume &lt;session-id&gt;</code></td><td>Resume from a prior session JSONL file. Re-runs failed sub-agents; keeps successful comments. See <a href="/architecture.html#pipeline">Architecture &sect; Pipeline</a>.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Exit codes</h3>
+    <table>
+      <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>0</code></td><td>Review completed. No blocker-severity findings.</td></tr>
+        <tr><td><code>1</code></td><td>General runtime error (network, LLM provider, git).</td></tr>
+        <tr><td><code>2</code></td><td>Configuration error (bad flags, missing API key, invalid YAML). See <a href="/configuration.html">Configuration</a>.</td></tr>
+        <tr><td><code>3</code></td><td>Review completed but produced one or more <code>blocker</code>-severity findings. Wire this to CI to gate merges.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="index"><code>zreview index</code> <span class="badge warn">Phase 4</span></h2>
+    <p>Builds or refreshes the persistent code index used by <code>zreview review</code> and <code>zreview overlap</code>. Without an index, review falls back to just-in-time context loading via the agent's <code>file_read</code> / <code>code_search</code> tools &mdash; smaller signal, higher token cost per run.</p>
+
+    <table>
+      <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>--repo &lt;path&gt;</code></td><td>Path to the git checkout to index. Defaults to CWD.</td></tr>
+        <tr><td><code>--full</code></td><td>Force a full re-index. Otherwise the incremental walker only touches files changed since the last run.</td></tr>
+        <tr><td><code>--db &lt;dsn&gt;</code></td><td>Database DSN. Overrides <code>$ZREVIEW_DB_URL</code>. Accepts <code>postgres://...</code> or <code>sqlite:///path/to/file.db</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <strong>Cost note.</strong> Indexing calls an embedding model per chunk. Point it at a cheap model (e.g., a small embedding endpoint) separately from your review model &mdash; <code>ZREVIEW_INDEX_MODEL</code> controls that. See <a href="/configuration.html">Configuration</a>.
+    </div>
+
+    <h2 id="rules"><code>zreview rules</code> <span class="badge warn">Phase 7</span></h2>
+    <p>Inspect and refresh the org-level rules pulled from <code>$ZREVIEW_ORG_RULES_REPO</code>.</p>
+
+    <table>
+      <thead><tr><th>Subcommand</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>zreview rules list</code></td><td>List every loaded rule with id, scope, severity, and whether it would apply to the current repo/path.</td></tr>
+        <tr><td><code>zreview rules sync</code></td><td>Fetch the latest rules commit from <code>$ZREVIEW_ORG_RULES_REPO</code> (respecting <code>$ZREVIEW_ORG_RULES_REF</code>). Idempotent.</td></tr>
+      </tbody>
+    </table>
+
+    <p>See <a href="/review-rules.html">Review rules</a> for the YAML schema and authoring guide.</p>
+
+    <h2 id="overlap"><code>zreview overlap</code> <span class="badge warn">Phase 5</span></h2>
+    <p>Reports which currently-open pull requests overlap in scope or risk merge conflicts with the target PR. Runs the deterministic prefilter (Jaccard on title, symbol/file intersection) before spending any LLM budget on a batched verdict pass.</p>
+
+    <table>
+      <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>--pr &lt;number&gt;</code></td><td>PR to compare all other open PRs against.</td></tr>
+      </tbody>
+    </table>
+
+    <p>Requires <code>GITHUB_TOKEN</code> with read access to pull requests. Output is a human-readable table by default; <code>--format json</code> for machine consumption. If the LLM batch call fails, the prefilter results are still printed &mdash; overlap never blocks review.</p>
+
+    <h2 id="doctor"><code>zreview doctor</code> <span class="badge warn">Phase 9</span></h2>
+    <p>Pre-flight checks. Run this in CI before <code>zreview review</code> so misconfigurations fail fast with a readable message.</p>
+
+    <p>Checks performed:</p>
+    <ul>
+      <li><code>git</code> binary on <code>$PATH</code> and version &ge; 2.30.</li>
+      <li>Repository is a git checkout and has fetched the requested refs.</li>
+      <li>An LLM provider credential is present: <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, or a resolvable AWS credential chain for Bedrock.</li>
+      <li><code>ZREVIEW_DB_URL</code> (if set) is reachable and the schema matches the binary's expected version.</li>
+      <li><code>ZREVIEW_ORG_RULES_REPO</code> (if set) is reachable and the YAML parses.</li>
+      <li><code>GITHUB_TOKEN</code> (if <code>--format github</code> is intended) has PR read+write scope.</li>
+    </ul>
+
+    <h3>Exit codes</h3>
+    <table>
+      <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>0</code></td><td>All checks passed.</td></tr>
+        <tr><td><code>2</code></td><td>One or more configuration problems found. Details printed to stderr.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="exit-codes">Exit-code summary</h2>
+    <p>Uniform across the CLI so CI wiring is simple.</p>
+    <table>
+      <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>0</code></td><td>Success.</td></tr>
+        <tr><td><code>1</code></td><td>General runtime error (network, provider, git, IO).</td></tr>
+        <tr><td><code>2</code></td><td>Configuration error &mdash; bad flags, missing credentials, unreachable dependency.</td></tr>
+        <tr><td><code>3</code></td><td><code>zreview review</code> only: review completed with at least one <code>blocker</code>-severity finding.</td></tr>
+      </tbody>
+    </table>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+      See <a href="https://github.com/shubam-disseqt/z-code-reviewer/issues">GitHub Issues</a> for missing flags or wrong defaults.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

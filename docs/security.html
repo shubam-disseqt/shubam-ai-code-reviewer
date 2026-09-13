@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>Security &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+      <li><a href="/cli-reference.html">CLI reference</a></li>
+      <li><a href="/review-rules.html">Review rules</a></li>
+      <li><a href="/troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="/security.html" class="active">Security</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Security</h1>
+    <p class="lede">Summarized threat model, data-flow, and hardening posture. For the full narrative see <code>ARCHITECTURE.md &sect; 5</code> in the repo root &mdash; that is the source of truth. This page is the short version.</p>
+
+    <h2 id="reporting">Reporting a vulnerability</h2>
+    <p>Please do <strong>not</strong> file security issues as public GitHub Issues.</p>
+    <p>Use GitHub's private vulnerability reporting instead: <a href="https://github.com/shubam-disseqt/z-code-reviewer/security/advisories/new">Open a security advisory</a>. Include reproduction steps, affected versions, and (if you have one) a suggested fix or mitigation. See <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/SECURITY.md">SECURITY.md</a> for the disclosure timeline and PGP key.</p>
+
+    <div class="note">
+      <strong>Scope note.</strong> Security-report scope covers the <code>zreview</code> CLI and its embedded docs server. Third-party LLM providers, GitHub itself, and your own CI system are out of scope &mdash; report to those vendors directly.
+    </div>
+
+    <h2 id="threats">Threat summary</h2>
+    <p>The same table shipped in <a href="/architecture.html#threats">Architecture &sect; 5</a>, kept concise. Every mitigation is engineered in Go, not delegated to the LLM.</p>
+
+    <table>
+      <thead><tr><th>ID</th><th>Threat</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>T1</td><td>Command injection via crafted diff content</td><td>Only <code>git</code> is exec'd; hardcoded subcommands; <code>--end-of-options</code> guard; no shell interpretation</td></tr>
+        <tr><td>T2</td><td>API key leakage</td><td>Env-var only; never logged; scrubbed from session JSONL</td></tr>
+        <tr><td>T3</td><td>Path traversal via LLM-suggested paths</td><td><code>pathutil.WithinBase()</code> check pre- and post-symlink resolution</td></tr>
+        <tr><td>T4</td><td>DNS rebinding against local docs server</td><td>Host-header allowlist; wildcard binds require explicit env var</td></tr>
+        <tr><td>T5</td><td>MITM on API communication</td><td>TLS 1.2+, full certificate verification, <code>InsecureSkipVerify</code> never used</td></tr>
+        <tr><td>T6</td><td>Malicious LLM response (fabricated line numbers)</td><td>JSON schema + bounds check; line-snap re-derives positions server-side</td></tr>
+        <tr><td>T7</td><td>Malicious LLM response (over-escaped JSON)</td><td>Comment-args-repair refuses partial recovery on schema drift</td></tr>
+        <tr><td>T8</td><td>Dependency vulnerabilities</td><td><code>govulncheck</code> in CI; Dependabot; <code>go.sum</code> integrity</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="data-flow">Data-flow at a glance</h2>
+    <p>The list is short by design. Every off-machine egress is enumerated below.</p>
+
+    <table>
+      <thead><tr><th>Destination</th><th>What leaves</th><th>Why</th><th>Optional?</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>LLM provider (Anthropic / OpenAI / AWS Bedrock)</td>
+          <td>Diff hunks, matched org rules, requested file excerpts, prior tool outputs</td>
+          <td>The review itself &mdash; producing comments</td>
+          <td>No (required to run <code>review</code>). Choice of provider is yours.</td>
+        </tr>
+        <tr>
+          <td>Index database (Postgres or SQLite)</td>
+          <td>Repo file content chunks, embeddings, path metadata</td>
+          <td>Persistent index for repo-wide context</td>
+          <td>Yes (unset <code>ZREVIEW_DB_URL</code> to run JIT-only)</td>
+        </tr>
+        <tr>
+          <td>Org rules repo (GitHub HTTPS or SSH)</td>
+          <td>Nothing outbound &mdash; read-only clone</td>
+          <td>Fetch team rules YAML</td>
+          <td>Yes (unset <code>ZREVIEW_ORG_RULES_REPO</code>)</td>
+        </tr>
+        <tr>
+          <td>GitHub API</td>
+          <td>PR number, comment body + position; PR listings for overlap</td>
+          <td><code>--format github</code> and <code>zreview overlap</code></td>
+          <td>Yes (unset <code>GITHUB_TOKEN</code>)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>Everything else stays on-machine: local git operations, line-snapping, comment reflection, and the docs server all run without network. There is no telemetry beacon &mdash; <code>ZREVIEW_TELEMETRY</code> is off by default and opt-in only.</p>
+
+    <h2 id="release-verify">Release signature verification</h2>
+    <p>Every published binary carries a SLSA build-provenance attestation signed via GitHub's OIDC-backed sigstore chain. Verify a downloaded binary before running it:</p>
+
+    <div class="diagram">
+<pre><code>gh attestation verify ./zreview-linux-amd64 \
+  --owner shubam-disseqt</code></pre>
+    </div>
+
+    <p>The attestation binds the binary to (a) the exact commit that built it, (b) the workflow file used, (c) the runner identity. A tampered binary or one built off-tree will fail verification. See <a href="/installation.html#channels">Installation &sect; Planned channels</a> once binaries are published.</p>
+
+    <h2 id="third-party-llm">Third-party LLM data-handling</h2>
+    <p>When you point <code>zreview</code> at a hosted LLM provider, the data flow is straightforward: diff content, matched org rules, and any file content the agent chose to read are sent over HTTPS to that provider's API. Comments come back. What the provider does with the payload &mdash; retention, training use, sub-processors &mdash; is governed by <em>their</em> terms and your enterprise agreement with them, not by <code>zreview</code>.</p>
+
+    <p>Practical implications:</p>
+    <ul>
+      <li>If your codebase is under a data-residency regime (HIPAA, GDPR territorial scope, ITAR), pick a provider whose contract covers it. Bedrock in-region, private-tenancy Anthropic, or an on-prem endpoint are common answers.</li>
+      <li>Do not commit real secrets to source. <code>zreview</code> is not a DLP tool &mdash; if a secret is in the diff, it will be sent to the provider.</li>
+      <li>Review the provider's data-retention policy. <code>zreview</code> makes no calls without your credentials; conversely, <code>zreview</code> cannot enforce zero-retention on a provider that logs requests.</li>
+    </ul>
+
+    <p>We document the flow deliberately; we do not restate provider policies because they change without our involvement.</p>
+
+    <h2 id="docs-hardening">The docs server's hardening</h2>
+    <p><code>zreview docs</code> is the only long-lived network surface in the tool. It ships hardened by default:</p>
+
+    <ul>
+      <li><strong>Loopback-only default.</strong> Binds to <code>127.0.0.1</code> unless you explicitly override <code>--addr</code>.</li>
+      <li><strong>Host-header allowlist.</strong> Non-loopback binds require <code>ZREVIEW_DOCS_ALLOWED_HOSTS</code>. Defends against DNS rebinding (T4).</li>
+      <li><strong>Strict CSP</strong> on every response: <code>default-src 'self'; script-src 'none'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'</code>. No inline scripts, no iframes, no plugin content.</li>
+      <li><strong>No third-party assets.</strong> No external fonts, images, or JS &mdash; everything is under the Go binary's embedded FS. Docs work fully offline.</li>
+      <li><strong>Read-only.</strong> No routes accept <code>POST</code>, <code>PUT</code>, or <code>DELETE</code>. There is no state to mutate.</li>
+      <li><strong>Bounded lifetime.</strong> The server exits on SIGINT and does not daemonize. Nothing survives the invocation.</li>
+    </ul>
+
+    <p>The trade-off is deliberate: the docs viewer is convenient but must not become a persistent local attack surface. If it feels restrictive when running inside a container, see <a href="/troubleshooting.html#docs-no-connect">Troubleshooting &sect; docs can't connect</a>.</p>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+      Full threat narrative lives in <code>ARCHITECTURE.md &sect; 5</code>; disclosure process in <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/SECURITY.md">SECURITY.md</a>.
+    </footer>
+  </main>
+</div>
+</body>
+</html>
