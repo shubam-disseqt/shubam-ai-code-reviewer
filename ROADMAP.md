@@ -151,7 +151,7 @@ flag gates the publish stream (default `MEDIUM`).
 Deliverable: `internal/scoring/*`. Explicitly not an LLM — CR-bench
 data ruled out reflection loops as a substitute.
 
-## Phase 17 — SARIF output + PR description block (planned)
+## Phase 17 — SARIF output + PR description block (shipped)
 
 - `internal/sarif/` — SARIF 2.1.0 encoder with golden-file tests
   against the schema. `--format sarif` emits to file or stdout.
