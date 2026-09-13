@@ -101,6 +101,33 @@ func TestFileSession_RequestNoIncrementsPerTaskType(t *testing.T) {
 	}
 }
 
+func TestFileSession_AppendTaskRecordRedactsSecretsInMessages(t *testing.T) {
+	dir := t.TempDir()
+	s, err := New(dir, "sid-redact")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	fs := s.GetOrCreateFileSession("f")
+
+	const secret = "AKIAEXAMPLEEXAMPLE1234"
+	body := "diff --git a/.env b/.env\n+AWS_SECRET_ACCESS_KEY=" + secret + "\n"
+	fs.AppendTaskRecord(llmloop.MainTask, []llm.Message{{Role: "user", Content: body}})
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, "sid-redact.jsonl"))
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if strings.Contains(string(raw), secret) {
+		t.Fatalf("session log leaked secret %q\nraw: %s", secret, raw)
+	}
+	if !strings.Contains(string(raw), "[REDACTED]") {
+		t.Fatalf("session log missing [REDACTED] marker\nraw: %s", raw)
+	}
+}
+
 func equalFloats(a, b []float64) bool {
 	if len(a) != len(b) {
 		return false
