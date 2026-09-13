@@ -18,7 +18,7 @@ import (
 func TestRunCarryoverSkipsWithoutPR(t *testing.T) {
 	comments := []model.LlmComment{{Path: "a.go", StartLine: 1, EndLine: 1, Content: "x"}}
 	var buf bytes.Buffer
-	got := runCarryover(comments, []string{"a.go"}, "o", "r", 0, &buf)
+	got := runCarryover(comments, []string{"a.go"}, "o", "r", 0, testLogger(&buf))
 	if len(got.Comments) != 1 {
 		t.Errorf("want 1 comment untouched, got %d", len(got.Comments))
 	}
@@ -30,7 +30,7 @@ func TestRunCarryoverSkipsWithoutPR(t *testing.T) {
 func TestRunCarryoverSkipsWithoutOwnerRepo(t *testing.T) {
 	comments := []model.LlmComment{{Path: "a.go", StartLine: 1, EndLine: 1, Content: "x"}}
 	var buf bytes.Buffer
-	got := runCarryover(comments, []string{"a.go"}, "", "", 42, &buf)
+	got := runCarryover(comments, []string{"a.go"}, "", "", 42, testLogger(&buf))
 	if len(got.Comments) != 1 {
 		t.Errorf("want 1 comment untouched, got %d", len(got.Comments))
 	}
@@ -44,7 +44,7 @@ func TestRunCarryoverPersistsAndReturnsState(t *testing.T) {
 		{Path: "a.go", StartLine: 10, EndLine: 12, Content: "x", Category: "bug", ExistingCode: "if err != nil { return err }"},
 	}
 	var buf bytes.Buffer
-	got := runCarryover(comments, []string{"a.go"}, "o", "r", 42, &buf)
+	got := runCarryover(comments, []string{"a.go"}, "o", "r", 42, testLogger(&buf))
 
 	if len(got.Comments) != 1 {
 		t.Fatalf("want 1 comment, got %d", len(got.Comments))
@@ -78,7 +78,7 @@ func TestRunCarryoverReconcilesAcrossRuns(t *testing.T) {
 		{Path: "b.go", StartLine: 5, EndLine: 5, Content: "y", Category: "style", ExistingCode: "return  nil"},
 	}
 	var buf1 bytes.Buffer
-	_ = runCarryover(first, []string{"a.go", "b.go"}, "o", "r", 42, &buf1)
+	_ = runCarryover(first, []string{"a.go", "b.go"}, "o", "r", 42, testLogger(&buf1))
 
 	// Second pass: only re-finds a.go, but the diff touches ONLY a.go so
 	// b.go's finding should carry (file untouched).
@@ -86,7 +86,7 @@ func TestRunCarryoverReconcilesAcrossRuns(t *testing.T) {
 		{Path: "a.go", StartLine: 10, EndLine: 12, Content: "x", Category: "bug", ExistingCode: "if err != nil { return err }"},
 	}
 	var buf2 bytes.Buffer
-	got := runCarryover(second, []string{"a.go"}, "o", "r", 42, &buf2)
+	got := runCarryover(second, []string{"a.go"}, "o", "r", 42, testLogger(&buf2))
 
 	if len(got.Comments) != 2 {
 		t.Fatalf("want 2 (keep + carried), got %d: %+v", len(got.Comments), got.Comments)
@@ -111,11 +111,11 @@ func TestRunCarryoverDropsResolved(t *testing.T) {
 	first := []model.LlmComment{
 		{Path: "a.go", StartLine: 10, EndLine: 12, Content: "x", Category: "bug", ExistingCode: "if err != nil { return err }"},
 	}
-	_ = runCarryover(first, []string{"a.go"}, "o", "r", 42, &bytes.Buffer{})
+	_ = runCarryover(first, []string{"a.go"}, "o", "r", 42, testLogger(&bytes.Buffer{}))
 
 	// Second pass: file is touched again but no matching finding → resolved.
 	var buf bytes.Buffer
-	got := runCarryover(nil, []string{"a.go"}, "o", "r", 42, &buf)
+	got := runCarryover(nil, []string{"a.go"}, "o", "r", 42, testLogger(&buf))
 	if len(got.Comments) != 0 {
 		t.Errorf("expected empty (resolved dropped), got %d", len(got.Comments))
 	}

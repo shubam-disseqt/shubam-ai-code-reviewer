@@ -6,10 +6,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -21,6 +22,7 @@ import (
 	"github.com/shubam-disseqt/z-code-reviewer/internal/index"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/llmloop"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/logutil"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/overlap"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/reviewctx"
@@ -123,6 +125,12 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	// One logger per review, configured from env. Passed down explicitly —
+	// no package-level state. Text mode is default; JSON mode via
+	// ZREVIEW_LOG_FORMAT=json for CI/observability.
+	logger := logutil.FromEnv(cmd.OutOrStderr())
+	started := time.Now()
+	metrics := Metrics{}
 
 	// 0) scoring policy — loaded early so a bad override fails fast
 	// before we spend tokens. Repo-local overrides log so users know
@@ -132,7 +140,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		return fmt.Errorf("scoring: %w", err)
 	}
 	if opts.Verbose || policy.Source() != "embedded" {
-		fmt.Fprintf(cmd.OutOrStderr(), "[zreview] scoring policy: %s\n", policy.Source())
+		logutil.WithStage(logger, "scoring").Info("policy loaded", "source", policy.Source())
 	}
 	minSev, _ := scoring.ParseSeverity(opts.MinSeverity) // validated in opts.validate()
 
@@ -142,7 +150,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		return fmt.Errorf("diff: %w", err)
 	}
 	if len(diffs) == 0 {
-		fmt.Fprintln(cmd.OutOrStderr(), "[zreview] no changes to review")
+		logutil.WithStage(logger, "diff").Info("no changes to review")
 		return nil
 	}
 
@@ -150,12 +158,13 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	decisions := applySelector(diffs)
 	kept := selector.Kept(decisions)
 	if opts.Verbose {
-		fmt.Fprintf(cmd.OutOrStderr(), "[zreview] selector: kept %d of %d diffs\n", len(kept), len(diffs))
+		logutil.WithStage(logger, "selector").Info("kept diffs", "kept", len(kept), "total", len(diffs))
 	}
 	if len(kept) == 0 {
-		fmt.Fprintln(cmd.OutOrStderr(), "[zreview] every diff was filtered out")
+		logutil.WithStage(logger, "selector").Info("every diff was filtered out")
 		return nil
 	}
+	metrics.FilesReviewed = len(kept)
 
 	// 3) index store (optional)
 	store, err := openStore(ctx)
@@ -164,15 +173,16 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	}
 	if store != nil {
 		defer store.Close()
-		maybeSpawnWarmer(ctx, store, opts.Repo, kept, cmd.OutOrStderr())
+		maybeSpawnWarmer(ctx, store, opts.Repo, kept, logger)
 	}
 
 	// 3.5) deterministic scanners — best-effort, tolerant of missing
 	// binaries. Findings tagged Source="scanner:<tool>" enter the same
 	// comment collector as LLM findings; Phase 16 will score them and
 	// Phase 17 will route CVE/secret categories to SARIF.
-	scannerFindings := runScanners(ctx, opts.Repo, kept, cmd.OutOrStderr())
+	scannerFindings := runScanners(ctx, opts.Repo, kept, logger)
 	scannerByPath := groupScannerFindingsByPath(scannerFindings)
+	metrics.ScannerFindings = len(scannerFindings)
 
 	// 3.6) summarizer + labeler (parallel, cheap tier). Best-effort — a
 	// failure here logs and continues with zero values. We resolve tiers
@@ -181,23 +191,24 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	if err != nil {
 		return fmt.Errorf("llm: %w", err)
 	}
+	tiersLogger := logutil.WithStage(logger, "tiers")
 	for _, note := range tiers.Notes {
-		fmt.Fprintf(cmd.OutOrStderr(), "[zreview] tiers: %s\n", note)
+		tiersLogger.Info(note)
 	}
-	summary, labels := runCheapAgents(ctx, tiers, kept, opts.Verbose, cmd.OutOrStderr())
+	summary, labels := runCheapAgents(ctx, tiers, kept, opts.Verbose, logger)
 
 	// 4) rules
 	rulesBlock, err := loadRules(ctx, kept)
 	if err != nil {
 		// Rules failure is not fatal — log and continue.
-		fmt.Fprintf(cmd.OutOrStderr(), "[zreview] rules: %v (continuing without)\n", err)
+		logutil.WithStage(logger, "rules").Warn("continuing without rules", "err", err.Error())
 		rulesBlock = ""
 	}
 
 	// 5) context
 	reviewCtx, err := buildContext(ctx, opts.Repo, kept, store)
 	if err != nil {
-		fmt.Fprintf(cmd.OutOrStderr(), "[zreview] context: %v (continuing without)\n", err)
+		logutil.WithStage(logger, "context").Warn("continuing without context", "err", err.Error())
 		reviewCtx = ""
 	}
 
@@ -261,13 +272,14 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 
 	// 10) dispatch — one MAIN_TASK per file. v1: sequential, no batching.
 	changeFiles := renderChangedFilesJSON(kept)
+	reviewLogger := logutil.WithStage(logger, "review")
 	for _, d := range kept {
 		path := d.NewPath
 		if path == "" || path == "/dev/null" {
 			path = d.OldPath
 		}
 		if opts.Verbose {
-			fmt.Fprintf(cmd.OutOrStderr(), "[zreview] reviewing %s\n", path)
+			reviewLogger.Info("reviewing file", "path", path)
 		}
 		knownIssues := renderKnownIssuesBlock(scannerByPath[path])
 		msgs := buildReviewMessages(sysPrompt, userTmpl, rulesBlock, reviewCtx, knownIssues, changeFiles, renderDiffsForFile(d))
@@ -276,6 +288,8 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		}
 	}
 	runner.WaitBackground()
+	metrics.PromptTokens = runner.TotalInputTokens()
+	metrics.CompletionTokens = runner.TotalOutputTokens()
 
 	// 11) post-process — deduped & line-snapped by llmloop already. Keep
 	// only comments that resolved to a line, so the emitter never posts
@@ -291,8 +305,11 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	// (owner, repo, pr); unchanged file → carry, matching fp → keep,
 	// touched file with no match → resolved (dropped).
 	owner, repo := ownerRepoFromEnv()
-	carry := runCarryover(comments, changedPathsFromDiffs(kept), owner, repo, opts.PR, cmd.OutOrStderr())
+	carry := runCarryover(comments, changedPathsFromDiffs(kept), owner, repo, opts.PR, logger)
 	comments = carry.Comments
+	metrics.CarriedFindings = carry.Counts.Carried
+	metrics.ResolvedFindings = carry.Counts.Resolved
+	metrics.NewFindings = carry.Counts.New
 
 	// 12) overlap (best-effort)
 	overlapFindings := maybeDetectOverlap(ctx, opts, kept, llmClient)
@@ -320,6 +337,9 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	if err != nil {
 		return err
 	}
+	metrics.CommentsPosted = len(comments)
+	metrics.DurationMs = time.Since(started).Milliseconds()
+	emitMetrics(logger, metrics)
 
 	if code := exitCodeForComments(comments, scoreMap); code != 0 {
 		// Return a typed error so main.go can pick up the special exit code.
@@ -439,14 +459,14 @@ func changedPathsFromDiffs(kept []model.Diff) []string {
 // JIT for the missing files (that's reviewctx.Build's built-in fallback);
 // the NEXT review of the same files reads real summaries. All errors are
 // non-fatal.
-func maybeSpawnWarmer(ctx context.Context, store index.Store, repo string, kept []model.Diff, out io.Writer) {
+func maybeSpawnWarmer(ctx context.Context, store index.Store, repo string, kept []model.Diff, logger *slog.Logger) {
 	paths := changedPathsFromDiffs(kept)
 	missing, err := missingSummaryPaths(ctx, store, paths)
 	if err != nil {
-		fmt.Fprintf(out, "[zreview] warmer: %v (skipping)\n", err)
+		logutil.WithStage(logger, "warmer").Warn("skipping", "err", err.Error())
 		return
 	}
-	spawnIndexWarmer(repo, missing, out)
+	spawnIndexWarmer(repo, missing, logger)
 }
 
 // newSession creates (or resumes) a session file under ZREVIEW_SESSION_DIR.
@@ -610,31 +630,33 @@ func ownerRepoFromEnv() (string, string) {
 // so the main review path never blocks on them. errgroup.Wait always returns
 // nil here because the closures swallow errors after logging — the group is
 // used purely for parallel dispatch, not error propagation.
-func runCheapAgents(ctx context.Context, tiers llm.Tiers, kept []model.Diff, verbose bool, out io.Writer) (model.Summary, model.Labels) {
+func runCheapAgents(ctx context.Context, tiers llm.Tiers, kept []model.Diff, verbose bool, logger *slog.Logger) (model.Summary, model.Labels) {
 	var summary model.Summary
 	var labels model.Labels
+	sumLog := logutil.WithStage(logger, "summarizer")
+	labLog := logutil.WithStage(logger, "labeler")
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		s, err := RunSummarizer(gctx, tiers.Cheap, tiers.CheapModel, kept)
 		if err != nil {
-			fmt.Fprintf(out, "[zreview] summarizer: %v (continuing without)\n", err)
+			sumLog.Warn("continuing without summary", "err", err.Error())
 			return nil
 		}
 		summary = s
 		if verbose {
-			fmt.Fprintf(out, "[zreview] summarizer: risk=%q groups=%d\n", s.Risk, len(s.ChangeGroups))
+			sumLog.Info("summarized", "risk", s.Risk, "groups", len(s.ChangeGroups))
 		}
 		return nil
 	})
 	g.Go(func() error {
 		l, err := RunLabeler(gctx, tiers.Cheap, tiers.CheapModel, kept)
 		if err != nil {
-			fmt.Fprintf(out, "[zreview] labeler: %v (continuing without)\n", err)
+			labLog.Warn("continuing without labels", "err", err.Error())
 			return nil
 		}
 		labels = l
 		if verbose {
-			fmt.Fprintf(out, "[zreview] labeler: type=%q risk_tag=%q\n", l.PRType, l.RiskTag)
+			labLog.Info("labeled", "type", l.PRType, "risk_tag", l.RiskTag)
 		}
 		return nil
 	})

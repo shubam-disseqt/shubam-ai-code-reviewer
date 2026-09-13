@@ -5,10 +5,11 @@ package main
 
 import (
 	"fmt"
-	"io"
+	"log/slog"
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/findings"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/fingerprint"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/logutil"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
 )
 
@@ -19,27 +20,33 @@ type carryoverResult struct {
 	Comments []model.LlmComment
 	// State by comment fingerprint. Empty ⇒ carry-over disabled (no PR id).
 	State map[string]findings.State
+	// Counts exposes carried/resolved/new so the caller can wire them into
+	// per-review metrics. Zeroed when carry-over is skipped.
+	Counts findings.Counts
 }
 
 // runCarryover reconciles fresh review comments against persisted findings
 // for (owner, repo, pr) and returns the merged comment stream. Best-effort:
-// any failure returns the fresh comments unchanged and logs to `out`.
+// any failure returns the fresh comments unchanged and logs via `logger`.
 //
 // Skipped when pr == 0 (workspace / local mode has no stable identity).
-func runCarryover(comments []model.LlmComment, changedPaths []string, owner, repo string, pr int, out io.Writer) carryoverResult {
+func runCarryover(comments []model.LlmComment, changedPaths []string, owner, repo string, pr int, logger *slog.Logger) carryoverResult {
 	res := carryoverResult{Comments: comments}
 	if pr == 0 || owner == "" || repo == "" {
 		return res
 	}
+	// Legacy stage name kept as "findings" so historical grep patterns
+	// ("[zreview] findings: ...") still match in text mode.
+	log := logutil.WithStage(logger, "findings")
 
 	dir, err := findings.DefaultDir()
 	if err != nil {
-		fmt.Fprintf(out, "[zreview] findings: %v (skipping carry-over)\n", err)
+		log.Warn("skipping carry-over", "err", err.Error())
 		return res
 	}
 	previous, err := findings.Load(dir, owner, repo, pr)
 	if err != nil {
-		fmt.Fprintf(out, "[zreview] findings: %v (skipping carry-over)\n", err)
+		log.Warn("skipping carry-over", "err", err.Error())
 		return res
 	}
 
@@ -63,11 +70,17 @@ func runCarryover(comments []model.LlmComment, changedPaths []string, owner, rep
 	counts := findings.Summarize(previous, reconciled)
 
 	if err := findings.Save(dir, owner, repo, pr, reconciled); err != nil {
-		fmt.Fprintf(out, "[zreview] findings: save: %v\n", err)
+		log.Warn("save failed", "err", err.Error())
 	}
 
-	fmt.Fprintf(out, "[zreview] findings: %d carried, %d resolved, %d new\n",
-		counts.Carried, counts.Resolved, counts.New)
+	// Legacy grep pattern "N carried, N resolved, N new" preserved in the
+	// message; structured attrs surface the same counts for JSON mode.
+	log.Info(
+		fmt.Sprintf("%d carried, %d resolved, %d new", counts.Carried, counts.Resolved, counts.New),
+		"carried", counts.Carried,
+		"resolved", counts.Resolved,
+		"new", counts.New,
+	)
 
 	// Rebuild the comment stream from the reconciled set, including carried
 	// comments so a downstream GitHub poster can decide to update.
@@ -77,6 +90,7 @@ func runCarryover(comments []model.LlmComment, changedPaths []string, owner, rep
 		res.Comments = append(res.Comments, f.Comment)
 		res.State[f.Fingerprint] = f.State
 	}
+	res.Counts = counts
 	return res
 }
 

@@ -110,6 +110,48 @@
       <li>See <a href="/review-rules.html#selection">Review rules &sect; How selection works</a> for the full precedence.</li>
     </ol>
 
+    <h2 id="structured-logging">Structured logging</h2>
+    <p><code>zreview review</code> emits progress lines through <code>log/slog</code>. Two knobs control the shape:</p>
+    <ul>
+      <li><code>ZREVIEW_LOG_FORMAT</code> &mdash; <code>text</code> (default) or <code>json</code>. Text mode preserves the historical <code>[zreview] &lt;stage&gt;: &hellip;</code> prefix so existing grep patterns keep working. JSON mode emits one JSON record per line, ready for a log aggregator.</li>
+      <li><code>ZREVIEW_LOG_LEVEL</code> &mdash; <code>DEBUG</code>, <code>INFO</code> (default), <code>WARN</code>, or <code>ERROR</code>. Per-scanner adapter chatter is <code>DEBUG</code>; the stage summaries and the final metrics line are <code>INFO</code>.</li>
+    </ul>
+    <p>Sample text line:</p>
+    <div class="diagram">
+<pre><code>[zreview] scanners: 3 findings from gitleaks:2,semgrep:1 by_tool=gitleaks:2,semgrep:1 count=3</code></pre>
+    </div>
+    <p>Sample JSON line:</p>
+    <div class="diagram">
+<pre><code>{"time":"2026-09-14T10:15:00Z","level":"INFO","msg":"3 findings from gitleaks:2,semgrep:1","stage":"scanners","by_tool":"gitleaks:2,semgrep:1","count":3}</code></pre>
+    </div>
+
+    <h2 id="per-review-metrics">Per-review metrics</h2>
+    <p>Every successful <code>zreview review</code> emits one aggregate <code>metrics</code> line just before it exits. This replaces the older <code>--verbose</code>-only cost printouts &mdash; you don't need <code>--verbose</code> to see totals any more.</p>
+    <p>Text mode:</p>
+    <div class="diagram">
+<pre><code>[zreview] metrics: duration=42.3s files=8 tokens=in:12345/out:2345 cost=$0.42 findings=new:5/carried:3/resolved:1 scanner=2 comments=6</code></pre>
+    </div>
+    <p>JSON mode (one line, formatted here for clarity):</p>
+    <div class="diagram">
+<pre><code>{
+  "time": "2026-09-14T10:15:42Z",
+  "level": "INFO",
+  "msg": "duration=42.3s files=8 &hellip;",
+  "stage": "metrics",
+  "duration_ms": 42300,
+  "files_reviewed": 8,
+  "prompt_tokens": 12345,
+  "completion_tokens": 2345,
+  "total_cost_usd": 0.42,
+  "new_findings": 5,
+  "carried_findings": 3,
+  "resolved_findings": 1,
+  "scanner_findings": 2,
+  "comments_posted": 6
+}</code></pre>
+    </div>
+    <p><code>total_cost_usd</code> is populated from the provider's usage response when available; if the provider does not surface a price, the field stays at <code>0.00</code> and consumers can multiply <code>prompt_tokens</code> / <code>completion_tokens</code> by their own rate card.</p>
+
     <h2 id="internal-llm-coverage">Test coverage on <code>internal/llm</code> is 40%</h2>
     <p><strong>Not a bug.</strong> After the OCR provider trim, <code>internal/llm</code> is smaller than the original upstream code but a lot of retained provider glue is only exercised end-to-end &mdash; not by unit tests yet. Coverage rises as Phase 6+ wires the retained providers into the review path. Track progress on the <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/ROADMAP.md">roadmap</a>.</p>
 

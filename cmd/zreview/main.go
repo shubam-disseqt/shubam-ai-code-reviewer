@@ -15,6 +15,10 @@ import (
 
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
+		// Top-level exit path: kept as a plain "[zreview] error: ..." line so
+		// the format matches historical grep patterns and CI failure-parsing
+		// scripts. Structured logging lives inside runReview, where a slog
+		// logger threads through the pipeline stages.
 		fmt.Fprintf(os.Stderr, "[zreview] error: %s\n", err)
 		var bx *blockerExitError
 		if errors.As(err, &bx) {
