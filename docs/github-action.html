@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>GitHub Action &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+      <li><a href="/cli-reference.html">CLI reference</a></li>
+      <li><a href="/providers.html">Providers</a></li>
+      <li><a href="/index-and-context.html">Index and context</a></li>
+      <li><a href="/review-rules.html">Review rules</a></li>
+      <li><a href="/overlap.html">Overlap</a></li>
+      <li><a href="/session-log.html">Session log</a></li>
+      <li><a href="/github-action.html" class="active">GitHub Action</a></li>
+      <li><a href="/troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="/security.html">Security</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>GitHub Action</h1>
+    <p class="lede">Drop the <code>shubam-disseqt/z-code-reviewer</code> action into a workflow to run <code>zreview review</code> on every pull request. Composite action &mdash; installs the CLI and calls it in the same job.</p>
+
+    <h2 id="minimal">Minimal workflow</h2>
+    <pre><code># .github/workflows/review.yml
+name: AI review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # required so the PR base ref is available
+
+      - uses: shubam-disseqt/z-code-reviewer@v0
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}</code></pre>
+
+    <p>That's it for the default path: pull request event, Anthropic provider, comments posted inline on the PR. Everything else is a knob.</p>
+
+    <h2 id="inputs">Inputs</h2>
+    <p>All inputs are optional. Sensible defaults keep the minimal workflow above one env var wide.</p>
+    <table>
+      <thead><tr><th>Input</th><th>Purpose</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>version</code></td>
+          <td>zreview version to install. Empty means latest release.</td>
+          <td>latest</td>
+        </tr>
+        <tr>
+          <td><code>provider</code></td>
+          <td><code>anthropic | openai | bedrock | deepseek | openai-responses</code></td>
+          <td><code>anthropic</code></td>
+        </tr>
+        <tr>
+          <td><code>model</code></td>
+          <td>Model name, e.g. <code>claude-sonnet-4-6</code>.</td>
+          <td>provider default</td>
+        </tr>
+        <tr>
+          <td><code>from</code></td>
+          <td>Base ref for the diff.</td>
+          <td>PR base ref (<code>GITHUB_BASE_REF</code>)</td>
+        </tr>
+        <tr>
+          <td><code>to</code></td>
+          <td>Head ref for the diff.</td>
+          <td>PR head ref (<code>GITHUB_HEAD_REF</code>)</td>
+        </tr>
+        <tr>
+          <td><code>format</code></td>
+          <td><code>stdout | json | github</code>.</td>
+          <td><code>github</code></td>
+        </tr>
+        <tr>
+          <td><code>db-url</code></td>
+          <td><code>ZREVIEW_DB_URL</code> passthrough for a persistent index.</td>
+          <td>none (JIT mode)</td>
+        </tr>
+        <tr>
+          <td><code>rules-repo</code></td>
+          <td><code>ZREVIEW_ORG_RULES_REPO</code> passthrough &mdash; <code>owner/repo[@ref]</code>.</td>
+          <td>none</td>
+        </tr>
+        <tr>
+          <td><code>extra-args</code></td>
+          <td>Additional flags spliced into the <code>zreview review</code> call.</td>
+          <td>&mdash;</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="permissions">Required permissions</h2>
+    <p>The workflow's <code>permissions:</code> block controls what the built-in <code>GITHUB_TOKEN</code> can do. For the default <code>format: github</code> path:</p>
+    <pre><code>permissions:
+  contents: read           # read the repo
+  pull-requests: write     # post the review as inline comments</code></pre>
+
+    <p>If you also want the cross-PR overlap surface, that already reads via <code>pull-requests: read</code>, which <code>write</code> subsumes. Nothing extra to add.</p>
+
+    <div class="note">
+      <strong>Forked PRs.</strong> By default, GitHub gives fork PRs a read-only token &mdash; the action cannot post comments. Configure workflow_run or pull_request_target patterns carefully if you need reviews on fork PRs, and read the <a href="https://securitylab.github.com/research/github-actions-preventing-pwn-requests/">preventing pwn-requests</a> guide first. Do not blindly copy <code>pull_request_target</code> patterns.
+    </div>
+
+    <h2 id="secrets">Secrets</h2>
+    <p>The action needs exactly one secret in the minimal case: the LLM provider's API key. Set it under <strong>Settings &rarr; Secrets and variables &rarr; Actions</strong>.</p>
+    <table>
+      <thead><tr><th>Provider</th><th>Secret</th></tr></thead>
+      <tbody>
+        <tr><td><code>anthropic</code></td><td><code>ANTHROPIC_API_KEY</code></td></tr>
+        <tr><td><code>openai</code></td><td><code>OPENAI_API_KEY</code></td></tr>
+        <tr><td><code>openai-responses</code></td><td><code>OPENAI_RESPONSES_API_KEY</code></td></tr>
+        <tr><td><code>deepseek</code></td><td><code>DEEPSEEK_API_KEY</code></td></tr>
+        <tr><td><code>bedrock</code></td><td>AWS credential env: <code>AWS_ROLE_ARN</code> via OIDC, or <code>AWS_ACCESS_KEY_ID</code>/<code>AWS_SECRET_ACCESS_KEY</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="pinning">Pinning versions</h2>
+    <p>Composite actions pin best by SHA. If you need reproducible reviews across PRs, replace the tag with a commit SHA:</p>
+    <pre><code>- uses: shubam-disseqt/z-code-reviewer@&lt;40-char-sha&gt;
+  with:
+    version: v0.1.0             # pin the CLI too</code></pre>
+    <p>Renovate and Dependabot both understand this form and will PR updates on release.</p>
+
+    <h2 id="patterns">Common patterns</h2>
+
+    <h3>Shared index database</h3>
+    <p>Point every reviewer at the same Postgres so summaries are computed once. Populate the DB from a scheduled indexer job, not from the review workflow itself.</p>
+    <pre><code>- uses: shubam-disseqt/z-code-reviewer@v0
+  with:
+    db-url: ${{ secrets.ZREVIEW_DB_URL }}
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}</code></pre>
+
+    <h3>Org rules from a separate repo</h3>
+    <pre><code>- uses: shubam-disseqt/z-code-reviewer@v0
+  with:
+    rules-repo: disseqt/z-review-rules@main
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    ZREVIEW_ORG_RULES_TOKEN: ${{ secrets.RULES_REPO_READ_TOKEN }}</code></pre>
+
+    <h3>Block merge on blocker findings</h3>
+    <p>Review exit code <code>3</code> means &ldquo;completed, found a blocker.&rdquo; Wire that to a required check:</p>
+    <pre><code>- uses: shubam-disseqt/z-code-reviewer@v0
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+# The step fails (exit 3) if any comment has severity: blocker.
+# Mark this job as a required status check to block merges.</code></pre>
+
+    <h3>Cost-limit runs</h3>
+    <p>Skip AI review on trivial changes (docs, generated files) by gating the whole job on a paths filter:</p>
+    <pre><code>on:
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - '**/docs/**'
+      - '**/*.gen.go'</code></pre>
+
+    <h2 id="troubleshooting">When it doesn't post comments</h2>
+    <p>The two most common causes:</p>
+    <ol>
+      <li><strong>Missing <code>pull-requests: write</code>.</strong> The action ran, produced findings, and got 403 from the GitHub API. Check the job's <code>permissions:</code> block.</li>
+      <li><strong>Fork PR.</strong> Forked PRs get a read-only token. The action will still run, still emit comments to the job log, but the API call to post them fails. Use <code>format: stdout</code> for fork PRs or accept the limitation.</li>
+    </ol>
+    <p>See <a href="/troubleshooting.html">Troubleshooting</a> for the full list.</p>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+      The action definition lives in <code>action.yml</code> at the repo root.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

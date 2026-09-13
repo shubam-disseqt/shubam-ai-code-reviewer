@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>Providers &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+      <li><a href="/cli-reference.html">CLI reference</a></li>
+      <li><a href="/providers.html" class="active">Providers</a></li>
+      <li><a href="/index-and-context.html">Index and context</a></li>
+      <li><a href="/review-rules.html">Review rules</a></li>
+      <li><a href="/overlap.html">Overlap</a></li>
+      <li><a href="/session-log.html">Session log</a></li>
+      <li><a href="/github-action.html">GitHub Action</a></li>
+      <li><a href="/troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="/security.html">Security</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Providers</h1>
+    <p class="lede">Five built-in LLM providers. One credential env var per provider, one model name, one <code>ZREVIEW_PROVIDER</code> override. No provider adapters to install.</p>
+
+    <div class="note">
+      <strong>Pick one.</strong> Set the API key env var for the provider you want to use. <code>zreview</code> resolves the endpoint automatically. Override with <code>ZREVIEW_PROVIDER</code> and <code>ZREVIEW_MODEL</code> if you have more than one key configured.
+    </div>
+
+    <h2 id="registry">The five presets</h2>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Protocol</th><th>Auth</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>anthropic</code></td>
+          <td>Anthropic Messages API</td>
+          <td><code>ANTHROPIC_API_KEY</code></td>
+          <td>First-party endpoint. Recommended default for review work.</td>
+        </tr>
+        <tr>
+          <td><code>bedrock</code></td>
+          <td>Anthropic via AWS Bedrock</td>
+          <td>AWS credential chain (profile, SSO, instance role, or <code>AWS_*</code>)</td>
+          <td>Ambient auth &mdash; no API key. Set <code>AWS_REGION</code>. Model IDs are region-specific.</td>
+        </tr>
+        <tr>
+          <td><code>openai</code></td>
+          <td>OpenAI Chat Completions</td>
+          <td><code>OPENAI_API_KEY</code></td>
+          <td>Also works with any OpenAI-compatible endpoint if you override the base URL.</td>
+        </tr>
+        <tr>
+          <td><code>openai-responses</code></td>
+          <td>OpenAI Responses API</td>
+          <td><code>OPENAI_RESPONSES_API_KEY</code></td>
+          <td>Newer OpenAI surface. Same base URL as <code>openai</code>, different request shape.</td>
+        </tr>
+        <tr>
+          <td><code>deepseek</code></td>
+          <td>OpenAI-compatible (DeepSeek)</td>
+          <td><code>DEEPSEEK_API_KEY</code></td>
+          <td>Cost-efficient. Same protocol as <code>openai</code> against DeepSeek's endpoint.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="models">Suggested model IDs</h2>
+    <p>The exact list of models each provider ships changes over time. These are the shapes <code>zreview</code> is tested against &mdash; anything the provider will route is fair game.</p>
+
+    <h3><code>anthropic</code></h3>
+    <ul>
+      <li><code>claude-opus-5</code>, <code>claude-sonnet-5</code></li>
+      <li><code>claude-opus-4-8</code>, <code>claude-opus-4-7</code>, <code>claude-opus-4-6</code></li>
+      <li><code>claude-sonnet-4-6</code></li>
+    </ul>
+
+    <h3><code>bedrock</code></h3>
+    <p>Bedrock model IDs are prefixed by region-family (<code>us.*</code>, <code>global.*</code>). Run <code>aws bedrock list-inference-profiles</code> for what your account actually offers.</p>
+    <ul>
+      <li><code>us.anthropic.claude-opus-5</code>, <code>us.anthropic.claude-sonnet-5</code></li>
+      <li><code>us.anthropic.claude-opus-4-8</code>, <code>us.anthropic.claude-opus-4-7</code></li>
+      <li><code>global.anthropic.claude-opus-5</code>, <code>global.anthropic.claude-sonnet-5</code></li>
+    </ul>
+
+    <h3><code>openai</code></h3>
+    <ul>
+      <li><code>gpt-5.5</code>, <code>gpt-5.4</code>, <code>gpt-5.4-mini</code></li>
+    </ul>
+
+    <h3><code>openai-responses</code></h3>
+    <ul>
+      <li><code>gpt-5.6-sol</code>, <code>gpt-5.6-terra</code>, <code>gpt-5.6-luna</code></li>
+    </ul>
+
+    <h3><code>deepseek</code></h3>
+    <ul>
+      <li><code>deepseek-v4-pro</code>, <code>deepseek-v4-flash</code>, <code>deepseek-flash</code></li>
+    </ul>
+
+    <h2 id="resolution">How endpoint resolution works</h2>
+    <p><code>zreview</code> resolves the endpoint from, in order:</p>
+    <ol>
+      <li><code>ZREVIEW_PROVIDER</code> + <code>ZREVIEW_MODEL</code> if set.</li>
+      <li><code>~/.opencodereview/config.json</code> if present (inherited from the upstream OCR project).</li>
+      <li>The first provider whose API key env var is set. Anthropic wins on ties.</li>
+    </ol>
+    <p>Bedrock is treated specially: it has no api_key, so its readiness comes from the AWS credential chain. If <code>AWS_REGION</code> and any AWS credential source are present, Bedrock will resolve without an explicit <code>ZREVIEW_PROVIDER=bedrock</code>.</p>
+
+    <h2 id="cost">Cost notes</h2>
+    <p>Two cost knobs matter:</p>
+    <ul>
+      <li><strong>Review model</strong> &mdash; drives the main task loop. This is where most of the token spend lives. Opus-class models produce more precise comments; Sonnet-class is usually enough for standard PRs.</li>
+      <li><strong>Index model</strong> &mdash; embedding + per-file summaries. Called once per file at index time, then reused across every subsequent review. Point <code>ZREVIEW_INDEX_MODEL</code> at a cheap model here.</li>
+    </ul>
+    <p>The selector prefilter drops noisy diffs before any LLM call &mdash; formatting-only changes and generated files never hit the model. See <a href="/architecture.html#det-vs-llm">Architecture &sect; Deterministic vs LLM</a>.</p>
+
+    <h2 id="switching">Switching providers</h2>
+    <pre><code># Anthropic direct
+export ANTHROPIC_API_KEY=sk-ant-...
+zreview review --from origin/main --to HEAD
+
+# Same key set, but force Bedrock
+export ZREVIEW_PROVIDER=bedrock
+export ZREVIEW_MODEL=us.anthropic.claude-sonnet-5
+export AWS_REGION=us-east-1
+zreview review --from origin/main --to HEAD
+
+# DeepSeek for cost-sensitive runs
+export DEEPSEEK_API_KEY=...
+export ZREVIEW_PROVIDER=deepseek
+export ZREVIEW_MODEL=deepseek-v4-flash
+zreview review --from origin/main --to HEAD</code></pre>
+
+    <h2 id="troubleshooting">Common issues</h2>
+    <p>See <a href="/troubleshooting.html">Troubleshooting</a> for the full list. Provider-specific hits:</p>
+    <ul>
+      <li><strong>Anthropic 401.</strong> The API key was rotated. Regenerate under console.anthropic.com and re-export.</li>
+      <li><strong>Bedrock <code>AccessDeniedException</code>.</strong> The model is available in the region but the account doesn't have it enabled. Grant access in the Bedrock console; propagation can take a few minutes.</li>
+      <li><strong>OpenAI 429.</strong> Rate limit on the org key. <code>zreview</code> retries with backoff; if it still fails, drop concurrency or move to a higher tier.</li>
+      <li><strong>DeepSeek timeouts.</strong> Their endpoint occasionally rate-limits by IP. The retry loop handles transient 5xx; a persistent hang is worth reporting.</li>
+    </ul>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+      See <a href="/configuration.html">Configuration</a> for env-var precedence and <a href="/cli-reference.html">CLI reference</a> for command flags.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

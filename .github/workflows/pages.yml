@@ -1,0 +1,51 @@
+name: Deploy docs to GitHub Pages
+
+# The `docs/` directory doubles as the source for two surfaces:
+#   1. The offline docs viewer shipped in the binary — served by
+#      `zreview docs` from the `//go:embed *.html *.css` in `docs/embed.go`.
+#   2. The online copy at https://<owner>.github.io/z-code-reviewer/,
+#      deployed by this workflow.
+# One source of truth. Any HTML/CSS edit under `docs/` updates both.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload docs artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # docs/ is plain HTML+CSS — nothing to build. Serve as-is.
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

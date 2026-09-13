@@ -55,9 +55,10 @@ tidy:
 ## check: full CI-equivalent battery
 check: tidy lint test
 
-## docs: build the docs site into docs/dist/ (Phase 10)
+## docs: docs are plain HTML+CSS under docs/, embedded via //go:embed
 docs:
-	@echo "Docs site build: Phase 10 deliverable — see ROADMAP.md"
+	@echo "Docs are plain HTML+CSS under docs/ — no build step."
+	@echo "Served offline by 'zreview docs' and online via GitHub Pages."
 
 ## vuln: run govulncheck against all packages (matches CI)
 vuln:
