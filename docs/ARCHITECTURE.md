@@ -37,20 +37,37 @@ flowchart TD
     B --> C[bundle<br/>related files]
     C --> D[load index context<br/>+ JIT if index empty]
     D --> E[load matching<br/>org rules]
-    E --> F[LLM agent loop<br/>tools: file_read, code_search,<br/>file_find, code_comment,<br/>task_done]
+
+    E --> S1[cheap tier:<br/>summarizer]
+    E --> S2[cheap tier:<br/>labeler]
+    E --> S3[deterministic scanners:<br/>gitleaks + semgrep + govulncheck]
+    E --> F[main tier: LLM agent loop<br/>tools: file_read, code_search,<br/>file_find, file_read_diff,<br/>code_comment, task_done]
+
     F --> G[comment collector]
+    S3 --> G
     G --> H[line-snap<br/>positioning]
     H --> I[reflection<br/>dedup, low-confidence filter]
-    I --> J[format<br/>stdout &#124; json &#124; github]
+    I --> P[fingerprint<br/>vs previous findings]
+    P --> Q[scoring engine<br/>confidence × impact × category]
+    Q --> J[format<br/>stdout &#124; json &#124; github &#124; sarif]
+    S1 -.-> J
+    S2 -.-> J
 
     K[open PRs list] -.-> L[fingerprint<br/>prefilter Jaccard]
     L -.-> M[LLM overlap<br/>verdict]
     M -.-> J
 ```
 
-Dashed edges are the cross-PR overlap sub-pipeline: it runs in parallel
-with the main review and never blocks it — every failure returns "no
-overlap findings" rather than failing the run.
+Dashed edges are best-effort sub-pipelines: cross-PR overlap, PR
+summary, and PR labeling all run in parallel with the main review and
+never block it — every failure returns an empty result rather than
+failing the run.
+
+**Cost-shape.** The main tier (Sonnet-class) runs the reviewer loop
+only. Summary + labeler use the cheap tier (Haiku / Flash / DeepSeek).
+Scanners are pure Go subprocess wrappers with zero LLM tokens. On a
+re-review push, fingerprint carry-over drops files whose findings are
+already resolved; the reviewer skips them entirely.
 
 ---
 
@@ -82,7 +99,13 @@ source of the approach.
 | `internal/gh` | GitHub REST via `google/go-github`: list open PRs, get PR files, post review comments | Mira `providers/github.py` — port shape |
 | `internal/session` | JSONL append log for `--resume`, chained by `parentUuid` | OCR `internal/session/*` — copy, drop viewer, drop manifest coverage sets (v2) |
 | `internal/docs` | Embedded static docs + local HTTP server for `zreview docs` | New — modeled on OCR `internal/viewer/{server,hostguard,securityheaders}.go` |
-| `internal/prompts` | Embedded prompt templates (`main_task_system.md`, `main_task_user.md`, `memory_compression_task.md`, `summarize.md`, `overlap.md`) | OCR + Mira — copy verbatim |
+| `internal/prompts` | Embedded prompt templates (`main_task_system.md`, `main_task_user.md`, `memory_compression_task.md`, `summarize.md`, `overlap.md`, `summarizer.md`, `labeler.md`) | OCR + Mira + New |
+| `internal/fingerprint` | Stable finding hash: `owner\|repo\|category\|normalized_path\|symbol\|normalized_snippet`. Whitespace-collapsed and comment-stripped so pure formatting diffs don't reset findings. | New — semantics from PDF §5 |
+| `internal/findings` | Per-PR JSON persistence keyed by `(owner, repo, pr, fingerprint)`; drives the `fixed / unchanged / affected` re-review split. Atomic write via tmp+rename. | New |
+| `internal/scanner` | Deterministic security scanner adapters: Gitleaks (secrets), Semgrep (SAST), govulncheck (Go stdlib CVE). Concurrent runner with best-effort skip when a binary is missing. | New |
+| `internal/scoring` | Deterministic severity policy: `confidence × impact × category → CRITICAL / HIGH / MEDIUM / LOW / SUPPRESS`. Table-driven YAML, embeddable defaults, overridable via `ZREVIEW_SCORING_POLICY`. | New — from PDF §6 |
+| `internal/sarif` | SARIF 2.1.0 encoder for GitHub Code Scanning uploads. Golden-file tested against schema. | New |
+| `internal/llm` (tiers) | `Tiers{Main, Cheap}` client + model resolution. `ZREVIEW_CHEAP_MODEL` and `ZREVIEW_CHEAP_PROVIDER` env vars; cheap falls back to Main when unset. | New addition to existing package |
 
 The per-file map, LOC estimates, and modifications needed live in
 [PORTING.md](PORTING.md).
@@ -100,12 +123,19 @@ is where the model's failure modes live.
 | Which files to review | Go | Coverage guaranteed — no "agent skipped 3 files" |
 | How to bundle files | Go | Isolated sub-agent contexts; parallelizable; stable on large diffs |
 | Which rules match a file | Go (glob against YAML) | More predictable than prompt-injected rules |
+| Which model tier serves a call | Go (`internal/llm/tiers`) | Cheap for structured summary / labeling; main for reviewer — measured 60-70% cost cut vs main-only |
+| Secret / SAST / CVE detection | Go (`internal/scanner` shells out to Gitleaks / Semgrep / govulncheck) | Deterministic tools have perfect precision on the categories LLMs are worst at |
 | Reading a file, searching code | LLM via tools | Dynamic context is where agents earn their keep |
-| Writing comments | LLM | Only creative task |
+| Writing review comments | LLM (main tier) | Only creative task |
+| PR walkthrough / summary | LLM (cheap tier) | Cheap explanatory prose; best-effort, no critical path |
+| PR type / risk labels | LLM (cheap tier) | Structured JSON output, single call |
 | Line-number positioning | Go post-processor (line-snap against real hunks) | Fixes the classic LLM off-by-N bug |
 | Comment reflection / dedup | Go | Filters low-quality comments before they hit the user |
+| Finding fingerprint | Go (`internal/fingerprint`) | Stable across whitespace / renames so incremental re-review can carry state |
+| Severity scoring | Go (`internal/scoring`) — deterministic YAML policy | Explicit non-agent decision; no reflection loop (CR-bench: reflexion hurts usefulness) |
 | Cross-PR overlap prefilter | Go (Jaccard on title, symbol/file intersect) | Cheap gate before any LLM call |
-| Cross-PR overlap verdict | LLM (batched) | Pattern-match on intent only |
+| Cross-PR overlap verdict | LLM (main tier, batched) | Pattern-match on intent only |
+| SARIF encoding for GitHub Code Scanning | Go (`internal/sarif`) | Deterministic schema |
 
 ---
 
@@ -203,13 +233,14 @@ code, no diffs, no comments.
 
 ## 7. State and persistence
 
-Three durable stores. Only the first is required.
+Four durable stores. Only the first is required.
 
 | Store | Required? | What it holds | Rebuildable? |
 |---|---|---|---|
 | Filesystem session log | Yes (always local) | Append-only JSONL per invocation for `--resume` | Rebuildable — session is rerun-safe |
 | Index DB (Postgres or SQLite) | Optional (features degrade to JIT context if absent) | Per-file summaries, symbols, imports, external refs, package manifests | Rebuildable — `zreview index --full` recomputes |
 | Org rules repo (git) | Optional (features degrade to no-rules if absent) | YAML files describing review rules with scope + severity + category | Source of truth in git |
+| Per-PR findings JSON | Optional (drives incremental re-review) | Fingerprinted findings from prior review runs of the same `(owner, repo, pr)` at `~/.zreview/findings/<owner>_<repo>_<pr>.json`. Atomic write (`tmp → rename`). | Rebuildable — deletion just means the next review is a full pass |
 
 No review history is persisted. Comments are ephemeral — they land in
 the PR (via `--format github`), or in stdout / JSON, and that is the
@@ -318,9 +349,11 @@ core:
 | New LLM provider | Add a `Protocol` constant to `internal/llm/protocol.go` and a client adapter in `internal/llm/`. Register in `internal/llm/providers.go`. |
 | New manifest parser | Add a `Parser` implementation in `internal/manifests/` and register in the dispatch table. |
 | New symbol-extraction language | Add a regex + walker in `internal/extract/` keyed by language enum. |
-| New docs page | Drop a Markdown file into `docs/src/content/docs/en/` and rebuild. `zreview docs` picks up the new page from the embedded FS. |
-| New tool the agent can call | Implement `tool.Provider` in `internal/tool/`, register in `Registry` at startup, add its JSON schema to `internal/config/toolsconfig/tools.json`. |
-| New output format | Add a formatter under `internal/format/` and register via `--format` flag switch in `cmd/zreview/review_cmd.go`. |
+| New docs page | Drop a plain HTML file into `docs/` — `embed.go`'s `//go:embed *.html *.css` picks it up automatically. Update the sidebar in the other pages. |
+| New tool the agent can call | Implement `tool.Provider` in `internal/tool/`, register in `Registry` at startup, add its JSON schema to `internal/tool/tools.json`. |
+| New output format | Add a formatter under `cmd/zreview/emit.go` and register via `--format` flag switch in `cmd/zreview/review_cmd.go`. |
+| New security scanner | Implement `scanner.Runner` in `internal/scanner/` (parse tool JSON → `ScannerFinding`). Register in `internal/scanner/runner.go`'s concurrent errgroup. Best-effort: a missing binary skips with an info line. |
+| Change severity policy | Drop a YAML override at `.zreview/scoring.yaml` or point `$ZREVIEW_SCORING_POLICY` at any YAML file. Keys: `category\|rule → {impact, confidence_floor, severity_map}`. Reload is per-invocation. |
 
 ---
 
@@ -332,11 +365,28 @@ Called out explicitly so scope creep is loud:
 - **No webhook server.** CLI only. CI/CD is the delivery mechanism.
 - **No learning loop.** Rules are authored by humans and reviewed via
   git PR on the rules repo.
-- **No vulnerability scanning.** OSV / SCA is out of scope — different
-  tool, different failure modes. Users layer their own SAST/SCA in CI.
+- **No LangGraph or graph-based orchestration framework.** The tool
+  loop in `internal/llmloop` is a single-threaded linear agent per
+  Cognition's ["Don't Build Multi-Agents"](https://cognition.com/blog/dont-build-multi-agents)
+  principle. The parallel stages in Section 2's diagram are parallel
+  best-effort branches, not a coordinated multi-agent graph.
+- **No Reflection / Adjudicator / Best-Practices LLM sub-agents.**
+  CR-bench (NUS, 2026) measured that Reflexion-style loops produce
+  lower usefulness than single-shot for code review. Deterministic
+  line-snap + fingerprint dedup + scoring policy replace this.
+- **No Python service split.** Single Go binary is the distribution
+  contract. Every dependency listed here compiles into that binary.
+- **Vulnerability scanning is scoped.** Ships secret detection
+  (Gitleaks), lightweight SAST (Semgrep), and Go stdlib CVE
+  (govulncheck). Deep SCA / dependency-tree / license analysis remain
+  out of scope — different tools, different failure modes.
 - **No cross-repo dependency graph.** Mira's `relationships.py`
   intentionally not ported.
 - **No fine-tuning or custom models.** Wrong tool for the job.
 - **No plugin marketplace, delegation mode, MCP server, or agent skill
   packaging.** These may return later as opt-in adapters, not first-class
   features.
+- **No manual-effort estimator.** Suggested in the LangGraph-Edition
+  design but rejected — a synthetic minute count is not something a
+  reviewer machine can produce credibly without pilot calibration
+  data, and PR-time labeling already carries risk signal.

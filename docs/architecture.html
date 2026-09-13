@@ -32,7 +32,11 @@
 
   <main>
     <h1>Architecture</h1>
-    <p class="lede">The whole tool as one Go CLI. Deterministic engineering around a thin LLM loop. This page is the source of truth &mdash; the repo file <code>ARCHITECTURE.md</code> mirrors it.</p>
+    <p class="lede">The whole tool as one Go CLI. Deterministic engineering around a thin LLM loop. The full source of truth lives at <code>docs/ARCHITECTURE.md</code> in the repo &mdash; this page is the browsable mirror.</p>
+
+    <div class="note">
+      <strong>Phase 12&ndash;17 (planned).</strong> The pipeline below reflects the shipped review path through Phase 11. The next six phases add: <em>model tiering</em> (cheap tier for summary + labeling), <em>fingerprinting + incremental re-review</em> (drop resolved findings, carry unchanged, review only affected), <em>deterministic scanners</em> (Gitleaks + Semgrep + govulncheck as evidence), <em>summarizer + labeler cheap-model agents</em>, <em>scoring engine</em> (confidence &times; impact &rarr; severity), and <em>SARIF output + PR description block</em>. Explicitly rejected: LangGraph, Reflection Agent, Adjudicator loop, Best Practices as a separate node, manual effort estimator, Python service split. See <a href="/ROADMAP.md">ROADMAP</a> and <code>docs/ARCHITECTURE.md</code> for the extended pipeline diagram and package map.
+    </div>
 
     <h2 id="one-paragraph">1. What we build, in one paragraph</h2>
     <p><code>zreview</code> is a Go CLI. It takes a git diff (or a range, or a commit), optionally consults a <strong>persistent code index</strong> for repo-wide context, optionally consults an <strong>org-level rules repo</strong> for team-specific review policy, calls an LLM through a <strong>thin agent loop</strong> with a small set of tools (file read, code search, file find, comment), snaps LLM-produced comments to real diff lines via a deterministic post-processor, and optionally scans other open PRs for overlap or merge-conflict risk. The output is a stream of comments &mdash; printed to stdout, emitted as JSON, or posted to a PR via a <code>--format github</code> writer.</p>
@@ -235,9 +239,13 @@
       <li><strong>No dashboard.</strong> No web UI beyond this local docs viewer.</li>
       <li><strong>No webhook server.</strong> CLI only. CI/CD is the delivery mechanism.</li>
       <li><strong>No learning loop.</strong> Rules are authored by humans and reviewed via git PR on the rules repo.</li>
-      <li><strong>No vulnerability scanning.</strong> OSV / SCA is out of scope &mdash; different tool, different failure modes.</li>
+      <li><strong>No LangGraph or graph-based orchestration framework.</strong> Single-threaded linear agent per Cognition's &ldquo;Don&rsquo;t Build Multi-Agents&rdquo; principle. The parallel best-effort branches (summary, labeler, scanners, overlap) are independent side channels, not a coordinated multi-agent graph.</li>
+      <li><strong>No Reflection / Adjudicator / Best-Practices LLM sub-agents.</strong> CR-bench (NUS, 2026) measured lower usefulness than single-shot. Deterministic line-snap + fingerprint dedup + scoring policy replace them.</li>
+      <li><strong>No Python service split.</strong> Single Go binary is the distribution contract.</li>
+      <li><strong>Vulnerability scanning is scoped.</strong> Phase 14 adds secret detection (Gitleaks), lightweight SAST (Semgrep), and Go stdlib CVE (govulncheck). Deep SCA / dependency-tree / license analysis remain out of scope.</li>
       <li><strong>No cross-repo dependency graph.</strong> Mira's <code>relationships.py</code> intentionally not ported.</li>
       <li><strong>No fine-tuning or custom models.</strong> Wrong tool for the job.</li>
+      <li><strong>No manual-effort estimator.</strong> Suggested in the LangGraph-Edition design but rejected until pilot calibration data justifies it.</li>
       <li><strong>No plugin marketplace, delegation mode, MCP server, or agent skill packaging.</strong></li>
     </ul>
 

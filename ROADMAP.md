@@ -90,11 +90,104 @@ line-precision. Everything else about the pilot is execution, not
 code — this repo ships v0.1.0 with the pilot ready to
 kick off.
 
+## Phase 12 — Model tiering (planned)
+
+Two-tier LLM client resolution: `Main` (Sonnet-class, reviewer) and
+`Cheap` (Haiku / Flash / DeepSeek — summary, labeling). Env vars
+`ZREVIEW_CHEAP_MODEL` + `ZREVIEW_CHEAP_PROVIDER` opt in; cheap falls
+back to Main when unset. Foundational for Phases 15 and 17.
+
+Deliverable: `internal/llm/tiers.go` + `Tiers{Main, Cheap}` consumed
+by `cmd/zreview/review_cmd.go`. Measured target: 30-40% cost cut on
+reviews that add PR summary + labels (Ellipsis benchmark).
+
+## Phase 13 — Fingerprinting + incremental re-review (planned)
+
+Persistent per-PR findings under `~/.zreview/findings/<owner>_<repo>_<pr>.json`.
+Stable fingerprint = `sha256(owner|repo|category|normalized_path|symbol|normalized_snippet)`,
+whitespace-collapsed and comment-stripped so pure formatting doesn't
+reset state. On re-review: findings whose file is untouched
+carry-over as `unchanged → keep`; matching fresh finding →
+`resolved → drop`; files touched with nothing found → `fixed → resolve`.
+
+Deliverable: `internal/fingerprint/*` + `internal/findings/*` +
+integration in `cmd/zreview/review_cmd.go`. Measured target: 40-50%
+token cut on iterative PR pushes (Ellipsis benchmark).
+
+## Phase 14 — Deterministic security scanners (planned)
+
+Gitleaks (secrets), Semgrep (SAST), and govulncheck (Go stdlib CVE)
+run concurrently over `kept` files via `errgroup`; JSON output parsed
+into `ScannerFinding{RuleID, Path, Line, Kind, Severity, ...}`.
+Findings flow into the same collector as LLM findings tagged
+`Source=scanner:<tool>`. Best-effort: a missing tool binary skips
+with an info line — never fatal.
+
+Deliverable: `internal/scanner/{gitleaks,semgrep,govulncheck,runner}.go`
+plus a new `## Known Issues (from static analysis)` block in the
+system prompt so the LLM enriches rather than restates. Docs page:
+`docs/scanners.html`.
+
+## Phase 15 — Summarizer + Labeler cheap-model agents (planned)
+
+Two structured-JSON calls on the cheap tier, run parallel with
+scanners in an `errgroup`. Summarizer produces
+`{walkthrough, change_groups, testing_notes, risk}`; Labeler produces
+`{pr_type, domains, risk_tag, ownership_hints}`. Both best-effort —
+empty on failure.
+
+Deliverable: `internal/prompts/{summarizer,labeler}.md` +
+`cmd/zreview/{summary,label}.go`. Consumed by Phase 17's PR
+description block and by GitHub labels.
+
+## Phase 16 — Scoring engine (planned)
+
+Deterministic policy: `Score(finding) → {Severity, Confidence, Impact}`,
+table-driven from `internal/scoring/policy.yaml` (embedded default,
+overridable via `ZREVIEW_SCORING_POLICY` or `.zreview/scoring.yaml`).
+`emit.go`'s `filterResolved` becomes `filterByScore`; `--min-severity`
+flag gates the publish stream (default `MEDIUM`).
+
+Deliverable: `internal/scoring/*`. Explicitly not an LLM — CR-bench
+data ruled out reflection loops as a substitute.
+
+## Phase 17 — SARIF output + PR description block (planned)
+
+- `internal/sarif/` — SARIF 2.1.0 encoder with golden-file tests
+  against the schema. `--format sarif` emits to file or stdout.
+- `internal/gh/` gains `GetPRBody`, `UpdatePRBody`, `AddLabels`,
+  `UploadSARIF`. Feature-gate initial SARIF upload behind
+  `ZREVIEW_UPLOAD_SARIF=1`.
+- `cmd/zreview/description.go` — idempotent PR body update between
+  `<!-- ZREVIEW:BEGIN -->` and `<!-- ZREVIEW:END -->` markers with
+  the Phase 15 walkthrough + Phase 16 severity summary.
+
+Deliverable: security findings flow to GitHub Code Scanning (SARIF);
+review comments stay on the diff; PR description carries the
+zreview-managed walkthrough block.
+
+## Explicitly excluded (from the LangGraph-Edition design)
+
+Documented so scope creep is loud. See
+[docs/ARCHITECTURE.md §9](docs/ARCHITECTURE.md#9-non-goals) for the
+non-goals section that owns these.
+
+- **LangGraph orchestration framework.** `llmloop` stays.
+- **Reflection Agent / Adjudicator LLM loop.** CR-bench (NUS, 2026)
+  measured lower usefulness than single-shot.
+- **Best Practices Agent as separate node.** Rules layer already
+  covers it.
+- **Manual effort estimator.** Feature bloat until pilot data
+  justifies it.
+- **Python service split.** Single Go binary is the distribution
+  contract.
+
 ## Not planned
 
 - Dashboard, web UI, webhook server
 - Learning loop / feedback synthesis
-- Vulnerability scanning / SCA / SAST
+- Deep SCA / dependency-tree / license analysis (Phase 14 is scoped
+  to secrets + lightweight SAST + Go stdlib CVE)
 - Delegation mode, MCP server, plugin marketplace
 - Fine-tuning or custom-hosted models
 - Cross-repo dependency graph
