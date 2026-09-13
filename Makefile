@@ -19,7 +19,7 @@ LDFLAGS := -s -w \
 
 GO_BUILD := CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
 
-.PHONY: build test coverage lint vet fmt check clean tidy docs help
+.PHONY: build test coverage lint vet fmt check clean tidy docs vuln help
 
 ## build: build the zreview binary for the host platform into ./bin/
 build: $(BIN_DIR)/$(BINARY)
@@ -58,6 +58,13 @@ check: tidy lint test
 ## docs: build the docs site into docs/dist/ (Phase 10)
 docs:
 	@echo "Docs site build: Phase 10 deliverable — see ROADMAP.md"
+
+## vuln: run govulncheck against all packages (matches CI)
+vuln:
+	@command -v govulncheck >/dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
+	@GOBIN=$$(go env GOBIN); \
+	if [ -z "$$GOBIN" ]; then GOBIN=$$(go env GOPATH)/bin; fi; \
+	PATH="$$GOBIN:$$PATH" govulncheck ./...
 
 ## clean: remove build artifacts
 clean:
