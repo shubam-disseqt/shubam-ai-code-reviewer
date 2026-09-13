@@ -90,7 +90,7 @@ line-precision. Everything else about the pilot is execution, not
 code — this repo ships v0.1.0 with the pilot ready to
 kick off.
 
-## Phase 12 — Model tiering (planned)
+## Phase 12 — Model tiering (shipped)
 
 Two-tier LLM client resolution: `Main` (Sonnet-class, reviewer) and
 `Cheap` (Haiku / Flash / DeepSeek — summary, labeling). Env vars
@@ -101,7 +101,7 @@ Deliverable: `internal/llm/tiers.go` + `Tiers{Main, Cheap}` consumed
 by `cmd/zreview/review_cmd.go`. Measured target: 30-40% cost cut on
 reviews that add PR summary + labels (Ellipsis benchmark).
 
-## Phase 13 — Fingerprinting + incremental re-review (planned)
+## Phase 13 — Fingerprinting + incremental re-review (shipped)
 
 Persistent per-PR findings under `~/.zreview/findings/<owner>_<repo>_<pr>.json`.
 Stable fingerprint = `sha256(owner|repo|category|normalized_path|symbol|normalized_snippet)`,
@@ -114,7 +114,7 @@ Deliverable: `internal/fingerprint/*` + `internal/findings/*` +
 integration in `cmd/zreview/review_cmd.go`. Measured target: 40-50%
 token cut on iterative PR pushes (Ellipsis benchmark).
 
-## Phase 14 — Deterministic security scanners (planned)
+## Phase 14 — Deterministic security scanners (shipped)
 
 Gitleaks (secrets), Semgrep (SAST), and govulncheck (Go stdlib CVE)
 run concurrently over `kept` files via `errgroup`; JSON output parsed
