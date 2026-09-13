@@ -32,3 +32,29 @@ type CodeReviewResult struct {
 	ExistingCode      string `json:"existing_code"`
 	SuggestionCode    string `json:"suggestion_code"`
 }
+
+// ChangeGroup is one bucket in a Summary's change_groups list — a cluster of
+// related files with a shared title and one-paragraph rationale.
+type ChangeGroup struct {
+	Title   string   `json:"title"`
+	Files   []string `json:"files"`
+	Summary string   `json:"summary"`
+}
+
+// Summary is the cheap-tier summarizer's structured output. All fields are
+// optional and empty on any parse / call failure — Phase 17 consumes this for
+// the PR description block, so the emitter must tolerate blanks.
+type Summary struct {
+	Walkthrough  string        `json:"walkthrough,omitempty"`
+	ChangeGroups []ChangeGroup `json:"change_groups,omitempty"`
+	TestingNotes string        `json:"testing_notes,omitempty"`
+	Risk         string        `json:"risk,omitempty"`
+}
+
+// Labels is the cheap-tier labeler's structured output.
+type Labels struct {
+	PRType         string   `json:"pr_type,omitempty"`
+	Domains        []string `json:"domains,omitempty"`
+	RiskTag        string   `json:"risk_tag,omitempty"`
+	OwnershipHints []string `json:"ownership_hints,omitempty"`
+}
