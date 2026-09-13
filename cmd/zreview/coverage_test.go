@@ -180,16 +180,17 @@ func TestOverlapCmdRequiresFlags(t *testing.T) {
 	}
 }
 
-func TestNewLLMClientReturnsErrWithoutConfig(t *testing.T) {
+func TestNewLLMTiersReturnsErrWithoutConfig(t *testing.T) {
 	for _, k := range []string{
 		"OCR_LLM_URL", "OCR_LLM_TOKEN", "OCR_LLM_MODEL",
 		"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL",
 		"ZREVIEW_PROVIDER", "ZREVIEW_MODEL",
+		"ZREVIEW_CHEAP_PROVIDER", "ZREVIEW_CHEAP_MODEL",
 	} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("HOME", t.TempDir())
-	_, _, err := newLLMClient()
+	_, err := newLLMTiers()
 	if err == nil {
 		t.Fatal("expected err with no LLM env configured")
 	}

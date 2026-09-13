@@ -158,11 +158,15 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	}
 	defer sess.Close()
 
-	// 7) llm client
-	llmClient, modelName, err := newLLMClient()
+	// 7) llm tiers. Main drives the reviewer loop; Cheap is threaded through
+	// for Phase 15's summarizer/labeler and falls back to Main until then.
+	tiers, err := newLLMTiers()
 	if err != nil {
 		return fmt.Errorf("llm: %w", err)
 	}
+	llmClient := tiers.Main
+	modelName := tiers.MainModel
+	_ = tiers.Cheap // reserved for Phase 15
 
 	// 8) prompts + tool defs
 	sysPrompt, err := loadPrompt("main_task_system.md")
@@ -387,22 +391,20 @@ func newSession(resumeID string) (*session.Session, error) {
 	return session.New(dir, resumeID)
 }
 
-// newLLMClient resolves the endpoint from the OCR resolver (which walks
-// env / ~/.opencodereview/config.json / shell rc in priority order).
-// ZREVIEW_MODEL and ZREVIEW_PROVIDER may override the pick.
-func newLLMClient() (llm.LLMClient, string, error) {
+// newLLMTiers resolves the two-tier LLM clients. Main is resolved from the OCR
+// resolver (env / ~/.opencodereview/config.json / shell rc, with ZREVIEW_MODEL
+// / ZREVIEW_PROVIDER overrides). Cheap opts in via ZREVIEW_CHEAP_MODEL /
+// ZREVIEW_CHEAP_PROVIDER; when unset, Cheap == Main so callers never need a
+// nil check.
+func newLLMTiers() (llm.Tiers, error) {
 	configPath := ""
 	if home, err := os.UserHomeDir(); err == nil {
 		configPath = filepath.Join(home, ".opencodereview", "config.json")
 	}
-	ep, err := llm.ResolveEndpointWithOptions(configPath, llm.ResolveOptions{
+	return llm.ResolveTiers(configPath, llm.ResolveOptions{
 		Provider: os.Getenv("ZREVIEW_PROVIDER"),
 		Model:    os.Getenv("ZREVIEW_MODEL"),
 	})
-	if err != nil {
-		return nil, "", err
-	}
-	return llm.NewLLMClient(ep), ep.Model, nil
 }
 
 // buildToolRegistry wires the context-gathering tools the LLM can call

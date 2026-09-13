@@ -51,10 +51,11 @@ func runIndex(ctx context.Context, cmd *cobra.Command, repo string, full bool, p
 	}
 	defer store.Close()
 
-	llmClient, _, err := newLLMClient()
+	tiers, err := newLLMTiers()
 	if err != nil {
 		return fmt.Errorf("llm: %w", err)
 	}
+	llmClient := tiers.Main
 
 	status := &index.Status{}
 	indexer := index.NewIndexer(store, llmClient, index.IndexerOptions{
