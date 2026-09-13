@@ -128,7 +128,7 @@ plus a new `## Known Issues (from static analysis)` block in the
 system prompt so the LLM enriches rather than restates. Docs page:
 `docs/scanners.html`.
 
-## Phase 15 — Summarizer + Labeler cheap-model agents (planned)
+## Phase 15 — Summarizer + Labeler cheap-model agents (shipped)
 
 Two structured-JSON calls on the cheap tier, run parallel with
 scanners in an `errgroup`. Summarizer produces
@@ -140,7 +140,7 @@ Deliverable: `internal/prompts/{summarizer,labeler}.md` +
 `cmd/zreview/{summary,label}.go`. Consumed by Phase 17's PR
 description block and by GitHub labels.
 
-## Phase 16 — Scoring engine (planned)
+## Phase 16 — Scoring engine (shipped)
 
 Deterministic policy: `Score(finding) → {Severity, Confidence, Impact}`,
 table-driven from `internal/scoring/policy.yaml` (embedded default,
