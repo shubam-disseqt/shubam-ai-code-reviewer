@@ -135,8 +135,39 @@ jq -c 'select(.type == "session_end")' ~/.zreview/sessions/&lt;id&gt;.jsonl</cod
     </ul>
 
     <h2 id="secrets">Secrets in logs</h2>
-    <p>The log records tool inputs and outputs verbatim. Anything the LLM read via <code>file_read</code> ends up as a snippet in the JSONL. If a changed file contains a secret, the secret will be in the log.</p>
-    <p>The reviewer flags secret-like content in comments (see the sample <code>no-committed-secrets</code> rule) but does <strong>not</strong> redact them from the JSONL. Treat the session dir as sensitive.</p>
+    <p>The log records tool inputs and outputs, and the writer runs a best-effort redactor over every text field before it hits disk. This is a defence-in-depth measure, not a substitute for good repo hygiene &mdash; treat the session dir as sensitive.</p>
+
+    <h3 id="redaction">Redaction</h3>
+    <p>The following credential shapes are replaced on the write path. Existing session files are not rewritten &mdash; redaction only applies to records written after the upgrade.</p>
+    <table>
+      <thead><tr><th>Pattern</th><th>Example (redacted)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Environment-style assignments: <code>*_API_KEY</code>, <code>*_TOKEN</code>, <code>*_SECRET</code>, <code>*_PASSWORD</code>, <code>*_PRIVATE_KEY</code>, <code>AWS_*_KEY|TOKEN|SECRET</code>, bare <code>PASSWORD</code>, <code>PRIVATE_KEY</code></td>
+          <td><code>AWS_SECRET_ACCESS_KEY=[REDACTED]</code></td>
+        </tr>
+        <tr>
+          <td>Prefixed tokens: <code>sk-ant-*</code> (Anthropic), <code>sk-*</code> (OpenAI), <code>ghp_*</code>, <code>github_pat_*</code>, <code>xoxb-*</code> (Slack), <code>AKIA*</code> (AWS access key ID)</td>
+          <td><code>[REDACTED]</code></td>
+        </tr>
+        <tr>
+          <td>PEM blocks between <code>-----BEGIN&hellip;-----</code> and <code>-----END&hellip;-----</code></td>
+          <td><code>[REDACTED-PEM]</code></td>
+        </tr>
+        <tr>
+          <td>JWTs (three-segment <code>eyJ&hellip;.&hellip;.&hellip;</code>)</td>
+          <td><code>[REDACTED-JWT]</code></td>
+        </tr>
+        <tr>
+          <td>HTTP(S) URLs with basic-auth: <code>https://user:pass@host/&hellip;</code></td>
+          <td><code>https://[REDACTED]@host/&hellip;</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <strong>Best-effort, not exhaustive.</strong> Patterns are bounded to keep false positives out of review comments &mdash; a benign identifier or the word "token" in prose is left alone. Novel or unshaped credentials (a bespoke internal token format, a raw hex API key with no prefix) will still land in the log verbatim. Don't rely on redaction to sanitize a repo with committed secrets; rotate the credential and clean the repo.
+    </div>
 
     <footer>
       &copy; 2026 disseqt. Apache-2.0.
