@@ -58,15 +58,15 @@ func (c *Client) AddLabels(ctx context.Context, owner, repo string, number int, 
 // The `sarif` field is base64(gzip(json)) per the GitHub REST spec:
 // https://docs.github.com/en/rest/code-scanning/code-scanning#upload-an-analysis-as-sarif-data
 //
-// v1 is fire-and-forget: the POST returns a sarif id which is discarded.
-// The 30s context timeout guards against a hung endpoint hijacking the
-// review's exit. Polling GET /code-scanning/sarifs/{id} is reserved for a
-// future --wait-sarif flag.
-func (c *Client) UploadSARIF(ctx context.Context, owner, repo, commitSHA, ref string, sarifBytes []byte) error {
+// Returns the sarif id assigned by GitHub so the caller can optionally
+// poll via WaitSARIF. Empty id means the upload succeeded but the API
+// omitted an id in the response. The 30s context timeout guards against
+// a hung endpoint hijacking the review's exit.
+func (c *Client) UploadSARIF(ctx context.Context, owner, repo, commitSHA, ref string, sarifBytes []byte) (string, error) {
 	c.warnIfUnauth()
 	encoded, err := gzipBase64(sarifBytes)
 	if err != nil {
-		return fmt.Errorf("gh: encode SARIF: %w", err)
+		return "", fmt.Errorf("gh: encode SARIF: %w", err)
 	}
 	analysis := &github.SarifAnalysis{
 		CommitSHA: github.String(commitSHA),
@@ -77,10 +77,47 @@ func (c *Client) UploadSARIF(ctx context.Context, owner, repo, commitSHA, ref st
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if _, _, err := c.sdk.CodeScanning.UploadSarif(ctx, owner, repo, analysis); err != nil {
-		return fmt.Errorf("gh: upload SARIF: %w", err)
+	sid, _, err := c.sdk.CodeScanning.UploadSarif(ctx, owner, repo, analysis)
+	if err != nil {
+		return "", fmt.Errorf("gh: upload SARIF: %w", err)
 	}
-	return nil
+	if sid == nil {
+		return "", nil
+	}
+	return sid.GetID(), nil
+}
+
+// WaitSARIF polls GET /code-scanning/sarifs/{id} until GitHub reports the
+// upload as "complete" or "failed", or the context deadline hits. Returns
+// the terminal processing_status. Caller decides whether a non-"complete"
+// outcome is fatal.
+//
+// ponytail: fixed 2s poll interval, upgrade to backoff if the endpoint
+// starts rate-limiting.
+func (c *Client) WaitSARIF(ctx context.Context, owner, repo, sarifID string) (string, error) {
+	c.warnIfUnauth()
+	if sarifID == "" {
+		return "", fmt.Errorf("gh: wait SARIF: empty id")
+	}
+	const interval = 2 * time.Second
+	for {
+		up, _, err := c.sdk.CodeScanning.GetSARIF(ctx, owner, repo, sarifID)
+		if err != nil {
+			return "", fmt.Errorf("gh: wait SARIF: %w", err)
+		}
+		status := ""
+		if up != nil {
+			status = up.GetProcessingStatus()
+		}
+		if status == "complete" || status == "failed" {
+			return status, nil
+		}
+		select {
+		case <-ctx.Done():
+			return status, ctx.Err()
+		case <-time.After(interval):
+		}
+	}
 }
 
 // gzipBase64 gzip-then-base64-encodes `raw` for the SARIF upload API. The

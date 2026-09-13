@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/findings"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
@@ -113,6 +114,10 @@ type emitConfig struct {
 	// Ref is the git ref for SARIF uploads (e.g. "refs/pull/42/head").
 	// Empty falls back to refs/heads/main inside the SARIF upload path.
 	Ref string
+	// WaitSARIF blocks after upload until GitHub reports the SARIF as
+	// "complete" or "failed". Off by default; the CLI --wait-sarif flag
+	// toggles it.
+	WaitSARIF bool
 
 	Stdout io.Writer
 }
@@ -277,7 +282,9 @@ func isScannerSource(source string) bool {
 // uploadScannerSARIF filters scanner-sourced comments, builds sarif.Finding
 // entries, encodes the log, and hands it to gh.UploadSARIF. Ref falls back
 // to refs/heads/main when the caller didn't provide one — Code Scanning
-// requires the ref to attach the analysis.
+// requires the ref to attach the analysis. When cfg.WaitSARIF is set, we
+// poll GitHub for the terminal processing status and log it; a "failed"
+// terminal returns an error so the caller can surface the outcome.
 func uploadScannerSARIF(ctx context.Context, cfg emitConfig) error {
 	findings := scannerFindingsForSARIF(cfg)
 	if len(findings) == 0 {
@@ -291,11 +298,34 @@ func uploadScannerSARIF(ctx context.Context, cfg emitConfig) error {
 	if err != nil {
 		return err
 	}
+	if err := sarif.Validate(blob); err != nil {
+		return err
+	}
 	ref := cfg.Ref
 	if ref == "" {
 		ref = "refs/heads/main"
 	}
-	return cfg.GHClient.UploadSARIF(ctx, cfg.Owner, cfg.Repo, cfg.CommitSHA, ref, blob)
+	id, err := cfg.GHClient.UploadSARIF(ctx, cfg.Owner, cfg.Repo, cfg.CommitSHA, ref, blob)
+	if err != nil {
+		return err
+	}
+	if !cfg.WaitSARIF || id == "" {
+		return nil
+	}
+	// Cap wait at 5 minutes — GitHub typically finishes in under a minute
+	// but pathological uploads can stall. Beyond that, treat it as an
+	// operator problem and stop blocking the review's exit.
+	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	status, err := cfg.GHClient.WaitSARIF(waitCtx, cfg.Owner, cfg.Repo, id)
+	if err != nil {
+		return fmt.Errorf("wait sarif %s: %w", id, err)
+	}
+	fmt.Fprintf(cfg.Stdout, "emit github: SARIF %s → %s\n", id, status)
+	if status == "failed" {
+		return fmt.Errorf("SARIF %s: processing_status=failed", id)
+	}
+	return nil
 }
 
 // scannerFindingsForSARIF projects scanner-sourced comments into
