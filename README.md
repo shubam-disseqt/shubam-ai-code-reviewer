@@ -35,7 +35,19 @@ Beyond diff review, `zreview` also **indexes your codebase** for repo-wide conte
 
 Its design philosophy is inherited from two Apache-2.0 upstream projects. The diff-precision layer, the agent tool loop, and the prompt templates are ported (with attribution) from [alibaba/open-code-review](https://github.com/alibaba/open-code-review) &mdash; battle-tested inside Alibaba Group as its official AI review assistant across tens of thousands of developers. The persistent code index, JIT context builder, and cross-PR overlap detector are re-implemented in Go from [miracodeai/mira](https://github.com/miracodeai/mira). Full port map: [docs/PORTING.md](docs/PORTING.md) and [NOTICE](NOTICE).
 
-![Highlights](docs/architecture.html)
+```mermaid
+flowchart LR
+  A[git diff] --> B[deterministic<br/>file selection]
+  B --> C[scanners<br/>gitleaks + semgrep<br/>+ govulncheck]
+  B --> D[cheap tier<br/>summarizer + labeler]
+  B --> E[reviewer agent<br/>file_read, code_search,<br/>code_comment, task_done]
+  C --> F[line-snap<br/>+ dedup]
+  E --> F
+  F --> G[fingerprint<br/>vs previous]
+  G --> H[severity<br/>scoring]
+  H --> I[stdout &#124; json &#124;<br/>github &#124; sarif]
+  D -.-> I
+```
 
 ## Why z-code-reviewer?
 
