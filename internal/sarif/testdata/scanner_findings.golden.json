@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "zreview",
+          "version": "v0.2.0",
+          "informationUri": "https://github.com/shubam-disseqt/z-code-reviewer",
+          "rules": [
+            {
+              "id": "scanner:gitleaks/aws-access-token",
+              "name": "aws-access-token",
+              "shortDescription": {
+                "text": "hardcoded AWS access key"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "scanner:govulncheck/GO-2024-1234",
+              "name": "GO-2024-1234",
+              "shortDescription": {
+                "text": "net/http path traversal"
+              },
+              "helpUri": "https://pkg.go.dev/vuln/GO-2024-1234",
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "scanner:semgrep/go.lang.security.audit.crypto.md5-used",
+              "name": "go.lang.security.audit.crypto.md5-used",
+              "shortDescription": {
+                "text": "MD5 used for crypto"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "scanner:gitleaks/aws-access-token",
+          "level": "error",
+          "message": {
+            "text": "hardcoded AWS access key"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "cmd/app/main.go"
+                },
+                "region": {
+                  "startLine": 42
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "zreview/v1": "fp-aws-1"
+          }
+        },
+        {
+          "ruleId": "scanner:semgrep/go.lang.security.audit.crypto.md5-used",
+          "level": "warning",
+          "message": {
+            "text": "MD5 used for crypto"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "internal/auth/hash.go"
+                },
+                "region": {
+                  "startLine": 10,
+                  "endLine": 14
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "zreview/v1": "fp-md5-1"
+          }
+        },
+        {
+          "ruleId": "scanner:govulncheck/GO-2024-1234",
+          "level": "error",
+          "message": {
+            "text": "net/http path traversal"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "internal/server/handler.go"
+                },
+                "region": {
+                  "startLine": 77
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "zreview/v1": "fp-cve-1"
+          }
+        }
+      ]
+    }
+  ]
+}
