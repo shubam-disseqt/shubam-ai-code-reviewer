@@ -37,13 +37,23 @@ func TestReviewOptsValidate(t *testing.T) {
 		},
 		{
 			name:    "workspace mode is fine",
-			opts:    reviewOpts{Format: "stdout"},
+			opts:    reviewOpts{Format: "stdout", MinSeverity: "MEDIUM"},
 			wantErr: "",
 		},
 		{
 			name:    "commit-only is fine",
-			opts:    reviewOpts{Commit: "abc", Format: "json"},
+			opts:    reviewOpts{Commit: "abc", Format: "json", MinSeverity: "MEDIUM"},
 			wantErr: "",
+		},
+		{
+			name:    "min-severity invalid is rejected",
+			opts:    reviewOpts{Format: "stdout", MinSeverity: "purple"},
+			wantErr: "--min-severity",
+		},
+		{
+			name:    "min-severity SUPPRESS is rejected",
+			opts:    reviewOpts{Format: "stdout", MinSeverity: "SUPPRESS"},
+			wantErr: "SUPPRESS",
 		},
 	}
 
@@ -75,7 +85,7 @@ func TestReviewCmdHelpMentionsFlags(t *testing.T) {
 		t.Fatalf("--help returned error: %v", err)
 	}
 	got := buf.String()
-	for _, flag := range []string{"--from", "--to", "--commit", "--repo", "--format", "--output", "--pr", "--resume", "--verbose"} {
+	for _, flag := range []string{"--from", "--to", "--commit", "--repo", "--format", "--output", "--pr", "--resume", "--verbose", "--min-severity"} {
 		if !strings.Contains(got, flag) {
 			t.Errorf("--help output missing flag %s", flag)
 		}

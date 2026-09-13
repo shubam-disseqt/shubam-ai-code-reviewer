@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/scoring"
 )
 
 func TestFilterResolvedDropsUnlocated(t *testing.T) {
@@ -185,5 +186,70 @@ func TestBlockerExitError(t *testing.T) {
 	e := &blockerExitError{code: 3}
 	if e.Error() == "" {
 		t.Error("Error() should be non-empty")
+	}
+}
+
+func TestFilterByScoreDropsSuppressAndBelowMin(t *testing.T) {
+	pol, err := scoring.LoadPolicy("")
+	if err != nil {
+		t.Fatalf("load policy: %v", err)
+	}
+	in := []model.LlmComment{
+		// hardcoded-secret → CRITICAL, survives
+		{Path: "a.go", StartLine: 1, EndLine: 1, Category: "security.hardcoded-secret", Severity: "high"},
+		// naming → SUPPRESS, always dropped
+		{Path: "b.go", StartLine: 2, EndLine: 2, Category: "maintainability.naming", Severity: "low"},
+		// style → SUPPRESS (default), always dropped
+		{Path: "c.go", StartLine: 3, EndLine: 3, Category: "style"},
+		// bug default → MEDIUM, survives at min=MEDIUM
+		{Path: "d.go", StartLine: 4, EndLine: 4, Category: "bug", Severity: "medium"},
+	}
+	got, scores := filterByScore(in, pol, scoring.SeverityMedium)
+	if len(got) != 2 {
+		t.Fatalf("want 2 survivors, got %d: %+v", len(got), got)
+	}
+	if got[0].Path != "a.go" || got[1].Path != "d.go" {
+		t.Errorf("wrong survivors: %+v", got)
+	}
+	if len(scores) != 2 {
+		t.Errorf("scores map size: got %d want 2", len(scores))
+	}
+	if scores[commentKey(got[0])].Severity != scoring.SeverityCritical {
+		t.Errorf("first survivor severity: %+v", scores[commentKey(got[0])])
+	}
+}
+
+func TestFilterByScoreMinHigh(t *testing.T) {
+	pol, err := scoring.LoadPolicy("")
+	if err != nil {
+		t.Fatalf("load policy: %v", err)
+	}
+	in := []model.LlmComment{
+		{Path: "a.go", StartLine: 1, EndLine: 1, Category: "bug", Severity: "medium"},        // MEDIUM
+		{Path: "b.go", StartLine: 2, EndLine: 2, Category: "security", Severity: "critical"}, // CRITICAL
+	}
+	got, _ := filterByScore(in, pol, scoring.SeverityHigh)
+	if len(got) != 1 || got[0].Path != "b.go" {
+		t.Fatalf("min=HIGH should keep only CRITICAL, got: %+v", got)
+	}
+}
+
+func TestFilterByScoreEmpty(t *testing.T) {
+	pol, _ := scoring.LoadPolicy("")
+	got, scores := filterByScore(nil, pol, scoring.SeverityMedium)
+	if len(got) != 0 || scores != nil {
+		t.Errorf("expected empty result, got %+v / %+v", got, scores)
+	}
+}
+
+func TestExitCodeUsesScoredSeverity(t *testing.T) {
+	// LLM raw severity is "high" (would not exit 3), but scored is CRITICAL:
+	// scoring wins.
+	c := model.LlmComment{Path: "a.go", StartLine: 1, EndLine: 1, Severity: "high"}
+	scores := map[string]scoring.Score{
+		commentKey(c): {Severity: scoring.SeverityCritical},
+	}
+	if got := exitCodeForComments([]model.LlmComment{c}, scores); got != 3 {
+		t.Errorf("scored CRITICAL should exit 3, got %d", got)
 	}
 }

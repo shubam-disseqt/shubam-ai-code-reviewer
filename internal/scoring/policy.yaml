@@ -1,0 +1,158 @@
+# z-code-reviewer default scoring policy.
+#
+# Keys under `categories` accept either "category.rule" (specific) or a
+# bare "category" (generic bucket). Lookup order in scoring.go:
+#   1. "<category>.<rule>"    e.g. "security.hardcoded-secret"
+#   2. "<category>"           e.g. "security"
+#   3. defaults
+#
+# severity_map keys are the raw severity labels from the producer
+# (scanner tool severity or LLM-reported severity), lowercased. The
+# "default" key applies when the raw severity is empty or not mapped.
+#
+# Override this file via:
+#   - $ZREVIEW_SCORING_POLICY=/path/to/policy.yaml
+#   - <repo>/.zreview/scoring.yaml
+
+categories:
+  # ---- PDF §6 examples ----
+  security.hardcoded-secret:
+    impact: 0.95
+    confidence_floor: 0.90
+    severity_map:
+      critical: CRITICAL
+      high: CRITICAL
+      medium: HIGH
+      low: HIGH
+      default: CRITICAL
+
+  security.missing-auth:
+    impact: 0.90
+    confidence_floor: 0.85
+    severity_map:
+      default: HIGH
+
+  bug.missing-error-wrap:
+    impact: 0.50
+    confidence_floor: 0.65
+    severity_map:
+      default: MEDIUM
+
+  maintainability.naming:
+    impact: 0.10
+    confidence_floor: 0.60
+    severity_map:
+      default: SUPPRESS
+
+  # ---- generic scanner-producer buckets ----
+  # Scanner findings carry Category="security" and Source="scanner:<tool>";
+  # they land in this bucket unless a more specific rule fires. Confidence
+  # floor is high — deterministic tools have near-perfect precision on the
+  # categories they flag.
+  secret:
+    impact: 0.95
+    confidence_floor: 0.90
+    severity_map:
+      critical: CRITICAL
+      high: CRITICAL
+      medium: HIGH
+      low: HIGH
+      info: MEDIUM
+      default: CRITICAL
+
+  sast:
+    impact: 0.70
+    confidence_floor: 0.75
+    severity_map:
+      critical: CRITICAL
+      high: HIGH
+      medium: MEDIUM
+      low: LOW
+      info: LOW
+      default: MEDIUM
+
+  cve:
+    impact: 0.80
+    confidence_floor: 0.85
+    severity_map:
+      critical: CRITICAL
+      high: HIGH
+      medium: MEDIUM
+      low: LOW
+      info: LOW
+      default: HIGH
+
+  # ---- generic LLM-producer buckets ----
+  security:
+    impact: 0.85
+    confidence_floor: 0.70
+    severity_map:
+      critical: CRITICAL
+      high: HIGH
+      medium: HIGH
+      low: MEDIUM
+      default: HIGH
+
+  bug:
+    impact: 0.55
+    confidence_floor: 0.60
+    severity_map:
+      critical: HIGH
+      high: HIGH
+      medium: MEDIUM
+      low: LOW
+      default: MEDIUM
+
+  performance:
+    impact: 0.40
+    confidence_floor: 0.55
+    severity_map:
+      critical: HIGH
+      high: MEDIUM
+      medium: MEDIUM
+      low: LOW
+      default: LOW
+
+  maintainability:
+    impact: 0.20
+    confidence_floor: 0.55
+    severity_map:
+      critical: MEDIUM
+      high: MEDIUM
+      medium: LOW
+      low: SUPPRESS
+      default: LOW
+
+  test:
+    impact: 0.30
+    confidence_floor: 0.55
+    severity_map:
+      critical: MEDIUM
+      high: MEDIUM
+      medium: LOW
+      low: LOW
+      default: LOW
+
+  style:
+    impact: 0.10
+    confidence_floor: 0.50
+    severity_map:
+      default: SUPPRESS
+
+  documentation:
+    impact: 0.15
+    confidence_floor: 0.50
+    severity_map:
+      medium: LOW
+      high: LOW
+      default: SUPPRESS
+
+defaults:
+  impact: 0.40
+  confidence_floor: 0.50
+  severity_map:
+    critical: HIGH
+    high: HIGH
+    medium: MEDIUM
+    low: LOW
+    default: MEDIUM

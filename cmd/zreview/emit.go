@@ -15,6 +15,7 @@ import (
 	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/overlap"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/scoring"
 )
 
 // Format identifies an emit target. Kept as strings to line up with the
@@ -44,11 +45,22 @@ type emitResult struct {
 }
 
 // emittedComment wraps LlmComment with the reconciled state (new, keep,
-// carried). Downstream posters read `state` to decide whether to create a
-// new PR comment or update an existing one (Phase 17 concern).
+// carried) and the Phase 16 scoring output. Downstream posters read
+// `state` to decide whether to create a new PR comment or update an
+// existing one (Phase 17 concern). The scoring fields override the raw
+// LlmComment.Severity in the JSON envelope so consumers see the
+// policy-bucketed decision, not the producer's raw label.
 type emittedComment struct {
 	model.LlmComment
 	State findings.State `json:"state,omitempty"`
+
+	// Score exposes the deterministic scoring engine output. Omitted
+	// from the JSON envelope when the scorer wasn't invoked (severity
+	// == ""), which keeps existing test fixtures stable.
+	Severity   scoring.Severity `json:"severity,omitempty"`
+	Confidence float64          `json:"confidence,omitempty"`
+	Impact     float64          `json:"impact,omitempty"`
+	Rationale  string           `json:"rationale,omitempty"`
 }
 
 // emit writes the comments in the chosen format. For "github" it posts each
@@ -84,6 +96,10 @@ type emitConfig struct {
 	Summary model.Summary
 	Labels  model.Labels
 
+	// Scores maps commentKey(c) to the deterministic scoring output.
+	// Only populated for JSON emit in v1 — stdout / github stay compact.
+	Scores map[string]scoring.Score
+
 	// GitHub-specific:
 	GHClient  *gh.Client
 	Owner     string
@@ -101,6 +117,18 @@ func (cfg *emitConfig) commentState(c model.LlmComment) findings.State {
 		return ""
 	}
 	return cfg.FindingState[commentFingerprint(cfg.Owner, cfg.Repo, c)]
+}
+
+// commentKey returns a stable identity string used to zip scoring results
+// back to their originating comment during emit. Path + line-range + first
+// 64 chars of content is enough to disambiguate within a single review
+// run without pulling in a full fingerprint hash.
+func commentKey(c model.LlmComment) string {
+	content := c.Content
+	if len(content) > 64 {
+		content = content[:64]
+	}
+	return fmt.Sprintf("%s:%d-%d:%s", c.Path, c.StartLine, c.EndLine, content)
 }
 
 // emitStdout prints a human-readable block per comment.
@@ -137,7 +165,14 @@ func emitStdout(w io.Writer, comments []model.LlmComment, findings []overlap.Fin
 func emitJSON(cfg emitConfig) error {
 	wrapped := make([]emittedComment, 0, len(cfg.Comments))
 	for _, c := range cfg.Comments {
-		wrapped = append(wrapped, emittedComment{LlmComment: c, State: cfg.commentState(c)})
+		ec := emittedComment{LlmComment: c, State: cfg.commentState(c)}
+		if sc, ok := cfg.Scores[commentKey(c)]; ok {
+			ec.Severity = sc.Severity
+			ec.Confidence = sc.Confidence
+			ec.Impact = sc.Impact
+			ec.Rationale = sc.Rationale
+		}
+		wrapped = append(wrapped, ec)
 	}
 	res := emitResult{
 		SessionID: cfg.SessionID,
@@ -236,9 +271,17 @@ func isZeroLabels(l model.Labels) bool {
 }
 
 // exitCodeForComments returns 3 when any comment carries a critical/blocker
-// severity, mirroring the behaviour described in docs/security.html.
-func exitCodeForComments(comments []model.LlmComment) int {
+// severity, mirroring the behaviour described in docs/security.html. When
+// scores are provided, the scoring-engine severity (authoritative) wins
+// over the raw LlmComment.Severity; otherwise the raw label is used.
+func exitCodeForComments(comments []model.LlmComment, scores map[string]scoring.Score) int {
 	for _, c := range comments {
+		if sc, ok := scores[commentKey(c)]; ok {
+			if sc.Severity == scoring.SeverityCritical {
+				return 3
+			}
+			continue
+		}
 		switch c.Severity {
 		case "critical", "blocker":
 			return 3
