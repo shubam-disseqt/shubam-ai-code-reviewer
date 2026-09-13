@@ -23,3 +23,6 @@ Please keep your responses concise and objective.
 - If the current code review task is complete, call `task_done` to end the task.
 - If a code issue has been identified and confirmed, call the `code_comment` tool to provide feedback.
 - If additional context is needed to confirm the issue, call the appropriate context tool.
+
+## Known Issues (from static analysis)
+When a `## Known Issues (from static analysis)` section is present above, those findings were detected deterministically by external scanners (gitleaks, semgrep, govulncheck). Do not re-report them via `code_comment`. If you have relevant context to add, you may extend a finding with a one-line risk note by producing a normal `code_comment` at a *different* line or scope that references the original finding; otherwise leave them alone — the scoring engine will publish them.

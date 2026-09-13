@@ -136,6 +136,13 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		maybeSpawnWarmer(ctx, store, opts.Repo, kept, cmd.OutOrStderr())
 	}
 
+	// 3.5) deterministic scanners — best-effort, tolerant of missing
+	// binaries. Findings tagged Source="scanner:<tool>" enter the same
+	// comment collector as LLM findings; Phase 16 will score them and
+	// Phase 17 will route CVE/secret categories to SARIF.
+	scannerFindings := runScanners(ctx, opts.Repo, kept, cmd.OutOrStderr())
+	scannerByPath := groupScannerFindingsByPath(scannerFindings)
+
 	// 4) rules
 	rulesBlock, err := loadRules(ctx, kept)
 	if err != nil {
@@ -188,6 +195,12 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		return fmt.Errorf("tools: %w", err)
 	}
 	collector := comment.NewCommentCollector()
+	// Feed deterministic scanner findings into the collector before the
+	// LLM loop runs so downstream consumers (dedup, emit) treat them like
+	// any other finding.
+	for _, sc := range scannerFindings {
+		collector.Add(scannerFindingToComment(sc))
+	}
 	runner := llmloop.NewRunner(llmloop.Deps{
 		LLMClient: llmClient,
 		Model:     modelName,
@@ -214,7 +227,8 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		if opts.Verbose {
 			fmt.Fprintf(cmd.OutOrStderr(), "[zreview] reviewing %s\n", path)
 		}
-		msgs := buildReviewMessages(sysPrompt, userTmpl, rulesBlock, reviewCtx, changeFiles, renderDiffsForFile(d))
+		knownIssues := renderKnownIssuesBlock(scannerByPath[path])
+		msgs := buildReviewMessages(sysPrompt, userTmpl, rulesBlock, reviewCtx, knownIssues, changeFiles, renderDiffsForFile(d))
 		if _, stop, err := runner.RunMainTask(ctx, msgs, path); err != nil {
 			return fmt.Errorf("llmloop %s: %w (stop=%s)", path, err, stop)
 		}

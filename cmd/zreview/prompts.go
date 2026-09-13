@@ -38,13 +38,18 @@ func renderUserPrompt(tmpl string, vars map[string]string) string {
 // buildReviewMessages assembles the main-task conversation from the loaded
 // templates, the rendered rules block, the codebase context and this file's
 // diff. changeFiles is the JSON-encoded list of every diff filename in the
-// current run (out-of-batch context for the LLM).
-func buildReviewMessages(sys, userTmpl, systemRule, reviewCtx, changeFiles, diffs string) []llm.Message {
+// current run (out-of-batch context for the LLM). knownIssues is the
+// pre-rendered "## Known Issues (from static analysis)" block for the file
+// under review; empty when no scanner findings applied.
+func buildReviewMessages(sys, userTmpl, systemRule, reviewCtx, knownIssues, changeFiles, diffs string) []llm.Message {
 	// The reviewctx block is not first-class in main_task_user.md, so prepend
 	// it under the system message as a codebase-context brief. Empty is fine.
 	systemContent := sys
 	if reviewCtx != "" {
-		systemContent = sys + "\n\n## Codebase Context\n\n" + reviewCtx
+		systemContent = systemContent + "\n\n## Codebase Context\n\n" + reviewCtx
+	}
+	if knownIssues != "" {
+		systemContent = systemContent + "\n\n" + knownIssues
 	}
 
 	user := renderUserPrompt(userTmpl, map[string]string{
