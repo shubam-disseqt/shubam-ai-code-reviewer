@@ -70,6 +70,13 @@ func TestFingerprintEqualityUnderNormalization(t *testing.T) {
 				return i
 			},
 		},
+		{
+			name: "adding a real comment same fingerprint",
+			mut: func(i Input) Input {
+				i.Snippet = "if err != nil { // freshly added note\n    return err\n} // and another"
+				return i
+			},
+		},
 	}
 	want := Fingerprint(base())
 	for _, tt := range tests {
@@ -148,19 +155,47 @@ func TestFingerprintEmptyInputStable(t *testing.T) {
 
 func TestNormalizeSnippet(t *testing.T) {
 	tests := []struct {
+		name     string
 		in, want string
 	}{
-		{"", ""},
-		{"foo   bar\n baz", "foo bar baz"},
-		{"12: foo\n13: bar", "foo bar"},
-		{"foo // trailing", "foo"},
-		{"foo # trailing", "foo"},
-		{"  \t hello \t  ", "hello"},
+		{name: "empty", in: "", want: ""},
+		{name: "collapse whitespace", in: "foo   bar\n baz", want: "foo bar baz"},
+		{name: "strip line-number prefix", in: "12: foo\n13: bar", want: "foo bar"},
+		{name: "trailing // comment", in: "foo // trailing", want: "foo"},
+		{name: "trailing # comment", in: "foo # trailing", want: "foo"},
+		{name: "trim outer whitespace", in: "  \t hello \t  ", want: "hello"},
+
+		// URL scheme must survive the comment stripper.
+		{name: "http url in code", in: `get("http://example.com/x")`, want: `get("http://example.com/x")`},
+		{name: "https url in code", in: `get("https://example.com")`, want: `get("https://example.com")`},
+		{name: "git+ssh url in code", in: `clone("git+ssh://host/repo")`, want: `clone("git+ssh://host/repo")`},
+
+		// Bare URL outside any string literal (yaml/config/shell snippets).
+		{name: "bare http url", in: `url: http://example.com/x`, want: `url: http://example.com/x`},
+		{name: "bare url then real comment", in: `url: http://example.com # note`, want: `url: http://example.com`},
+		{name: "uppercase scheme is not a URL", in: `foo HTTP://x // c`, want: `foo HTTP:`},
+
+		// // inside a string literal must not be treated as a comment.
+		{name: "// inside double-quoted string", in: `s := "//"`, want: `s := "//"`},
+		{name: "// inside single-quoted string", in: `s = '//'`, want: `s = '//'`},
+		{name: "// inside backtick raw string", in: "s := `no // comment here`", want: "s := `no // comment here`"},
+		{name: "// inside triple-quoted string", in: `s = """no // here"""`, want: `s = """no // here"""`},
+		{name: "# inside string literal", in: `s := "#not a comment"`, want: `s := "#not a comment"`},
+
+		// Comment tail is stripped, code head is kept.
+		{name: "code then // tail", in: `foo(x) // side note`, want: `foo(x)`},
+		{name: "code then # tail", in: `foo(x) # side note`, want: `foo(x)`},
+		{name: "// after closing string", in: `s := "hello" // real comment`, want: `s := "hello"`},
+
+		// Escaped quote inside a string does not close it.
+		{name: "escaped quote inside string", in: `s := "he said \"hi\"" // c`, want: `s := "he said \"hi\""`},
 	}
 	for _, tt := range tests {
-		if got := normalizeSnippet(tt.in); got != tt.want {
-			t.Errorf("normalizeSnippet(%q) = %q, want %q", tt.in, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeSnippet(tt.in); got != tt.want {
+				t.Errorf("normalizeSnippet(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
 	}
 }
 
