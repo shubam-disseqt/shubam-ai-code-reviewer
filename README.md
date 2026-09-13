@@ -172,8 +172,6 @@ raw HTML in [`docs/`](docs/):
   semantics
 - [GitHub Action](docs/github-action.html) — drop the composite action
   into a workflow
-- [Docs deployment](docs/deployment.html) — Cloudflare Pages setup for
-  the public docs site (works on private repos too)
 - [Architecture](docs/architecture.html) — pipeline, package map,
   trust boundaries (mirrors [ARCHITECTURE.md](ARCHITECTURE.md))
 - [Security](docs/security.html) — mirrors [SECURITY.md](SECURITY.md)
