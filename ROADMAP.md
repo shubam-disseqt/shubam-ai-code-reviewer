@@ -5,10 +5,12 @@ checkpoint before the next starts. The plan below is the source of
 truth — issues and milestones track work within a phase, not phase
 sequencing itself.
 
-## Current state — Phase 3 + Phase 4a shipped
+## Current state — Phases 2–8 shipped, Phase 9 in progress
 
-Fifteen packages under `internal/`, ~100 Go files, full test suite green
-(`go test ./... -race`), 62.8% overall coverage.
+Twenty-three packages under `internal/`, full test suite green
+(`go test ./... -race`). Coverage: most packages 80–100%; `llm` and
+`llmloop` still catching up after the provider trim (tracked in
+Phase 9 hardening).
 
 - **Phase 2** — Skeleton, CLI, docs viewer, governance, CI (initial commit)
 - **Phase 3** — OCR diff-precision layer copied with Apache-2.0
@@ -30,74 +32,30 @@ Fifteen packages under `internal/`, ~100 Go files, full test suite green
   stdlib-only, all with 91–100% coverage:
   - `internal/filetype/` (100%), `internal/filter/` (94.6%),
     `internal/chunker/` (100%), `internal/conventions/` (91.9%)
+- **Phase 4b** (Mira index core) — `internal/index/*` (83.9%),
+  `internal/manifests/*` (90.9%), `internal/extract/*` (93.2%).
+  `zreview index --repo .` produces an index in SQLite or Postgres.
+- **Phase 5** (Mira overlap) — `internal/overlap/*` (96.4%),
+  `internal/gh/*` (87.8%). `zreview overlap` surfaces candidate
+  overlapping PRs.
+- **Phase 6** (Precision wiring) — `internal/selector/*` (100%),
+  `internal/reviewctx/*` (89.4%). Line-snap + dedup wired end-to-end.
+- **Phase 7** (Org rules) — `internal/rules/*` (93.7%). YAML rules
+  pulled at review time, scoped by glob, injected into the prompt.
+- **Phase 8** (Review engine wire-up) — `cmd/zreview/review_cmd.go`
+  orchestrates the full pipeline; `internal/session/*` (91.8%) writes
+  the JSONL append log; `--format stdout | json | github` supported;
+  GitHub PR comment poster via `internal/gh`.
+- **Phase 9 (partial)** — matrix release with SHA-256 sums and SLSA
+  build-provenance attestation, `install.sh` / `install.ps1`,
+  `action.yml`, Dockerfile, and `zreview doctor` are in place.
 
-**What is not yet wired.** Packages exist and each test suite passes,
-but end-to-end orchestration (`zreview review` producing real output)
-needs Phase 8's wire-up. The `Session` interface, the index store,
-overlap, rules, and the review command itself are still ahead.
+## Phase 9 — Production hardening (remaining)
 
-## Phase 4 continued — Mira index core (planned)
-
-Biggest single remaining chunk. Python → Go.
-
-- `internal/index/{indexer,batch,summarize,store,sqlite_store,postgres_store,schema,types,status}.go`
-- `internal/context/{jit,review,imports,hunk}.go`
-- `internal/manifests/*.go` — go.mod, package.json, pyproject.toml, Dockerfile, composer.json, lockfiles
-- `internal/extract/extract.go`
-
-Deliverable: `zreview index --repo .` produces an index in a local
-SQLite file or an external Postgres. `zreview index-inspect <path>`
-prints the summary + symbols + imports for one file. JIT context
-mode works on a repo with no index.
-
-## Phase 5 — Mira overlap detector (planned)
-
-- `internal/overlap/{overlap,prefilter,prompt,parse,render}.go`
-- `internal/gh/{pulls,files,client}.go` via `google/go-github/v63`
-- Fingerprint persistence (reuse the index Store — same DB)
-
-Deliverable: `zreview overlap --pr 42` prints candidate overlapping PRs
-with kind + confidence + shared files.
-
-## Phase 6 — Precision wiring (planned)
-
-- `internal/select/selection.go` — deterministic file selection ported from OCR agent
-- Line-snap positioning wired end-to-end (LLM comment → hunk match → snap)
-- Reflection / dedup pass
-- Bundling deferred (one-file-per-review dispatch in v1)
-
-Deliverable: `zreview review --from main --to HEAD` produces
-line-accurate review comments on a real diff.
-
-## Phase 7 — Org rules layer (planned)
-
-- `internal/rules/{loader,schema,selector,inject,glob}.go`
-- Shallow `git clone` of `$ZREVIEW_ORG_RULES_REPO` at review time
-- YAML → filter by `scope` (global | repo | path) → inject into prompt
-
-Deliverable: a repository of `.yaml` rules pulled at review time,
-scoped by glob, injected into the review prompt under
-`## Custom Review Rules`.
-
-## Phase 8 — Review engine wire-up (planned)
-
-- Full `cmd/zreview/review_cmd.go` orchestration
-- Session JSONL append log + `--resume`
-- `--format stdout | json | github` outputs
-- GitHub PR comment poster via `internal/gh`
-
-Deliverable: a real end-to-end review on a real PR, `--format github`
-posts inline comments.
-
-## Phase 9 — Production hardening (planned)
-
-- `goreleaser`-free release: matrix build + SHA-256 sums + SLSA build-provenance attestation
-- `install.sh` (POSIX) + `install.ps1` (PowerShell) + `action.yml` (GitHub Action)
 - npm publishing via platform-stub packages + `bin/zreview.js` launcher
-- Docker image
-- `zreview doctor` — pre-flight for creds, DB reachability, provider API
 - `govulncheck` in CI
 - Threat-model doc finalized
+- `llm` / `llmloop` coverage lifted back above 80%
 
 ## Phase 10 — Docs and launch prep (planned)
 
