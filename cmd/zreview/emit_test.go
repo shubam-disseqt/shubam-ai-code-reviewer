@@ -119,7 +119,7 @@ func TestEmitGithubWithoutClientErrors(t *testing.T) {
 }
 
 func TestValidFormat(t *testing.T) {
-	for _, ok := range []string{"stdout", "json", "github"} {
+	for _, ok := range []string{"stdout", "json", "github", "sarif"} {
 		if !validFormat(ok) {
 			t.Errorf("format %q should be valid", ok)
 		}
@@ -195,6 +195,72 @@ func TestEmitJSONAttachesScoreFields(t *testing.T) {
 	}
 	if got["rationale"] != "bug" {
 		t.Errorf("rationale: got %v", got["rationale"])
+	}
+}
+
+func TestEmitSARIF_WritesFileWithScannerComments(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "res.sarif")
+	// One scanner-sourced comment (SARIF-bound) and one LLM comment (skipped).
+	comments := []model.LlmComment{
+		{Path: "a.go", StartLine: 1, EndLine: 1, Content: "hardcoded key",
+			Source: "scanner:gitleaks", Category: "aws-key", Severity: "high"},
+		{Path: "b.go", StartLine: 5, EndLine: 5, Content: "avoid mutation",
+			Category: "bug", Severity: "medium"},
+	}
+	err := emit(context.Background(), emitConfig{
+		Format:   formatSARIF,
+		Output:   out,
+		Comments: comments,
+	})
+	if err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	str := string(data)
+	if !strings.Contains(str, "\"version\": \"2.1.0\"") {
+		t.Errorf("missing SARIF version:\n%s", str)
+	}
+	if !strings.Contains(str, "scanner:gitleaks/aws-key") {
+		t.Errorf("scanner rule ID missing:\n%s", str)
+	}
+	if strings.Contains(str, "avoid mutation") {
+		t.Errorf("LLM comment should not appear in SARIF:\n%s", str)
+	}
+}
+
+func TestEmitSARIF_StdoutWhenDashOutput(t *testing.T) {
+	var buf bytes.Buffer
+	err := emit(context.Background(), emitConfig{
+		Format:   formatSARIF,
+		Output:   "-",
+		Comments: nil,
+		Stdout:   &buf,
+	})
+	if err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	if !strings.Contains(buf.String(), "\"results\": []") {
+		t.Errorf("empty-set SARIF missing results:[]:\n%s", buf.String())
+	}
+}
+
+func TestIsScannerSource(t *testing.T) {
+	cases := map[string]bool{
+		"":                 false,
+		"llm":              false,
+		"scanner:gitleaks": true,
+		"scanner:semgrep":  true,
+		"scanner":          false, // no colon → not a Phase-14 tag
+		"scanner:x:y":      true,
+	}
+	for in, want := range cases {
+		if got := isScannerSource(in); got != want {
+			t.Errorf("isScannerSource(%q) = %v, want %v", in, got, want)
+		}
 	}
 }
 

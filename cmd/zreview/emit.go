@@ -15,6 +15,7 @@ import (
 	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/overlap"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/sarif"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/scoring"
 )
 
@@ -24,12 +25,13 @@ const (
 	formatStdout = "stdout"
 	formatJSON   = "json"
 	formatGithub = "github"
+	formatSARIF  = "sarif"
 )
 
 // validFormat reports whether f is a supported --format value.
 func validFormat(f string) bool {
 	switch f {
-	case formatStdout, formatJSON, formatGithub:
+	case formatStdout, formatJSON, formatGithub, formatSARIF:
 		return true
 	}
 	return false
@@ -73,6 +75,8 @@ func emit(ctx context.Context, cfg emitConfig) error {
 		return emitJSON(cfg)
 	case formatGithub:
 		return emitGithub(ctx, cfg)
+	case formatSARIF:
+		return emitSARIF(cfg)
 	default:
 		return fmt.Errorf("emit: unsupported format %q", cfg.Format)
 	}
@@ -106,6 +110,9 @@ type emitConfig struct {
 	Repo      string
 	PRNumber  int
 	CommitSHA string
+	// Ref is the git ref for SARIF uploads (e.g. "refs/pull/42/head").
+	// Empty falls back to refs/heads/main inside the SARIF upload path.
+	Ref string
 
 	Stdout io.Writer
 }
@@ -204,7 +211,10 @@ func emitJSON(cfg emitConfig) error {
 }
 
 // emitGithub posts each comment to the PR and prints a summary. Comments
-// without a resolved line are skipped (GitHub rejects them).
+// without a resolved line are skipped (GitHub rejects them). Scanner-sourced
+// comments are skipped for inline posting — they go to SARIF instead — so
+// PRs don't drown in high-precision but low-context findings on the diff.
+// The PR description block (Phase 17) is updated after posting.
 func emitGithub(ctx context.Context, cfg emitConfig) error {
 	if cfg.GHClient == nil {
 		return fmt.Errorf("emit github: no GITHUB_TOKEN configured")
@@ -212,8 +222,12 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 	if cfg.PRNumber == 0 || cfg.Owner == "" || cfg.Repo == "" {
 		return fmt.Errorf("emit github: --pr, owner, and repo are required")
 	}
-	var posted, skipped int
+	var posted, skipped, scannerCount int
 	for _, c := range cfg.Comments {
+		if isScannerSource(c.Source) {
+			scannerCount++
+			continue
+		}
 		if c.StartLine == 0 && c.EndLine == 0 {
 			skipped++
 			continue
@@ -234,8 +248,119 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 		}
 		posted++
 	}
-	fmt.Fprintf(cfg.Stdout, "Posted %d comment(s) to %s/%s#%d (skipped %d unresolved).\n",
-		posted, cfg.Owner, cfg.Repo, cfg.PRNumber, skipped)
+	fmt.Fprintf(cfg.Stdout, "Posted %d comment(s) to %s/%s#%d (skipped %d unresolved, %d scanner→SARIF).\n",
+		posted, cfg.Owner, cfg.Repo, cfg.PRNumber, skipped, scannerCount)
+
+	// Best-effort SARIF upload when the operator has opted in.
+	if scannerCount > 0 && os.Getenv("ZREVIEW_UPLOAD_SARIF") == "1" {
+		if err := uploadScannerSARIF(ctx, cfg); err != nil {
+			fmt.Fprintf(cfg.Stdout, "emit github: SARIF upload failed: %v (continuing)\n", err)
+		}
+	}
+
+	// PR description block — best-effort; a failure logs and lets the
+	// review exit succeed.
+	counts := scoreCountsFromMap(cfg.Scores)
+	if err := UpdateDescription(ctx, cfg.GHClient, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.Summary, cfg.Labels, counts); err != nil {
+		fmt.Fprintf(cfg.Stdout, "emit github: description update failed: %v (continuing)\n", err)
+	}
+	return nil
+}
+
+// isScannerSource returns true for LlmComment.Source values Phase 14 tags
+// on scanner-derived comments — "scanner:gitleaks", "scanner:semgrep",
+// "scanner:govulncheck", etc.
+func isScannerSource(source string) bool {
+	return strings.HasPrefix(source, "scanner:")
+}
+
+// uploadScannerSARIF filters scanner-sourced comments, builds sarif.Finding
+// entries, encodes the log, and hands it to gh.UploadSARIF. Ref falls back
+// to refs/heads/main when the caller didn't provide one — Code Scanning
+// requires the ref to attach the analysis.
+func uploadScannerSARIF(ctx context.Context, cfg emitConfig) error {
+	findings := scannerFindingsForSARIF(cfg)
+	if len(findings) == 0 {
+		return nil
+	}
+	blob, err := sarif.Encode(findings, sarif.Meta{
+		Repo:    cfg.Owner + "/" + cfg.Repo,
+		HeadSHA: cfg.CommitSHA,
+		Version: Version,
+	})
+	if err != nil {
+		return err
+	}
+	ref := cfg.Ref
+	if ref == "" {
+		ref = "refs/heads/main"
+	}
+	return cfg.GHClient.UploadSARIF(ctx, cfg.Owner, cfg.Repo, cfg.CommitSHA, ref, blob)
+}
+
+// scannerFindingsForSARIF projects scanner-sourced comments into
+// sarif.Finding. Non-scanner comments are skipped so a shared review does
+// not surface LLM-derived stylistic comments as Code Scanning alerts.
+func scannerFindingsForSARIF(cfg emitConfig) []sarif.Finding {
+	out := make([]sarif.Finding, 0, len(cfg.Comments))
+	for _, c := range cfg.Comments {
+		if !isScannerSource(c.Source) {
+			continue
+		}
+		f := sarif.Finding{
+			Source:      c.Source,
+			RuleID:      c.Category, // scanner adapters map RuleID → Category="security"; fall through to Content
+			Description: strings.TrimSpace(c.Content),
+			Path:        c.Path,
+			StartLine:   c.StartLine,
+			EndLine:     c.EndLine,
+		}
+		// Prefer the scoring-engine severity when present; fall back to the
+		// raw label so the SARIF level is never blank.
+		if sc, ok := cfg.Scores[commentKey(c)]; ok {
+			f.Severity = sc.Severity
+		} else {
+			f.Severity = severityFromRawLabel(c.Severity)
+		}
+		if cfg.FindingState != nil {
+			f.Fingerprint = commentFingerprint(cfg.Owner, cfg.Repo, c)
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// severityFromRawLabel maps the pre-scoring LlmComment.Severity string onto
+// scoring.Severity for the SARIF level. Unknown values fall back to
+// MEDIUM — matches the SARIF encoder's own "unknown → warning" default.
+func severityFromRawLabel(raw string) scoring.Severity {
+	if s, ok := scoring.ParseSeverity(raw); ok {
+		return s
+	}
+	return scoring.SeverityMedium
+}
+
+// emitSARIF filters scanner-sourced comments, encodes them as SARIF 2.1.0,
+// and writes to cfg.Output (file or stdout via "-"). LLM-derived comments
+// do not appear in SARIF — the format is reserved for deterministic
+// tool findings that GitHub Code Scanning knows how to render.
+func emitSARIF(cfg emitConfig) error {
+	findings := scannerFindingsForSARIF(cfg)
+	blob, err := sarif.Encode(findings, sarif.Meta{
+		Repo:    cfg.Owner + "/" + cfg.Repo,
+		HeadSHA: cfg.CommitSHA,
+		Version: Version,
+	})
+	if err != nil {
+		return fmt.Errorf("emit sarif: %w", err)
+	}
+	if cfg.Output == "" || cfg.Output == "-" {
+		_, err := cfg.Stdout.Write(blob)
+		return err
+	}
+	if err := os.WriteFile(cfg.Output, blob, 0o644); err != nil {
+		return fmt.Errorf("emit sarif: write %s: %w", cfg.Output, err)
+	}
 	return nil
 }
 

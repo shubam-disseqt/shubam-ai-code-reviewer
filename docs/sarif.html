@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>SARIF output &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+      <li><a href="/cli-reference.html">CLI reference</a></li>
+      <li><a href="/providers.html">Providers</a></li>
+      <li><a href="/index-and-context.html">Index and context</a></li>
+      <li><a href="/review-rules.html">Review rules</a></li>
+      <li><a href="/overlap.html">Overlap</a></li>
+      <li><a href="/scanners.html">Scanners</a></li>
+      <li><a href="/sarif.html" class="active">SARIF output</a></li>
+      <li><a href="/session-log.html">Session log</a></li>
+      <li><a href="/github-action.html">GitHub Action</a></li>
+      <li><a href="/troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="/security.html">Security</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>SARIF output</h1>
+    <p class="lede">Ship deterministic scanner findings to GitHub Code Scanning as SARIF 2.1.0 while keeping human review comments on the diff. Two output surfaces, one review pass.</p>
+
+    <h2 id="why">Why SARIF</h2>
+    <p>Scanner findings (gitleaks, semgrep, govulncheck) are high-precision, category-limited, and repeat across pushes. Inline review comments for every hardcoded secret and MD5 call would drown a PR. SARIF is the format GitHub Code Scanning expects for these; it deduplicates by fingerprint, tracks alert state across pushes, and renders in the <em>Security</em> tab instead of the diff.</p>
+    <p>The split is deterministic:</p>
+    <ul>
+      <li><strong>Scanner-sourced comments</strong> (<code>Source=scanner:*</code>) &rarr; SARIF only.</li>
+      <li><strong>LLM comments</strong> &rarr; inline PR comments (or JSON / stdout).</li>
+    </ul>
+
+    <h2 id="formats">Emitting SARIF</h2>
+
+    <h3><code>--format sarif</code></h3>
+    <p>Writes a SARIF 2.1.0 JSON log to <code>--output</code> (file or <code>-</code> for stdout). Suitable for CI jobs that upload SARIF as a workflow artifact, or for piping into other tooling.</p>
+    <pre><code>zreview review --commit HEAD --format sarif --output review.sarif</code></pre>
+    <p>Every unique <code>(Source, RuleID)</code> pair becomes one <code>ReportingDescriptor</code>; every finding becomes one <code>Result</code>. Results carry <code>partialFingerprints.zreview/v1</code>, the same Phase 13 fingerprint the incremental re-review path uses &mdash; so Code Scanning alert state and zreview carry-over stay in sync.</p>
+
+    <h3><code>--format github</code> + Code Scanning upload</h3>
+    <p>The default GitHub path posts LLM comments inline and, when opted in, uploads scanner findings as SARIF in the same run:</p>
+    <pre><code>env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  ZREVIEW_UPLOAD_SARIF: "1"
+run: zreview review --pr ${{ github.event.number }} --format github</code></pre>
+    <p>Upload requires the workflow permission <code>security-events: write</code>. Without it GitHub returns 403 and the SARIF step logs the failure without failing the review.</p>
+
+    <h2 id="severity">Severity mapping</h2>
+    <p>Phase 16 scoring buckets translate to SARIF levels:</p>
+    <table>
+      <thead><tr><th>zreview severity</th><th>SARIF level</th></tr></thead>
+      <tbody>
+        <tr><td><code>CRITICAL</code>, <code>HIGH</code></td><td><code>error</code></td></tr>
+        <tr><td><code>MEDIUM</code></td><td><code>warning</code></td></tr>
+        <tr><td><code>LOW</code></td><td><code>note</code></td></tr>
+        <tr><td><code>SUPPRESS</code></td><td>dropped &mdash; never emitted</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="fingerprints">Fingerprints and alert carry-over</h2>
+    <p>The <code>partialFingerprints</code> map on every result includes:</p>
+    <pre><code>"partialFingerprints": {
+  "zreview/v1": "&lt;sha256 of owner|repo|category|path|symbol|snippet&gt;"
+}</code></pre>
+    <p>Whitespace-collapsed, comment-stripped, extension-lowercased. Two pushes that differ only in formatting produce the same fingerprint &mdash; a Code Scanning alert stays open across those pushes instead of being closed and reopened.</p>
+
+    <h2 id="permissions">Required permissions</h2>
+    <pre><code>permissions:
+  contents: read
+  pull-requests: write     # inline LLM comments
+  security-events: write   # SARIF upload
+</code></pre>
+
+    <h2 id="troubleshooting">Troubleshooting</h2>
+    <ul>
+      <li><strong>Upload logs &ldquo;422 Unprocessable&rdquo;.</strong> GitHub validated the SARIF and rejected it. Save the file locally with <code>--format sarif --output x.sarif</code> and open it in a JSON viewer &mdash; typical causes are missing <code>commit_sha</code> (set <code>GITHUB_SHA</code>) or empty <code>ref</code>. The <code>zreview review</code> command reads <code>GITHUB_REF</code> automatically inside a GH Actions runner.</li>
+      <li><strong>&ldquo;security-events: write&rdquo; missing.</strong> Add the permission to the job&rsquo;s <code>permissions</code> block. Composite Actions do not grant permissions on your behalf.</li>
+      <li><strong>Alert flapping across pushes.</strong> Confirm the finding&rsquo;s fingerprint is stable &mdash; run <code>zreview review --format json</code> on both pushes and diff the <code>partialFingerprints</code>. Non-stable fingerprints usually mean the snippet includes a moving line number or timestamp; open an issue with the offending scanner rule.</li>
+    </ul>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

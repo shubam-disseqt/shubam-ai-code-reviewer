@@ -24,6 +24,7 @@
       <li><a href="/review-rules.html">Review rules</a></li>
       <li><a href="/overlap.html">Overlap</a></li>
       <li><a href="/scanners.html">Scanners</a></li>
+      <li><a href="/sarif.html">SARIF output</a></li>
       <li><a href="/session-log.html">Session log</a></li>
       <li><a href="/github-action.html" class="active">GitHub Action</a></li>
       <li><a href="/troubleshooting.html">Troubleshooting</a></li>
@@ -117,9 +118,17 @@ jobs:
     <p>The workflow's <code>permissions:</code> block controls what the built-in <code>GITHUB_TOKEN</code> can do. For the default <code>format: github</code> path:</p>
     <pre><code>permissions:
   contents: read           # read the repo
-  pull-requests: write     # post the review as inline comments</code></pre>
+  pull-requests: write     # post the review as inline comments
+  security-events: write   # optional: upload SARIF to Code Scanning</code></pre>
 
-    <p>If you also want the cross-PR overlap surface, that already reads via <code>pull-requests: read</code>, which <code>write</code> subsumes. Nothing extra to add.</p>
+    <p>If you also want the cross-PR overlap surface, that already reads via <code>pull-requests: read</code>, which <code>write</code> subsumes. Nothing extra to add. <code>security-events: write</code> is only needed when you opt into SARIF upload &mdash; see <a href="/sarif.html">SARIF output</a>.</p>
+
+    <h2 id="code-scanning">Code Scanning integration</h2>
+    <p>Set <code>ZREVIEW_UPLOAD_SARIF=1</code> to upload scanner findings (gitleaks / semgrep / govulncheck) to GitHub Code Scanning in the same run that posts inline comments. Scanner-sourced comments are routed to SARIF only; LLM comments continue to land inline. See <a href="/sarif.html">SARIF output</a> for the severity mapping and fingerprint semantics.</p>
+    <pre><code>- uses: shubam-disseqt/z-code-reviewer@v0
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    ZREVIEW_UPLOAD_SARIF: "1"</code></pre>
 
     <div class="note">
       <strong>Forked PRs.</strong> By default, GitHub gives fork PRs a read-only token &mdash; the action cannot post comments. Configure workflow_run or pull_request_target patterns carefully if you need reviews on fork PRs, and read the <a href="https://securitylab.github.com/research/github-actions-preventing-pwn-requests/">preventing pwn-requests</a> guide first. Do not blindly copy <code>pull_request_target</code> patterns.
