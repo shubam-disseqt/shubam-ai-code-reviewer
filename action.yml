@@ -1,0 +1,73 @@
+name: 'z-code-reviewer'
+description: 'AI-powered pull-request review as a self-hosted CLI'
+author: 'shubam-disseqt'
+branding:
+  icon: 'git-pull-request'
+  color: 'purple'
+
+inputs:
+  version:
+    description: 'zreview version to install (default: latest)'
+    required: false
+    default: ''
+  provider:
+    description: 'LLM provider: anthropic | openai | bedrock | deepseek | openai-responses'
+    required: false
+    default: 'anthropic'
+  model:
+    description: 'Model name (e.g. claude-sonnet-4-6)'
+    required: false
+    default: ''
+  from:
+    description: 'Base ref for the diff (default: PR base)'
+    required: false
+    default: ''
+  to:
+    description: 'Head ref for the diff (default: PR head)'
+    required: false
+    default: ''
+  format:
+    description: 'Output format: stdout | json | github'
+    required: false
+    default: 'github'
+  db-url:
+    description: 'ZREVIEW_DB_URL — SQLite DSN for the index (optional)'
+    required: false
+    default: ''
+  rules-repo:
+    description: 'ZREVIEW_ORG_RULES_REPO — owner/repo[@ref] for org rules'
+    required: false
+    default: ''
+  extra-args:
+    description: 'Additional flags to pass to zreview review'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install zreview
+      shell: bash
+      run: curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/install.sh | ZREVIEW_VERSION=${{ inputs.version }} sh
+    - name: Run review
+      shell: bash
+      env:
+        ZREVIEW_PROVIDER: ${{ inputs.provider }}
+        ZREVIEW_MODEL: ${{ inputs.model }}
+        ZREVIEW_DB_URL: ${{ inputs.db-url }}
+        ZREVIEW_ORG_RULES_REPO: ${{ inputs.rules-repo }}
+      run: |
+        set -euo pipefail
+        FROM="${{ inputs.from }}"
+        TO="${{ inputs.to }}"
+        if [ -z "$FROM" ] && [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          FROM="$GITHUB_BASE_REF"
+        fi
+        if [ -z "$TO" ]; then
+          TO="$GITHUB_HEAD_REF"
+        fi
+        PR_NUM=""
+        if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          PR_NUM="--pr ${{ github.event.pull_request.number }}"
+        fi
+        zreview review --from "$FROM" --to "$TO" --format ${{ inputs.format }} $PR_NUM ${{ inputs.extra-args }}

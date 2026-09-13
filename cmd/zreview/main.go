@@ -8,13 +8,18 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 )
 
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "[zreview] error: %s\n", err)
+		var bx *blockerExitError
+		if errors.As(err, &bx) {
+			os.Exit(bx.code)
+		}
 		os.Exit(1)
 	}
 }

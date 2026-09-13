@@ -1,0 +1,149 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: build ${{ matrix.os }}/${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            suffix: ''
+          - os: linux
+            arch: arm64
+            suffix: ''
+          - os: darwin
+            arch: amd64
+            suffix: ''
+          - os: darwin
+            arch: arm64
+            suffix: ''
+          - os: windows
+            arch: amd64
+            suffix: '.exe'
+          - os: windows
+            arch: arm64
+            suffix: '.exe'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          BIN="zreview-${GOOS}-${GOARCH}${{ matrix.suffix }}"
+          COMMIT="$(git rev-parse --short HEAD)"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          go build -trimpath \
+            -ldflags "-s -w -X main.Version=${{ github.ref_name }} -X main.GitCommit=${COMMIT} -X main.BuildDate=${DATE}" \
+            -o "${BIN}" ./cmd/zreview
+          echo "BIN=${BIN}" >> "$GITHUB_ENV"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zreview-${{ matrix.os }}-${{ matrix.arch }}
+          path: ${{ env.BIN }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          : > sha256sum.txt
+          for f in zreview-*; do
+            [ -f "$f" ] || continue
+            sha256sum "$f" >> sha256sum.txt
+          done
+          echo "== sha256sum.txt =="
+          cat sha256sum.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/zreview-*
+            dist/sha256sum.txt
+
+      - name: Generate release notes
+        id: notes
+        env:
+          CURRENT_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          PREV_TAG="$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || true)"
+          notes_file="$(mktemp)"
+          {
+            echo "## Release ${CURRENT_TAG}"
+            echo
+            if [ -z "$PREV_TAG" ]; then
+              echo "Initial release."
+              echo
+            else
+              feats="$(git log --oneline --no-merges "${PREV_TAG}..${CURRENT_TAG}" --grep='^feat' || true)"
+              fixes="$(git log --oneline --no-merges "${PREV_TAG}..${CURRENT_TAG}" --grep='^fix' || true)"
+              refactors="$(git log --oneline --no-merges "${PREV_TAG}..${CURRENT_TAG}" --grep='^refactor' || true)"
+              docs="$(git log --oneline --no-merges "${PREV_TAG}..${CURRENT_TAG}" --grep='^docs' || true)"
+              other="$(git log --oneline --no-merges "${PREV_TAG}..${CURRENT_TAG}" --invert-grep --grep='^feat' --grep='^fix' --grep='^refactor' --grep='^docs' || true)"
+              if [ -n "$feats" ];     then echo "### Features";       echo; echo "$feats"     | sed 's/^/- /'; echo; fi
+              if [ -n "$fixes" ];     then echo "### Fixes";          echo; echo "$fixes"     | sed 's/^/- /'; echo; fi
+              if [ -n "$refactors" ]; then echo "### Refactors";      echo; echo "$refactors" | sed 's/^/- /'; echo; fi
+              if [ -n "$docs" ];      then echo "### Docs";           echo; echo "$docs"      | sed 's/^/- /'; echo; fi
+              if [ -n "$other" ];     then echo "### Other";          echo; echo "$other"     | sed 's/^/- /'; echo; fi
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...${CURRENT_TAG}"
+            fi
+          } > "$notes_file"
+          echo "notes_file=${notes_file}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: ${{ steps.notes.outputs.notes_file }}
+          files: |
+            dist/zreview-*
+            dist/sha256sum.txt
+          fail_on_unmatched_files: true
