@@ -127,6 +127,29 @@
     </ul>
     <p>The selector prefilter drops noisy diffs before any LLM call &mdash; formatting-only changes and generated files never hit the model. See <a href="/architecture.html#det-vs-llm">Architecture &sect; Deterministic vs LLM</a>.</p>
 
+    <h2 id="tiers">Two-tier model routing</h2>
+    <p><code>zreview</code> resolves two LLM clients per run &mdash; a <strong>main</strong> tier that drives the reviewer agent loop and a <strong>cheap</strong> tier reserved for structured summary and labeling calls (Phase 15). By default both tiers point at the same client, so nothing changes until you opt in.</p>
+    <table>
+      <thead>
+        <tr><th>Env var</th><th>What it does</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>ZREVIEW_CHEAP_MODEL</code></td><td>Cheap model name. Alone, reuses the main client &mdash; same endpoint, different model on the wire.</td></tr>
+        <tr><td><code>ZREVIEW_CHEAP_PROVIDER</code></td><td>Cheap provider preset. Only takes effect when <code>ZREVIEW_CHEAP_MODEL</code> is also set; resolves an independent client against a second provider.</td></tr>
+      </tbody>
+    </table>
+    <p>Fallback: if either variable is unset, cheap silently reuses the main client. There is no such thing as a "half-configured" cheap tier that breaks the reviewer.</p>
+    <pre><code># Same key, cheaper model on the reviewer's own provider
+export ANTHROPIC_API_KEY=sk-ant-...
+export ZREVIEW_CHEAP_MODEL=claude-haiku-5
+
+# Independent cheap provider
+export ANTHROPIC_API_KEY=sk-ant-...
+export DEEPSEEK_API_KEY=...
+export ZREVIEW_CHEAP_PROVIDER=deepseek
+export ZREVIEW_CHEAP_MODEL=deepseek-flash</code></pre>
+    <p>Measured target: 30&ndash;40% cost cut once summary and labeling ride the cheap tier (Phase 15).</p>
+
     <h2 id="switching">Switching providers</h2>
     <pre><code># Anthropic direct
 export ANTHROPIC_API_KEY=sk-ant-...

@@ -45,10 +45,11 @@ func runOverlap(ctx context.Context, cmd *cobra.Command, owner, repoName string,
 	if err != nil {
 		return fmt.Errorf("gh client: %w", err)
 	}
-	llmc, _, err := newLLMClient()
+	tiers, err := newLLMTiers()
 	if err != nil {
 		return fmt.Errorf("llm: %w", err)
 	}
+	llmc := tiers.Main
 
 	cur := overlap.PR{Owner: owner, Repo: repoName, Number: number}
 	findings, err := overlap.Detect(ctx, overlap.DefaultConfig(), cur, ghc, llmc)
