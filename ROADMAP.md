@@ -57,14 +57,25 @@ Phase 9 hardening).
 - Threat-model doc finalized
 - `llm` / `llmloop` coverage lifted back above 80%
 
-## Phase 10 — Docs and launch prep (planned)
+## Phase 10 — Docs and launch prep (in progress)
 
-- Full Astro Starlight site under `docs/` — 14 pages (see the plan
-  that authored this repo)
-- `zreview docs` serves the built site from embed.FS
-- GitHub Pages deploy for the online copy
-- CHANGELOG.md initial cut
-- v0.1.0 tagged
+- **Done** — Full docs site under `docs/`, 14 hand-written HTML pages
+  (index, architecture, quickstart, installation, configuration,
+  cli-reference, providers, index-and-context, review-rules, overlap,
+  session-log, github-action, troubleshooting, security). Switched
+  from the originally-planned Astro Starlight to plain static HTML +
+  CSS so the same files can be embedded via `//go:embed` with no
+  build step — one source of truth for the offline viewer and the
+  online copy.
+- **Done** — `zreview docs` serves the built site from `embed.FS`
+  (loopback-only, strict CSP, host allowlist).
+- **Done** — GitHub Pages deploy for the online copy — see
+  `.github/workflows/pages.yml`. Triggers on push to `main` when
+  `docs/**` changes, plus manual dispatch. Serves `docs/` as-is.
+- **Done** — `CHANGELOG.md` initial cut (Keep-a-Changelog 1.1,
+  SemVer, populated `[Unreleased]` section from git history).
+- **Pending** — v0.1.0 tagged (release step; not part of this
+  branch).
 
 ## Phase 11 — Pilot on a disseqt repo (planned)
 
