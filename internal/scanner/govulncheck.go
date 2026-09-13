@@ -46,10 +46,10 @@ type govulnFinding struct {
 }
 
 type govulnStep struct {
-	Module   string       `json:"module"`
-	Package  string       `json:"package"`
-	Function string       `json:"function"`
-	Position *govulnPos   `json:"position,omitempty"`
+	Module   string     `json:"module"`
+	Package  string     `json:"package"`
+	Function string     `json:"function"`
+	Position *govulnPos `json:"position,omitempty"`
 }
 
 type govulnPos struct {

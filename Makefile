@@ -19,7 +19,7 @@ LDFLAGS := -s -w \
 
 GO_BUILD := CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
 
-.PHONY: build test coverage lint vet fmt check clean tidy docs vuln help
+.PHONY: build test coverage lint vet fmt check clean tidy docs vuln install-scanners help
 
 ## build: build the zreview binary for the host platform into ./bin/
 build: $(BIN_DIR)/$(BINARY)
@@ -66,6 +66,34 @@ vuln:
 	@GOBIN=$$(go env GOBIN); \
 	if [ -z "$$GOBIN" ]; then GOBIN=$$(go env GOPATH)/bin; fi; \
 	PATH="$$GOBIN:$$PATH" govulncheck ./...
+
+## install-scanners: best-effort install of gitleaks, semgrep, govulncheck
+install-scanners:
+	@echo "==> installing missing scanner binaries (best-effort)"
+	@if ! command -v govulncheck >/dev/null 2>&1; then \
+		echo "installing govulncheck via 'go install'"; \
+		go install golang.org/x/vuln/cmd/govulncheck@latest; \
+	else echo "govulncheck: already installed"; fi
+	@case "$$(uname -s)" in \
+	 Darwin) \
+		if ! command -v gitleaks >/dev/null 2>&1; then \
+			echo "installing gitleaks via brew"; brew install gitleaks || true; \
+		else echo "gitleaks: already installed"; fi; \
+		if ! command -v semgrep  >/dev/null 2>&1; then \
+			echo "installing semgrep via brew";  brew install semgrep  || true; \
+		else echo "semgrep: already installed"; fi;; \
+	 Linux) \
+		if ! command -v gitleaks >/dev/null 2>&1; then \
+			echo "gitleaks: install via 'apt install gitleaks' or the release binary from https://github.com/gitleaks/gitleaks/releases"; \
+		else echo "gitleaks: already installed"; fi; \
+		if ! command -v semgrep  >/dev/null 2>&1; then \
+			echo "semgrep:  install via 'pipx install semgrep' (recommended)"; \
+		else echo "semgrep: already installed"; fi;; \
+	 *) \
+		echo "unrecognised OS ($$(uname -s)); install gitleaks + semgrep manually"; \
+		echo "  https://github.com/gitleaks/gitleaks/releases"; \
+		echo "  https://semgrep.dev/docs/getting-started/";; \
+	esac
 
 ## clean: remove build artifacts
 clean:

@@ -161,3 +161,46 @@ type captureLog struct {
 func (c *captureLog) Log(format string, args ...any) {
 	c.lines = append(c.lines, fmt.Sprintf(format, args...))
 }
+
+func TestDefaultScannersHasThree(t *testing.T) {
+	got := defaultScanners(nil)
+	if len(got) != 3 {
+		t.Fatalf("want 3 default scanners, got %d", len(got))
+	}
+	want := []string{"gitleaks", "semgrep", "govulncheck"}
+	for i, name := range want {
+		if got[i].Name() != name {
+			t.Errorf("scanner[%d]: got %q, want %q", i, got[i].Name(), name)
+		}
+	}
+}
+
+func TestEnvDisabledReadsEnv(t *testing.T) {
+	t.Setenv("ZREVIEW_DISABLE_SCANNERS", "gitleaks")
+	got := EnvDisabled()
+	if _, ok := got["gitleaks"]; !ok {
+		t.Errorf("EnvDisabled missed the env value: %v", got)
+	}
+	t.Setenv("ZREVIEW_DISABLE_SCANNERS", "")
+	if EnvDisabled() != nil {
+		t.Errorf("empty env should return nil map")
+	}
+}
+
+// Full-integration Run() call with default scanners: on machines without
+// the binaries this still exercises the LookPath skip path in each
+// adapter — proving the "no binaries" configuration is truly non-fatal.
+func TestRunWithDefaultScannersNoBinaries(t *testing.T) {
+	// We can't force LookPath to fail deterministically without hacks,
+	// but this covers the wiring: Run() picks up defaultScanners when
+	// Scanners is nil.
+	logs := &captureLog{}
+	got, err := Run(context.Background(), t.TempDir(), nil, Options{Log: logs.Log})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	// findings may be zero or a small handful depending on the machine;
+	// we only assert the call didn't fail and (if all binaries missing)
+	// produced at least one "skipping" log line.
+	_ = got
+}

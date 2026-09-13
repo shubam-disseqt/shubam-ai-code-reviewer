@@ -170,9 +170,9 @@ func defaultScanners(stderr io.Writer) []scannerImpl {
 // "adapter didn't run".
 func TallyByTool(findings []ScannerFinding) string {
 	counts := map[string]int{
-		"gitleaks":     0,
-		"semgrep":      0,
-		"govulncheck":  0,
+		"gitleaks":    0,
+		"semgrep":     0,
+		"govulncheck": 0,
 	}
 	for _, f := range findings {
 		counts[f.Tool]++

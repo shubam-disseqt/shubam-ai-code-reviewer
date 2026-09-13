@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>Scanners &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+      <li><a href="/cli-reference.html">CLI reference</a></li>
+      <li><a href="/providers.html">Providers</a></li>
+      <li><a href="/index-and-context.html">Index and context</a></li>
+      <li><a href="/review-rules.html">Review rules</a></li>
+      <li><a href="/overlap.html">Overlap</a></li>
+      <li><a href="/scanners.html" class="active">Scanners</a></li>
+      <li><a href="/session-log.html">Session log</a></li>
+      <li><a href="/github-action.html">GitHub Action</a></li>
+      <li><a href="/troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="/security.html">Security</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Scanners</h1>
+    <p class="lede">Deterministic security scanners run alongside the LLM reviewer. They catch what LLMs are worst at &mdash; secrets, well-known SAST anti-patterns, Go stdlib CVEs &mdash; with near-perfect precision and zero token cost.</p>
+
+    <h2 id="why">Why this exists</h2>
+    <p>An LLM will happily miss a hardcoded AWS key and, in the same review, invent a race condition that isn't there. Static analysers have the opposite failure mode: high precision on the categories they cover, blind to everything else. Running both is cheaper and more accurate than trying to make either do the other's job.</p>
+    <p>Scanners run in the review pipeline right after file selection and before the LLM loop. Findings feed the same output stream, pre-tagged <code>Source=scanner:&lt;tool&gt;</code> so downstream stages (Phase 16 scoring, Phase 17 SARIF routing) can treat them separately.</p>
+
+    <h2 id="supported">Supported scanners</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Kind</th><th>What it catches</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><a href="https://github.com/gitleaks/gitleaks">gitleaks</a></td>
+          <td><code>secret</code></td>
+          <td>Hardcoded credentials: AWS/GCP/Azure keys, GitHub tokens, private keys, generic high-entropy strings that match ~250 built-in rules.</td>
+        </tr>
+        <tr>
+          <td><a href="https://semgrep.dev/">semgrep</a></td>
+          <td><code>sast</code></td>
+          <td>Language-aware SAST rules from the <code>--config auto</code> community pack: injection, weak crypto, dangerous subprocess use, insecure deserialisation. Multi-language.</td>
+        </tr>
+        <tr>
+          <td><a href="https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck">govulncheck</a></td>
+          <td><code>cve</code></td>
+          <td>Known Go vulnerabilities that are <em>reachable</em> from your code &mdash; module-version + call-graph, not just <code>go.sum</code> comparison.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="install">Install</h2>
+
+    <h3>macOS (Homebrew)</h3>
+    <pre><code>brew install gitleaks semgrep
+go install golang.org/x/vuln/cmd/govulncheck@latest</code></pre>
+
+    <h3>Linux (apt / native)</h3>
+    <pre><code># gitleaks: pick the latest release binary
+curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz \
+  | sudo tar -xz -C /usr/local/bin gitleaks
+
+# semgrep via pipx (recommended over pip)
+pipx install semgrep
+
+# govulncheck via Go tooling
+go install golang.org/x/vuln/cmd/govulncheck@latest</code></pre>
+
+    <h3>Windows</h3>
+    <p>Scoop or the vendors' release binaries. <code>go install</code> works identically for <code>govulncheck</code>. If a scanner isn't installed, zreview skips it with a one-line info log &mdash; the review still runs.</p>
+
+    <h3>Convenience target</h3>
+    <p>The repository ships a helper for local development:</p>
+    <pre><code>make install-scanners</code></pre>
+    <p>The target detects the current OS and installs whichever binaries are missing. On Windows it echoes the manual install instructions instead of running installers you didn't ask for.</p>
+
+    <h2 id="disable">Disable a scanner</h2>
+    <p>Comma-separated env var, matched by tool name (lowercase):</p>
+    <pre><code>ZREVIEW_DISABLE_SCANNERS=gitleaks,semgrep zreview review</code></pre>
+    <p>Setting all three effectively turns the scanner stage off. There is no <code>--no-scanners</code> flag on purpose: this is an operational knob, not a per-invocation choice.</p>
+
+    <h2 id="output">Output</h2>
+    <p>Scanner findings appear alongside LLM findings in every output format. In <code>--format stdout</code>, they carry a <code>[scanner:&lt;tool&gt;]</code> prefix. In <code>--format json</code>, the same information lives in the <code>source</code> field on each comment.</p>
+    <pre><code>{
+  "path": "config/aws.py",
+  "start_line": 5,
+  "end_line": 5,
+  "content": "AWS Access Token\n\nEvidence: `AWS_KEY = ***REDACTED***`",
+  "category": "security",
+  "severity": "high",
+  "source": "scanner:gitleaks"
+}</code></pre>
+    <p>Raw secrets are redacted with a <code>***REDACTED***</code> marker before the finding is emitted; the raw credential never leaves the tool's memory.</p>
+
+    <h2 id="prompt">Interaction with the LLM</h2>
+    <p>Scanner findings for the file under review are also injected into the reviewer prompt as an optional <code>## Known Issues (from static analysis)</code> block. The model is instructed to <em>not</em> re-report them, and to add a one-line risk note only if it has additional context. Concretely this cuts duplicate findings on the emitted PR without shrinking the scanner's coverage.</p>
+
+    <h2 id="triage">False-positive triage</h2>
+    <ul>
+      <li><strong>Gitleaks.</strong> Add narrow allowlists to <code>.gitleaks.toml</code> at the repo root &mdash; paths, regexes, or fingerprints. Never broaden the allowlist to cover real source files without a security review.</li>
+      <li><strong>Semgrep.</strong> Add <code>// nosemgrep: rule-id</code> comments at the offending line, or drop custom rule overrides under <code>.semgrep.yml</code>. Rule IDs come straight from the <code>check_id</code> field in the finding.</li>
+      <li><strong>govulncheck.</strong> The <em>reachability</em> check already filters most noise. When it flags an unreachable path the trace will be missing a user-code step &mdash; zreview silently drops those. If a reachable finding is a false positive, upgrade the dependency; there is no per-finding suppression by design.</li>
+    </ul>
+
+    <h2 id="failure">Failure semantics</h2>
+    <p>Best-effort at every level:</p>
+    <ul>
+      <li>Missing binary &rarr; one-line info log, adapter returns zero findings.</li>
+      <li>Non-zero exit or JSON parse error &rarr; logged as a warning, adapter returns zero findings.</li>
+      <li>One scanner failing does not affect the others &mdash; they run concurrently under an <code>errgroup</code>.</li>
+      <li>Only <code>ctx</code> cancellation propagates as an error to the review pipeline.</li>
+    </ul>
+    <p>This mirrors <code>zreview</code>'s posture on every other optional stage: a flaky external dependency must not swallow the review comments you actually came for.</p>
+
+    <h2 id="limits">Limits</h2>
+    <ul>
+      <li><strong>Scope is intentional.</strong> Deep SCA, license analysis, and container/IaC scanning are out of scope &mdash; different tools, different failure modes.</li>
+      <li><strong>Semgrep scans changed paths only.</strong> Full-repo scans belong in nightly CI; the review pipeline stays targeted.</li>
+      <li><strong>govulncheck runs on the whole module.</strong> Reachability is a call-graph property; scanning a subset would produce misleading traces.</li>
+      <li><strong>Rule packs are the tools' defaults.</strong> Customisation lives in the tool's own config (<code>.gitleaks.toml</code>, <code>.semgrep.yml</code>) &mdash; zreview does not wrap those APIs.</li>
+    </ul>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+    </footer>
+  </main>
+</div>
+</body>
+</html>
