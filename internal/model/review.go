@@ -18,6 +18,11 @@ type LlmComment struct {
 	// Severity indicates the importance of the finding. One of:
 	// critical, high, medium, low.
 	Severity string `json:"severity,omitempty"`
+	// Source names the producer of the finding. Empty (or "llm") means the
+	// main-task LLM. Deterministic scanners tag themselves as
+	// "scanner:<tool>", e.g. "scanner:gitleaks". Downstream consumers
+	// (Phase 16 scoring, Phase 17 SARIF routing) key on this prefix.
+	Source string `json:"source,omitempty"`
 }
 
 // CodeReviewResult holds raw LLM-generated review suggestion for a code segment.

@@ -1,0 +1,46 @@
+{
+  "version": "1.55.0",
+  "results": [
+    {
+      "check_id": "python.lang.security.audit.dangerous-subprocess-use.dangerous-subprocess-use",
+      "path": "scripts/deploy.py",
+      "start": { "line": 42, "col": 5, "offset": 1024 },
+      "end":   { "line": 42, "col": 45, "offset": 1064 },
+      "extra": {
+        "message": "Detected subprocess function with user input. This is dangerous if arbitrary variables are allowed.",
+        "severity": "ERROR",
+        "lines": "    subprocess.run(f'ls {user_input}', shell=True)",
+        "metadata": {
+          "cwe": ["CWE-78"],
+          "owasp": ["A03:2021"]
+        }
+      }
+    },
+    {
+      "check_id": "go.lang.security.audit.crypto.weak-cipher-block-chaining-mode",
+      "path": "internal/crypto/legacy.go",
+      "start": { "line": 88, "col": 2, "offset": 2200 },
+      "end":   { "line": 88, "col": 50, "offset": 2248 },
+      "extra": {
+        "message": "Weak CBC block cipher mode without integrity check.",
+        "severity": "WARNING",
+        "lines": "\tmode := cipher.NewCBCEncrypter(block, iv)"
+      }
+    },
+    {
+      "check_id": "generic.secrets.security.detected-generic-secret.detected-generic-secret",
+      "path": "config/settings.yaml",
+      "start": { "line": 3, "col": 1, "offset": 30 },
+      "end":   { "line": 3, "col": 60, "offset": 90 },
+      "extra": {
+        "message": "Generic secret detected.",
+        "severity": "INFO",
+        "lines": "password: hunter2"
+      }
+    }
+  ],
+  "errors": [],
+  "paths": {
+    "scanned": ["scripts/deploy.py", "internal/crypto/legacy.go", "config/settings.yaml"]
+  }
+}

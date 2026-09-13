@@ -1,0 +1,47 @@
+[
+  {
+    "Description": "AWS Access Token",
+    "StartLine": 5,
+    "EndLine": 5,
+    "StartColumn": 24,
+    "EndColumn": 43,
+    "Match": "AWS_KEY = AKIAIOSFODNN7EXAMPLE",
+    "Secret": "AKIAIOSFODNN7EXAMPLE",
+    "File": "config/aws.py",
+    "SymlinkFile": "",
+    "Commit": "",
+    "Entropy": 3.5,
+    "Author": "",
+    "Email": "",
+    "Date": "",
+    "Message": "",
+    "Tags": [
+      "key",
+      "AWS"
+    ],
+    "RuleID": "aws-access-token",
+    "Fingerprint": "config/aws.py:aws-access-token:5"
+  },
+  {
+    "Description": "Generic API Key",
+    "StartLine": 12,
+    "EndLine": 12,
+    "StartColumn": 15,
+    "EndColumn": 55,
+    "Match": "api_key='sk-abc123XYZlivelongandprosper9876'",
+    "Secret": "sk-abc123XYZlivelongandprosper9876",
+    "File": "internal/handler/auth.go",
+    "SymlinkFile": "",
+    "Commit": "",
+    "Entropy": 4.2,
+    "Author": "",
+    "Email": "",
+    "Date": "",
+    "Message": "",
+    "Tags": [
+      "key"
+    ],
+    "RuleID": "generic-api-key",
+    "Fingerprint": "internal/handler/auth.go:generic-api-key:12"
+  }
+]

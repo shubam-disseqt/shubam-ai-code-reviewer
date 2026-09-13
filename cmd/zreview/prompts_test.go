@@ -42,7 +42,7 @@ func TestRenderUserPromptSubstitutes(t *testing.T) {
 }
 
 func TestBuildReviewMessagesShape(t *testing.T) {
-	msgs := buildReviewMessages("SYS", "user {{diffs}} end", "RULES", "CTX", "[\"a.go\"]", "DIFF")
+	msgs := buildReviewMessages("SYS", "user {{diffs}} end", "RULES", "CTX", "", "[\"a.go\"]", "DIFF")
 	if len(msgs) != 2 {
 		t.Fatalf("want 2 messages, got %d", len(msgs))
 	}
@@ -60,10 +60,25 @@ func TestBuildReviewMessagesShape(t *testing.T) {
 }
 
 func TestBuildReviewMessagesEmptyContext(t *testing.T) {
-	msgs := buildReviewMessages("SYS", "u", "", "", "", "")
+	msgs := buildReviewMessages("SYS", "u", "", "", "", "", "")
 	sys := msgs[0].ExtractText()
 	if strings.Contains(sys, "Codebase Context") {
 		t.Errorf("empty context should skip section header: %q", sys)
+	}
+	if strings.Contains(sys, "Known Issues") {
+		t.Errorf("empty known issues should skip section header: %q", sys)
+	}
+}
+
+func TestBuildReviewMessagesInjectsKnownIssues(t *testing.T) {
+	known := "## Known Issues (from static analysis)\n\n- [gitleaks / secret / HIGH] a.go:1 — foo\n"
+	msgs := buildReviewMessages("SYS", "u", "", "", known, "", "")
+	sys := msgs[0].ExtractText()
+	if !strings.Contains(sys, "Known Issues") {
+		t.Errorf("known-issues block missing: %q", sys)
+	}
+	if !strings.Contains(sys, "gitleaks") {
+		t.Errorf("known-issues body missing: %q", sys)
 	}
 }
 
