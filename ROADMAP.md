@@ -21,11 +21,12 @@ Phase 9 hardening).
   - `internal/comment/*` (parse, args_repair, collector) — **99.5% coverage**
   - `internal/llm/*` — providers trimmed to 5 (Anthropic, OpenAI,
     Bedrock, OpenAI-Responses, DeepSeek); retry-report ledger dropped.
-    Coverage 40% because agent dropped tests that depended on removed
-    providers — will come back up as we exercise the retained code.
+    Coverage **89.3%** after Phase 9 test-lift covering the retained
+    providers via httptest round-trips plus the resolver strategies.
   - `internal/llmloop/*` (loop, pool, compression) — retry-ledger
     dropped; a small local `Session` interface stands in until
-    `internal/session` lands. Coverage 22% for the same reason as `llm`.
+    `internal/session` lands. Coverage **88.5%** after Phase 9 test-lift
+    for RunMainTask, compression, and Runner metrics.
   - `internal/prompts/*.md` — main_task + memory_compression templates
     embedded
 - **Phase 4a** — Independent Mira leaf packages ported Python → Go,
@@ -57,7 +58,7 @@ Phase 9 hardening).
 - [x] `govulncheck` in CI (`.github/workflows/govulncheck.yml`, plus a
   local `make vuln` target)
 - [x] Threat-model doc finalized (`THREAT_MODEL.md`)
-- `llm` / `llmloop` coverage lifted back above 80%
+- [x] `llm` / `llmloop` coverage lifted back above 80% (89.3% / 88.5%)
 
 ## Phase 10 — Docs and launch prep (in progress)
 
