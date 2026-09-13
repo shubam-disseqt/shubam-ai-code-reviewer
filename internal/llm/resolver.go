@@ -129,6 +129,7 @@ func ResolveEndpointWithOptions(configPath string, opts ResolveOptions) (Resolve
 	}{
 		{"OCR config file", func() (ResolvedEndpoint, bool, error) { return tryOCRConfig(configPath, opts) }},
 		{"OCR environment", func() (ResolvedEndpoint, bool, error) { return tryOCREnv(opts.Model) }},
+		{"provider environment", func() (ResolvedEndpoint, bool, error) { return tryProviderEnv(opts.Model) }},
 		{"Claude Code environment", func() (ResolvedEndpoint, bool, error) { return tryCCEnv(opts.Model) }},
 		{"Shell rc file", func() (ResolvedEndpoint, bool, error) { return tryShellRC(opts.Model) }},
 	}
@@ -146,7 +147,7 @@ func ResolveEndpointWithOptions(configPath string, opts ResolveOptions) (Resolve
 		}
 	}
 
-	return ResolvedEndpoint{}, fmt.Errorf("no valid LLM endpoint configured; one of OCR_LLM_URL/OCR_LLM_TOKEN/OCR_LLM_MODEL, ~/.opencodereview/config.json, or ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN/ANTHROPIC_MODEL must be set")
+	return ResolvedEndpoint{}, fmt.Errorf("no valid LLM endpoint configured; set one of ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENAI_RESPONSES_API_KEY, DEEPSEEK_API_KEY (Bedrock uses ambient AWS credentials), or configure ~/.opencodereview/config.json")
 }
 
 // envOverrides holds the global OCR_LLM_* overrides that apply to whichever
@@ -696,6 +697,45 @@ func tryLegacyLlmConfig(cfg configFile, modelOverride string) (ResolvedEndpoint,
 		Timeout:      timeout,
 		RetryCodes:   retryCodes,
 	}, true, nil
+}
+
+// tryProviderEnv walks the provider registry and resolves the first preset
+// whose EnvVar (e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY)
+// is set. Model preference: explicit override → ZREVIEW_MODEL → provider's
+// first preset model. This is the friendly path documented across the
+// README + docs pages; it lets a user run zreview after `export
+// ANTHROPIC_API_KEY=sk-ant-...` with no other config.
+func tryProviderEnv(modelOverride string) (ResolvedEndpoint, bool, error) {
+	for _, p := range registry {
+		if p.EnvVar == "" {
+			continue
+		}
+		token := strings.TrimSpace(os.Getenv(p.EnvVar))
+		if token == "" {
+			continue
+		}
+		model := modelOverride
+		if model == "" {
+			model = strings.TrimSpace(os.Getenv("ZREVIEW_MODEL"))
+		}
+		if model == "" && len(p.Models) > 0 {
+			model = p.Models[0]
+		}
+		if model == "" {
+			return ResolvedEndpoint{}, false, fmt.Errorf(
+				"%s is set but no model is configured; set ZREVIEW_MODEL or pass --model",
+				p.EnvVar)
+		}
+		return ResolvedEndpoint{
+			URL:        p.BaseURL,
+			Token:      token,
+			Model:      model,
+			Protocol:   p.Protocol,
+			AuthHeader: p.AuthHeader,
+			Source:     "provider environment (" + p.EnvVar + ")",
+		}, true, nil
+	}
+	return ResolvedEndpoint{}, false, nil
 }
 
 // tryCCEnv reads Claude Code environment variables.

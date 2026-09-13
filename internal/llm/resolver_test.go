@@ -356,6 +356,78 @@ func writeConfig(t *testing.T, cfg configFile) string {
 	return path
 }
 
+func TestTryProviderEnv(t *testing.T) {
+	// Clear every provider EnvVar + ZREVIEW_MODEL so a stray CI env doesn't
+	// bleed into subtests. Also clear the CC / OCR vars since
+	// ResolveEndpointWithOptions consults them too.
+	clearProviderEnv := func(t *testing.T) {
+		t.Helper()
+		for _, p := range registry {
+			if p.EnvVar != "" {
+				t.Setenv(p.EnvVar, "")
+			}
+		}
+		t.Setenv("ZREVIEW_MODEL", "")
+	}
+
+	t.Run("ANTHROPIC_API_KEY alone picks the anthropic preset", func(t *testing.T) {
+		clearProviderEnv(t)
+		t.Setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+		ep, ok, err := tryProviderEnv("")
+		if err != nil || !ok {
+			t.Fatalf("tryProviderEnv: ok=%v err=%v", ok, err)
+		}
+		if ep.Protocol != ProtocolAnthropic {
+			t.Errorf("protocol = %q, want %q", ep.Protocol, ProtocolAnthropic)
+		}
+		if ep.Token != "sk-ant-test" {
+			t.Errorf("token = %q, want sk-ant-test", ep.Token)
+		}
+		if ep.URL != "https://api.anthropic.com" {
+			t.Errorf("URL = %q, want anthropic default", ep.URL)
+		}
+		if ep.Model == "" {
+			t.Error("model must fall back to the first preset")
+		}
+	})
+
+	t.Run("OPENAI_API_KEY alone picks the openai preset", func(t *testing.T) {
+		clearProviderEnv(t)
+		t.Setenv("OPENAI_API_KEY", "sk-openai-test")
+		ep, ok, err := tryProviderEnv("")
+		if err != nil || !ok {
+			t.Fatalf("tryProviderEnv: ok=%v err=%v", ok, err)
+		}
+		if ep.Protocol != ProtocolOpenAIChatCompletions {
+			t.Errorf("protocol = %q, want openai", ep.Protocol)
+		}
+	})
+
+	t.Run("modelOverride wins over ZREVIEW_MODEL", func(t *testing.T) {
+		clearProviderEnv(t)
+		t.Setenv("ANTHROPIC_API_KEY", "sk-ant")
+		t.Setenv("ZREVIEW_MODEL", "from-env")
+		ep, _, err := tryProviderEnv("from-override")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ep.Model != "from-override" {
+			t.Errorf("model = %q, want from-override", ep.Model)
+		}
+	})
+
+	t.Run("nothing set returns miss without error", func(t *testing.T) {
+		clearProviderEnv(t)
+		_, ok, err := tryProviderEnv("")
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if ok {
+			t.Error("expected miss when no provider env set")
+		}
+	})
+}
+
 func TestTryOCRConfig_MissingFile(t *testing.T) {
 	_, ok, err := tryOCRConfig(filepath.Join(t.TempDir(), "nonexistent.json"), ResolveOptions{})
 	if err != nil {
