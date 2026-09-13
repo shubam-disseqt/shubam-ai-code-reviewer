@@ -63,23 +63,36 @@ func (s *govulncheckScanner) Run(ctx context.Context, repoRoot string, _ []strin
 		return nil, fmt.Errorf("skipping govulncheck (not installed)")
 	}
 
-	//nolint:gosec // args are all constants
-	cmd := exec.CommandContext(ctx, "govulncheck", "-json", "./...")
-	cmd.Dir = repoRoot
-	cmd.Stderr = s.stderr
+	// govulncheck exits non-zero when it finds vulns AND when its own
+	// resolver fails. We treat "cmd failed AND no parseable findings" as a
+	// transient error worth retrying; every other outcome (success, or
+	// non-zero with real findings) short-circuits the retry loop.
 	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		// govulncheck exits non-zero when it finds vulns AND when its
-		// own resolver fails. We can't distinguish those from the exit
-		// code alone, so we parse whatever it emitted before returning.
-		findings, perr := parseGovulncheck(stdout.Bytes(), repoRoot)
-		if perr != nil || len(findings) == 0 {
-			return nil, fmt.Errorf("govulncheck exec: %w", err)
+	var findings []ScannerFinding
+	err := execAttempt(ctx, func() error {
+		stdout.Reset()
+		//nolint:gosec // args are all constants
+		cmd := exec.CommandContext(ctx, "govulncheck", "-json", "./...")
+		cmd.Dir = repoRoot
+		cmd.Stderr = s.stderr
+		cmd.Stdout = &stdout
+		runErr := cmd.Run()
+		parsed, perr := parseGovulncheck(stdout.Bytes(), repoRoot)
+		if runErr == nil {
+			findings = parsed
+			return perr
 		}
-		return findings, nil
+		if perr != nil || len(parsed) == 0 {
+			return runErr
+		}
+		// Non-zero exit + real findings = expected vulns, keep them.
+		findings = parsed
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("govulncheck exec: %w", err)
 	}
-	return parseGovulncheck(stdout.Bytes(), repoRoot)
+	return findings, nil
 }
 
 // parseGovulncheck consumes NDJSON emitted by `govulncheck -json` and

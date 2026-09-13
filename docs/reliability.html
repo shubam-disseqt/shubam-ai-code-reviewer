@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
+  <title>Reliability &mdash; z-code-reviewer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="wrap">
+  <nav class="sidebar">
+    <h2>z-code-reviewer</h2>
+    <span class="tag">local docs</span>
+    <ul>
+      <li><a href="/">Overview</a></li>
+      <li><a href="/architecture.html">Architecture</a></li>
+      <li><a href="/quickstart.html">Quickstart</a></li>
+      <li><a href="/installation.html">Installation</a></li>
+      <li><a href="/configuration.html">Configuration</a></li>
+      <li><a href="/cli-reference.html">CLI reference</a></li>
+      <li><a href="/providers.html">Providers</a></li>
+      <li><a href="/index-and-context.html">Index and context</a></li>
+      <li><a href="/review-rules.html">Review rules</a></li>
+      <li><a href="/overlap.html">Overlap</a></li>
+      <li><a href="/scanners.html">Scanners</a></li>
+      <li><a href="/sarif.html">SARIF output</a></li>
+      <li><a href="/session-log.html">Session log</a></li>
+      <li><a href="/github-action.html">GitHub Action</a></li>
+      <li><a href="/reliability.html" class="active">Reliability</a></li>
+      <li><a href="/troubleshooting.html">Troubleshooting</a></li>
+      <li><a href="/security.html">Security</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <h1>Reliability</h1>
+    <p class="lede">Every GitHub REST call zreview makes goes through two HTTP middlewares: a client-side rate limiter and a transient-failure retry. Local scanner subprocess flakiness is retried too. This page documents which endpoints get which policy and what knobs are exposed.</p>
+
+    <h2 id="why">Why this exists</h2>
+    <p>A single <code>zreview review</code> run can talk to GitHub a dozen times: list overlap candidates, fetch files per candidate, update the PR body, add labels, upload SARIF, poll SARIF status, post inline comments. Two failure modes previously derailed the whole review:</p>
+    <ul>
+      <li>Hitting GitHub&rsquo;s hourly rate limit on a busy CI runner &mdash; a single 429 aborted the SARIF upload step.</li>
+      <li>A transient GitHub 5xx during PR-body update or SARIF upload failed the whole review with no recovery.</li>
+    </ul>
+    <p>Both are now handled at the transport layer, so callers get retry-with-backoff for free regardless of which endpoint they invoke.</p>
+
+    <h2 id="rate-limit">Rate limit</h2>
+    <p>A token-bucket limiter paces every outbound GitHub request. Defaults target GitHub&rsquo;s authenticated hourly quota (5000 req/hr &asymp; 1.39 req/s) with a burst of 20 to accommodate the natural cluster at the start of a review (overlap enumeration, file lists).</p>
+    <table>
+      <thead><tr><th>Env var</th><th>Default</th><th>Type</th></tr></thead>
+      <tbody>
+        <tr><td><code>ZREVIEW_GH_RATE_LIMIT_RPS</code></td><td><code>1.39</code></td><td>float</td></tr>
+        <tr><td><code>ZREVIEW_GH_RATE_LIMIT_BURST</code></td><td><code>20</code></td><td>int</td></tr>
+      </tbody>
+    </table>
+    <p>An <code>rps</code> of <code>0</code> or a negative burst falls back to the defaults &mdash; there is no &ldquo;off&rdquo; switch on purpose. If you need to disable rate limiting for local integration testing, replace <code>Options.HTTPClient</code> when constructing the client from Go.</p>
+
+    <h2 id="retry">Retry</h2>
+    <p>Every request is retried on:</p>
+    <ul>
+      <li><strong>Network-level failures</strong> (connection refused, DNS timeout, TLS handshake error).</li>
+      <li><strong>HTTP 5xx</strong> (500-599).</li>
+      <li><strong>HTTP 429</strong> &mdash; rate-limit throttling from GitHub itself, distinct from our client-side limiter.</li>
+    </ul>
+    <p>Anything else &mdash; <code>2xx</code>, <code>3xx</code>, <code>4xx</code> other than 429 &mdash; is returned to the caller as-is. A 404 or 422 is a caller bug and won&rsquo;t improve on retry.</p>
+
+    <h3 id="backoff">Backoff schedule</h3>
+    <table>
+      <thead><tr><th>Attempt</th><th>Wait before this attempt</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>0</td></tr>
+        <tr><td>2</td><td>~500&nbsp;ms (jittered)</td></tr>
+        <tr><td>3</td><td>~1&nbsp;s (jittered)</td></tr>
+        <tr><td>4</td><td>~2&nbsp;s (jittered)</td></tr>
+        <tr><td>5</td><td>~4&nbsp;s (jittered, capped at 8&nbsp;s)</td></tr>
+      </tbody>
+    </table>
+    <p>Full jitter is applied: the actual wait is a random duration between 0 and the tabulated ceiling. This spreads out retries when multiple in-flight requests hit the same 5xx wave. Maximum total time in retry-and-wait is bounded &mdash; a persistently broken endpoint aborts after ~15&nbsp;s, not indefinitely.</p>
+
+    <h3 id="retry-after"><code>Retry-After</code> header</h3>
+    <p>When the server sets <code>Retry-After</code> (spec: RFC 7231 &sect; 7.1.3), it wins over exponential backoff. Both forms are accepted:</p>
+    <ul>
+      <li><strong>Integer seconds:</strong> <code>Retry-After: 30</code></li>
+      <li><strong>HTTP-date:</strong> <code>Retry-After: Wed, 21 Oct 2026 07:28:00 GMT</code></li>
+    </ul>
+    <p>Values that would stall zreview beyond <code>32&nbsp;s</code> (retryMaxDelay &times; 4) are clamped. A pathological server can&rsquo;t hang a review indefinitely by requesting an unreasonable pause.</p>
+
+    <h2 id="endpoints">Covered endpoints</h2>
+    <p>Because both middlewares sit on the shared HTTP transport, <em>every</em> go-github SDK method zreview calls gets the same policy. In practice the calls that matter are:</p>
+    <table>
+      <thead><tr><th>Operation</th><th>Method</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td>List open PRs (overlap)</td><td><code>GET</code></td><td>overlap batches</td></tr>
+        <tr><td>List PR files</td><td><code>GET</code></td><td>overlap batches</td></tr>
+        <tr><td>Get PR body</td><td><code>GET</code></td><td>PR description block</td></tr>
+        <tr><td>Update PR body</td><td><code>PATCH</code></td><td>PR description block</td></tr>
+        <tr><td>Add labels</td><td><code>POST</code></td><td>Phase 15 labeler</td></tr>
+        <tr><td>Post review comment</td><td><code>POST</code></td><td>inline comments (<code>--format github</code>)</td></tr>
+        <tr><td>Upload SARIF</td><td><code>POST</code></td><td>Code Scanning integration</td></tr>
+        <tr><td>Get SARIF status</td><td><code>GET</code></td><td><code>--wait-sarif</code> polling</td></tr>
+      </tbody>
+    </table>
+    <p>Request bodies (PATCH, POST) are buffered before the first attempt so retries can replay the same payload byte-for-byte.</p>
+
+    <h2 id="scanners">Scanner subprocesses</h2>
+    <p>Local scanner adapters (gitleaks, semgrep, govulncheck) get a light two-attempt retry on transient exec failure with 200&nbsp;ms between attempts. This is deliberately smaller than the HTTP policy &mdash; local subprocesses don&rsquo;t have network flakiness, but a Go binary occasionally fails to start under memory pressure or a temporary file lock, and one retry is enough to paper over that.</p>
+    <p>The retry never fires when the tool binary is missing &mdash; that path is caught by <code>exec.LookPath</code> before the retry helper is reached, so the &ldquo;missing binary skips silently&rdquo; contract is preserved.</p>
+
+    <h2 id="llm">LLM retries</h2>
+    <p>The LLM path already has its own retry-code middleware wired via the Anthropic / OpenAI SDKs (see <code>internal/llm/client.go</code>). This page covers everything <em>except</em> that path.</p>
+
+    <h2 id="observability">Observability</h2>
+    <p>Retries are silent by design &mdash; a review that transparently recovered from a 500 should not spam CI logs. If you suspect retry-related latency:</p>
+    <ul>
+      <li>Run <code>zreview review -vv</code> to surface the underlying go-github request timing.</li>
+      <li>The session log (<code>--session-log</code>) captures every LLM turn but does not log successful retries at the HTTP layer &mdash; only the final response.</li>
+      <li>Persistent 429s that outlast five attempts land in the review&rsquo;s stderr as a wrapped <code>gh:</code> error. Treat that as a signal to reduce parallelism (<code>--max-overlap-candidates</code>) or lengthen the token TTL.</li>
+    </ul>
+
+    <footer>
+      &copy; 2026 disseqt. Apache-2.0.
+    </footer>
+  </main>
+</div>
+</body>
+</html>

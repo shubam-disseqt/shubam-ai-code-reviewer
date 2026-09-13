@@ -69,13 +69,19 @@ func (s *semgrepScanner) Run(ctx context.Context, repoRoot string, changedPaths 
 	}
 	args = append(args, targets...)
 
-	//nolint:gosec // targets are repo-relative paths from the deterministic selector
-	cmd := exec.CommandContext(ctx, "semgrep", args...)
-	cmd.Dir = repoRoot
-	cmd.Stderr = s.stderr
+	// Fresh stdout buffer per attempt so a retry doesn't concatenate two
+	// runs' JSON.
 	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
+	err := execAttempt(ctx, func() error {
+		stdout.Reset()
+		//nolint:gosec // targets are repo-relative paths from the deterministic selector
+		cmd := exec.CommandContext(ctx, "semgrep", args...)
+		cmd.Dir = repoRoot
+		cmd.Stderr = s.stderr
+		cmd.Stdout = &stdout
+		return cmd.Run()
+	})
+	if err != nil {
 		// semgrep exits non-zero when it finds issues (with --error)
 		// OR when config download fails. We didn't set --error so any
 		// non-zero exit is a real failure; report + skip.

@@ -50,6 +50,12 @@ type Options struct {
 
 // NewClient builds a *Client. Returns an error only if BaseURL is provided
 // but unparseable.
+//
+// Two HTTP middlewares are installed on the transport chain, in this
+// order (outer to inner): rate limit -> retry -> transport. Rate limit paces
+// user-facing requests to stay under GitHub's authenticated hourly quota;
+// retry hides transient 5xx / 429 with exponential backoff + Retry-After.
+// See docs/reliability.html.
 func NewClient(opts Options) (*Client, error) {
 	base := opts.HTTPClient
 	if opts.Token != "" {
@@ -62,6 +68,7 @@ func NewClient(opts Options) (*Client, error) {
 		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: opts.Token})
 		base = oauth2.NewClient(ctx, ts)
 	}
+	base = withReliabilityMiddleware(base)
 	sdk := github.NewClient(base)
 	if opts.BaseURL != "" {
 		u := opts.BaseURL
@@ -250,4 +257,24 @@ func (c *Client) warnIfUnauth() {
 	if !c.authed {
 		log.Printf("gh: unauthenticated request (set GITHUB_TOKEN to raise rate limits)")
 	}
+}
+
+// withReliabilityMiddleware installs the rate-limit + retry chain on the
+// HTTP client that go-github (via oauth2) wraps. Nil in returns a fresh
+// client so callers don't have to special-case the "no options" path.
+func withReliabilityMiddleware(in *http.Client) *http.Client {
+	if in == nil {
+		in = &http.Client{}
+	}
+	base := in.Transport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	// Order (outer -> inner): rate limit -> retry -> transport.
+	// A single logical GitHub call passes the limiter once and may spend
+	// several attempts inside retry — the limiter caps steady-state
+	// throughput; retry handles bursts of transient failure.
+	out := *in
+	out.Transport = newRateLimitedTransport(newRetryTransport(base))
+	return &out
 }
