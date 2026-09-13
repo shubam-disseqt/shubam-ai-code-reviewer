@@ -530,6 +530,15 @@ func buildToolRegistry(repo string, kept []model.Diff, opts *reviewOpts) (*tool.
 		diffByPath[p] = d
 	}
 	reg.Register(tool.NewFileReadDiff(tool.NewDiffMap(diffTextByPath)))
+
+	// code_comment and task_done need to pass the registry lookup in
+	// llmloop.executeToolCall so the loop enters their special-cased
+	// branches (comment collection / task termination). Their Execute
+	// methods never run — the loop returns before the fallthrough — but
+	// without a registration the loop returns "not available" and every
+	// LLM finding gets silently dropped.
+	reg.Register(tool.NewStub(tool.CodeComment))
+	reg.Register(tool.NewStub(tool.TaskDone))
 	reg.Freeze()
 
 	lookup := func(path string) *model.Diff {

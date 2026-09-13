@@ -186,29 +186,26 @@ func TestReviewE2E_WorkspaceMode_ProducesJSON(t *testing.T) {
 		t.Errorf("fake anthropic never got called — env resolution didn't reach the client")
 	}
 
-	// Comment survival is a softer assertion: today the review Deps builder
-	// doesn't register code_comment on the tool registry, so the loop's
-	// not-found short-circuit swallows the finding before it reaches the
-	// collector. That's a real production bug (unrelated to this test), but
-	// this test is scoped to env + wiring + JSON emit, not to code_comment
-	// registration. Log it, don't fail on it — so a fix upstream flips this
-	// into a positive assertion via the len>0 branch below.
-	// ponytail: comment-survival check is soft, upgrade to hard assert once
-	// review_cmd.go registers a code_comment stub on the tool registry.
-	if len(out.Comments) > 0 {
-		var mainGoHit bool
-		for _, c := range out.Comments {
-			if c.Path == "main.go" {
-				mainGoHit = true
-				break
-			}
+	// Comment survival: the fake anthropic response includes exactly one
+	// code_comment on main.go:1. The registry now registers stubs for
+	// code_comment + task_done (see review_cmd.buildToolRegistry) so the
+	// loop enters the special-cased CodeComment branch instead of
+	// short-circuiting on "not available". A regression here is exactly
+	// the production bug this test was created to catch.
+	if len(out.Comments) == 0 {
+		t.Fatalf("expected at least one comment in output; got zero. " +
+			"Likely regression: code_comment / task_done stubs missing from " +
+			"review_cmd.buildToolRegistry.")
+	}
+	var mainGoHit bool
+	for _, c := range out.Comments {
+		if c.Path == "main.go" {
+			mainGoHit = true
+			break
 		}
-		if !mainGoHit {
-			t.Errorf("no comment landed on main.go: %+v", out.Comments)
-		}
-	} else {
-		t.Logf("no comments in output — pipeline reached emit but code_comment " +
-			"was filtered before collector.Add (see review_cmd.buildToolRegistry)")
+	}
+	if !mainGoHit {
+		t.Errorf("no comment landed on main.go: %+v", out.Comments)
 	}
 
 	// 6) Session log — one JSONL per session ID under the override dir.
