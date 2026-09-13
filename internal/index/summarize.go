@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"text/template"
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/filetype"
@@ -18,21 +19,31 @@ import (
 	"github.com/shubam-disseqt/z-code-reviewer/internal/prompts"
 )
 
-// summarizeTemplate lazily parses the embedded prompts/summarize.md. Panics
-// on parse error at first use — the template ships in the binary and any
-// error means the build is corrupt.
-var summarizeTemplate = mustParseSummarizeTemplate()
+// summarizeTemplate is loaded lazily on first use so a corrupt embedded
+// prompt surfaces as a normal error at index time, not a panic at package
+// init that kills every zreview subcommand (including unrelated ones like
+// `zreview docs`).
+var (
+	summarizeTemplateOnce sync.Once
+	summarizeTemplateVal  *template.Template
+	summarizeTemplateErr  error
+)
 
-func mustParseSummarizeTemplate() *template.Template {
-	data, err := prompts.Templates.ReadFile("summarize.md")
-	if err != nil {
-		panic(fmt.Errorf("index: read summarize template: %w", err))
-	}
-	tpl, err := template.New("summarize").Parse(string(data))
-	if err != nil {
-		panic(fmt.Errorf("index: parse summarize template: %w", err))
-	}
-	return tpl
+func getSummarizeTemplate() (*template.Template, error) {
+	summarizeTemplateOnce.Do(func() {
+		data, err := prompts.Templates.ReadFile("summarize.md")
+		if err != nil {
+			summarizeTemplateErr = fmt.Errorf("index: read summarize template: %w", err)
+			return
+		}
+		tpl, err := template.New("summarize").Parse(string(data))
+		if err != nil {
+			summarizeTemplateErr = fmt.Errorf("index: parse summarize template: %w", err)
+			return
+		}
+		summarizeTemplateVal = tpl
+	})
+	return summarizeTemplateVal, summarizeTemplateErr
 }
 
 // summarizeFileJSON is the parsed shape of one file entry in the LLM
@@ -103,8 +114,12 @@ func renderSummarizePrompt(files []filePair) (string, error) {
 	for i, f := range files {
 		data.Files[i] = tplFile{Path: f.Path, Content: f.Content}
 	}
+	tpl, err := getSummarizeTemplate()
+	if err != nil {
+		return "", err
+	}
 	var buf bytes.Buffer
-	if err := summarizeTemplate.Execute(&buf, data); err != nil {
+	if err := tpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("index: render summarize prompt: %w", err)
 	}
 	return buf.String(), nil

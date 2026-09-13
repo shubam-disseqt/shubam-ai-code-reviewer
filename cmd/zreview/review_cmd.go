@@ -181,6 +181,9 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	if err != nil {
 		return fmt.Errorf("llm: %w", err)
 	}
+	for _, note := range tiers.Notes {
+		fmt.Fprintf(cmd.OutOrStderr(), "[zreview] tiers: %s\n", note)
+	}
 	summary, labels := runCheapAgents(ctx, tiers, kept, opts.Verbose, cmd.OutOrStderr())
 
 	// 4) rules

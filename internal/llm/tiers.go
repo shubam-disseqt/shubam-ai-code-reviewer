@@ -27,6 +27,10 @@ type Tiers struct {
 	Cheap      LLMClient
 	MainModel  string
 	CheapModel string
+	// Notes carries non-fatal setup warnings that callers should surface
+	// to the operator. Example: a partial cheap-tier config that silently
+	// routes Phase 15 traffic through the full-price main tier.
+	Notes []string
 }
 
 // ResolveTiers resolves both LLM tiers in one pass.
@@ -61,8 +65,16 @@ func ResolveTiers(configPath string, opts ResolveOptions) (Tiers, error) {
 		return Tiers{Main: main, Cheap: main, MainModel: mainEp.Model, CheapModel: cheapModel}, nil
 	}
 	if cheapModel == "" {
-		// Provider override alone is meaningless without a model. Skip to Main.
-		return Tiers{Main: main, Cheap: main, MainModel: mainEp.Model, CheapModel: mainEp.Model}, nil
+		// Provider override alone is meaningless without a model — this is
+		// the silent-full-price case. Surface it so the operator knows the
+		// summarizer + labeler are still running at main-tier cost.
+		return Tiers{
+			Main: main, Cheap: main,
+			MainModel: mainEp.Model, CheapModel: mainEp.Model,
+			Notes: []string{
+				"ZREVIEW_CHEAP_PROVIDER is set but ZREVIEW_CHEAP_MODEL is not — cheap tier is falling back to the main tier at full price. Set ZREVIEW_CHEAP_MODEL to a smaller model (e.g. claude-haiku-4-5) to activate cost routing.",
+			},
+		}, nil
 	}
 
 	cheapEp, err := ResolveEndpointWithOptions(configPath, ResolveOptions{
