@@ -113,8 +113,8 @@ npm install -g zreview
 docker run --rm -v "$PWD:/repo" ghcr.io/shubam-disseqt/z-code-reviewer:latest review --repo /repo
 ```
 
-For the GitHub Action, [PILOT.md](PILOT.md) has a ready-to-paste
-workflow.
+For the GitHub Action, see [docs/github-action.html](docs/github-action.html)
+for a ready-to-paste workflow.
 
 ## Quick Start
 
@@ -207,8 +207,8 @@ make build
 ## Roadmap
 
 `v0.1.0` ships the full feature set. `v1.0.0` follows after a one-week
-pilot on a real repo — playbook in [PILOT.md](PILOT.md), remaining
-items and phase-by-phase history in [ROADMAP.md](ROADMAP.md).
+pilot on a real repo — remaining items and phase-by-phase history in
+[ROADMAP.md](ROADMAP.md).
 
 ## License
 

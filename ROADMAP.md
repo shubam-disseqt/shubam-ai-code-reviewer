@@ -75,18 +75,19 @@ Phase 9 hardening).
 - **Done** — GitHub Pages deploy for the online copy — see
   `.github/workflows/pages.yml`. Triggers on push to `main` when
   `docs/**` changes, plus manual dispatch. Serves `docs/` as-is.
-- **Done** — `CHANGELOG.md` initial cut (Keep-a-Changelog 1.1,
-  SemVer, populated `[Unreleased]` section from git history).
-- **Pending** — v0.1.0 tagged (release step; not part of this
-  branch).
+- **Pending** — v0.1.0 tagged (release step; `release.yml` generates
+  release notes from `git log` on tag push).
 
 ## Phase 11 — Pilot on a disseqt repo (ready to run)
 
-Pilot playbook is in [PILOT.md](PILOT.md). It fixes the target repo
-(default `disseqt-auth-service`), the workflow snippet to drop in,
-the metrics to track for the pilot week, the bug-fix release triggers,
-and the v1.0.0 exit criteria. Everything else about the pilot is
-execution, not code — this repo ships v0.1.0 with the pilot ready to
+Default target: `disseqt-auth-service`. Drop the workflow snippet from
+[docs/github-action.html](docs/github-action.html) into the target
+repo, set the provider API key as a repo secret, and run for one week.
+Track false-positive rate, line-precision hit rate, and median cost
+per review; cut a `v0.1.x` patch on any confirmed regression. Move to
+v1.0.0 after five consecutive days at <20% false positives and ≥95%
+line-precision. Everything else about the pilot is execution, not
+code — this repo ships v0.1.0 with the pilot ready to
 kick off.
 
 ## Not planned
