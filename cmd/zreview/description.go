@@ -47,6 +47,7 @@ func UpdateDescription(
 	labels model.Labels,
 	scoreCounts map[scoring.Severity]int,
 	overlapFindings []overlap.Finding,
+	scannerFindings []model.LlmComment,
 ) error {
 	if client == nil {
 		return fmt.Errorf("update description: nil client")
@@ -59,7 +60,7 @@ func UpdateDescription(
 	if err != nil {
 		return fmt.Errorf("update description: %w", err)
 	}
-	updated := replaceZreviewBlock(current, renderZreviewBlock(summary, labels, scoreCounts, overlapFindings))
+	updated := replaceZreviewBlock(current, renderZreviewBlock(summary, labels, scoreCounts, overlapFindings, scannerFindings))
 	if updated != current {
 		if err := client.UpdatePRBody(ctx, owner, repo, pr, updated); err != nil {
 			return fmt.Errorf("update description: %w", err)
@@ -99,7 +100,7 @@ func replaceZreviewBlock(body, block string) string {
 // Kept intentionally small: a walkthrough paragraph, a severity table, the
 // risk tag, and a change-groups list. Every section is optional so a
 // summary that came back mostly-empty still produces a sane block.
-func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[scoring.Severity]int, overlapFindings []overlap.Finding) string {
+func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[scoring.Severity]int, overlapFindings []overlap.Finding, scannerFindings []model.LlmComment) string {
 	var b strings.Builder
 	b.WriteString("## Automated review by zreview\n\n")
 
@@ -115,6 +116,18 @@ func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[s
 		b.WriteString("### Potential overlap with other PRs\n\n")
 		b.WriteString(strings.TrimSpace(md))
 		b.WriteString("\n\n")
+	}
+
+	// Scanner findings are routed to SARIF for the inline-comment path
+	// (they're noisy on repeat pushes) but SARIF upload requires GitHub
+	// Advanced Security, which many repos don't have. If we don't also
+	// list them here the severity table shows "HIGH: 1" with no way to
+	// know WHERE. Render as a compact table so authors can act on them
+	// even when SARIF isn't the delivery channel.
+	if md := renderScannerFindings(scannerFindings); md != "" {
+		b.WriteString("### Scanner findings\n\n")
+		b.WriteString(md)
+		b.WriteString("\n")
 	}
 
 	b.WriteString(renderSeverityTable(counts))
@@ -154,6 +167,45 @@ func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[s
 	}
 
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// renderScannerFindings prints a compact markdown table of the scanner
+// findings (comments whose Source is `scanner:*`). Empty list returns "".
+// Truncates rule and message text so the description block stays scannable
+// even when a scanner emits many findings.
+func renderScannerFindings(comments []model.LlmComment) string {
+	rows := make([][4]string, 0, len(comments))
+	for _, c := range comments {
+		if !strings.HasPrefix(c.Source, "scanner:") {
+			continue
+		}
+		tool := strings.TrimPrefix(c.Source, "scanner:")
+		rule := c.Category
+		if rule == "" {
+			rule = "-"
+		}
+		msg := oneLine(c.Content)
+		if len(msg) > 100 {
+			msg = msg[:97] + "..."
+		}
+		loc := fmt.Sprintf("`%s:%d`", c.Path, c.StartLine)
+		rows = append(rows, [4]string{tool, rule, loc, msg})
+	}
+	if len(rows) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("| Tool | Rule | Location | Finding |\n| --- | --- | --- | --- |\n")
+	for _, r := range rows {
+		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", r[0], r[1], r[2], r[3])
+	}
+	return b.String()
+}
+
+// oneLine collapses whitespace runs to single spaces so a multi-line
+// scanner description renders inside a single markdown table cell.
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // severityOrder is the display order for the severity table. SUPPRESS is

@@ -268,7 +268,13 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 	// collides with this one" warning surfaces where the author will see
 	// it, not just in the standalone `zreview overlap` command's stdout.
 	counts := scoreCountsFromMap(cfg.Scores)
-	if err := UpdateDescription(ctx, cfg.GHClient, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.Summary, cfg.Labels, counts, cfg.Overlap); err != nil {
+	scannerComments := make([]model.LlmComment, 0)
+	for _, c := range cfg.Comments {
+		if isScannerSource(c.Source) {
+			scannerComments = append(scannerComments, c)
+		}
+	}
+	if err := UpdateDescription(ctx, cfg.GHClient, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.Summary, cfg.Labels, counts, cfg.Overlap, scannerComments); err != nil {
 		fmt.Fprintf(cfg.Stdout, "emit github: description update failed: %v (continuing)\n", err)
 	}
 	return nil
