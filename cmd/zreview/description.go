@@ -152,6 +152,16 @@ func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[s
 		b.WriteString("\n\n")
 	}
 
+	// Mermaid diagram of what the PR touches. GitHub renders this
+	// natively inside the markdown block. sanitizeMermaid strips edge-
+	// label `|` characters inside node labels because Mermaid's parser
+	// rejects the whole diagram otherwise (see README bug in this repo).
+	if d := sanitizeMermaid(summary.Diagram); d != "" {
+		b.WriteString("### PR flow\n\n```mermaid\n")
+		b.WriteString(d)
+		b.WriteString("\n```\n\n")
+	}
+
 	// Overlap goes above the severity table because a merge collision is
 	// more actionable than a per-finding count — the author needs to know
 	// to coordinate BEFORE spending time on the review comments.
@@ -210,6 +220,53 @@ func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[s
 	}
 
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// sanitizeMermaid returns a Mermaid flowchart body safe to inline inside a
+// ```mermaid``` fence. Rules the summarizer's LLM output has been observed
+// to violate:
+//   - `|` inside `[label]` — Mermaid parses `|` as edge-label syntax and
+//     rejects the whole diagram (README bug)
+//   - literal `\n` escape sequences (backslash+n) rather than newlines
+//   - accidental ```mermaid fence wrapper
+//
+// Returns "" when the input isn't a plausible flowchart body — better to
+// drop the section than break the rest of the description block.
+func sanitizeMermaid(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	// Strip an accidental fence wrapper if the LLM added one.
+	s = strings.TrimPrefix(s, "```mermaid")
+	s = strings.TrimPrefix(s, "```")
+	s = strings.TrimSuffix(s, "```")
+	s = strings.TrimSpace(s)
+	// Real newlines only.
+	s = strings.ReplaceAll(s, "\\n", "\n")
+	if !strings.HasPrefix(s, "flowchart") && !strings.HasPrefix(s, "graph") {
+		return ""
+	}
+	// Replace `|` inside brackets with `/`.
+	var out strings.Builder
+	depth := 0
+	for _, r := range s {
+		switch r {
+		case '[', '(', '{':
+			depth++
+		case ']', ')', '}':
+			if depth > 0 {
+				depth--
+			}
+		case '|':
+			if depth > 0 {
+				out.WriteRune('/')
+				continue
+			}
+		}
+		out.WriteRune(r)
+	}
+	return strings.TrimSpace(out.String())
 }
 
 // escalateRiskFromFindings raises Labels.RiskTag to reflect what the

@@ -45,7 +45,7 @@ flowchart LR
   E --> F
   F --> G[fingerprint<br/>vs previous]
   G --> H[severity<br/>scoring]
-  H --> I[stdout &#124; json &#124;<br/>github &#124; sarif]
+  H --> I[stdout / json /<br/>github / sarif]
   D -.-> I
 ```
 

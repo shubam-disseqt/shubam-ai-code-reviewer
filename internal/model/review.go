@@ -49,6 +49,12 @@ type Summary struct {
 	ChangeGroups []ChangeGroup `json:"change_groups,omitempty"`
 	TestingNotes string        `json:"testing_notes,omitempty"`
 	Risk         string        `json:"risk,omitempty"`
+	// Diagram is a Mermaid flow diagram (fenced without the ```mermaid
+	// markers — the emitter adds them). Rendered by GitHub natively so
+	// PR viewers see an interactive graph of what the PR touches and how
+	// the pieces relate. Empty when the summarizer can't produce a useful
+	// diagram (trivial PR, parse failure).
+	Diagram string `json:"diagram,omitempty"`
 }
 
 // Labels is the cheap-tier labeler's structured output.
