@@ -37,7 +37,10 @@ func Compute(in Inputs, p Policy) Score {
 	for _, f := range in.Files {
 		totalAdded += f.LinesAdded
 		totalDeleted += f.LinesDeleted
-		if f.IsNew {
+		// Renames are moves, not new code. Count them against LOC churn and
+		// files_changed, but never against new_files — a whole-package move
+		// otherwise blows the score up as if every file were freshly written.
+		if f.IsNew && !f.IsRenamed {
 			newFiles++
 		}
 		churn := f.LinesAdded + f.LinesDeleted

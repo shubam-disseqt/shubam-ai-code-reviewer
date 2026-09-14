@@ -155,6 +155,43 @@ func TestCompute_TestRatioBonusApplies(t *testing.T) {
 	}
 }
 
+// TestCompute_RenamedFilesNotCountedAsNew verifies that a whole-package move
+// (renamed files with IsNew flag) doesn't inflate the score via the new_files
+// bucket. Renamed files should still contribute to files_changed and
+// loc_churn, but never to new_files.
+func TestCompute_RenamedFilesNotCountedAsNew(t *testing.T) {
+	renamed := []FileDelta{
+		{Path: "internal/bar/a.go", LinesAdded: 1, LinesDeleted: 1, IsNew: true, IsRenamed: true},
+		{Path: "internal/bar/b.go", LinesAdded: 1, LinesDeleted: 1, IsNew: true, IsRenamed: true},
+		{Path: "internal/bar/c.go", LinesAdded: 1, LinesDeleted: 1, IsNew: true, IsRenamed: true},
+	}
+	got := Compute(Inputs{Files: renamed}, baselinePolicy(t))
+	for _, c := range got.Contributions {
+		if c.Signal == "New files" {
+			t.Errorf("renamed files should not trigger New files contribution: %+v", c)
+		}
+	}
+	// Sanity: LOC churn and Files changed should still fire.
+	if !hasSignal(got, "Files changed") {
+		t.Error("Files changed contribution missing for renamed files")
+	}
+
+	// Contrast: three truly new files DO add a new_files contribution.
+	fresh := []FileDelta{
+		{Path: "internal/bar/a.go", LinesAdded: 1, LinesDeleted: 1, IsNew: true},
+		{Path: "internal/bar/b.go", LinesAdded: 1, LinesDeleted: 1, IsNew: true},
+		{Path: "internal/bar/c.go", LinesAdded: 1, LinesDeleted: 1, IsNew: true},
+	}
+	freshScore := Compute(Inputs{Files: fresh}, baselinePolicy(t))
+	if !hasSignal(freshScore, "New files") {
+		t.Error("truly new files should still trigger New files contribution")
+	}
+	if freshScore.Raw <= got.Raw {
+		t.Errorf("truly new files should score higher than a rename of the same count; new=%f renamed=%f",
+			freshScore.Raw, got.Raw)
+	}
+}
+
 func TestCompute_CapsAreEnforced(t *testing.T) {
 	// LOC churn cap is 4.0 at 0.10/10 lines. 100 lines would cost 1.0.
 	// 500 lines would want 5.0 but must cap.

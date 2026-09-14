@@ -104,6 +104,69 @@ func TestRenderDiffsForFileDeletedUsesOldPath(t *testing.T) {
 	}
 }
 
+// TestPromptUser_ShowsRenameHint verifies that renamed files carry a
+// renamed_from attribute so the reviewer can distinguish a move from a
+// delete+add pair.
+func TestPromptUser_ShowsRenameHint(t *testing.T) {
+	d := model.Diff{
+		OldPath:    "internal/data/store.go",
+		NewPath:    "internal/store/store.go",
+		Diff:       "diff body with one changed line\n",
+		IsRenamed:  true,
+		Insertions: 1,
+		Deletions:  1,
+	}
+	got := renderDiffsForFile(d)
+	if !strings.Contains(got, `renamed_from="internal/data/store.go"`) {
+		t.Errorf("missing renamed_from attribute: %s", got)
+	}
+	if !strings.Contains(got, `<file path="internal/store/store.go"`) {
+		t.Errorf("missing new path attribute: %s", got)
+	}
+	if !strings.Contains(got, "diff body with one changed line") {
+		t.Errorf("body dropped for non-pure rename: %s", got)
+	}
+}
+
+// TestPromptUser_PureRenameCollapsesBody verifies that a 100%-similarity
+// rename (no line changes) renders a one-line note instead of an empty diff.
+func TestPromptUser_PureRenameCollapsesBody(t *testing.T) {
+	d := model.Diff{
+		OldPath:   "pkg/old.go",
+		NewPath:   "pkg/new.go",
+		Diff:      "diff --git a/pkg/old.go b/pkg/new.go\nsimilarity index 100%\nrename from pkg/old.go\nrename to pkg/new.go\n",
+		IsRenamed: true,
+	}
+	got := renderDiffsForFile(d)
+	if !strings.Contains(got, `renamed_from="pkg/old.go"`) {
+		t.Errorf("missing renamed_from: %s", got)
+	}
+	if !strings.Contains(got, "with no content change") {
+		t.Errorf("pure rename should render note, got: %s", got)
+	}
+	if strings.Contains(got, "similarity index 100%") {
+		t.Errorf("pure rename should not echo raw diff header: %s", got)
+	}
+}
+
+func TestIsPureRename(t *testing.T) {
+	tests := []struct {
+		name string
+		d    model.Diff
+		want bool
+	}{
+		{"pure rename", model.Diff{IsRenamed: true}, true},
+		{"rename with edits", model.Diff{IsRenamed: true, Insertions: 3}, false},
+		{"rename with deletions", model.Diff{IsRenamed: true, Deletions: 1}, false},
+		{"not a rename", model.Diff{IsNew: true}, false},
+	}
+	for _, tt := range tests {
+		if got := isPureRename(tt.d); got != tt.want {
+			t.Errorf("%s: got %v want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestRenderChangedFilesJSON(t *testing.T) {
 	diffs := []model.Diff{
 		{NewPath: "a.go"},

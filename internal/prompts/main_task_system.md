@@ -18,6 +18,7 @@ Please keep your responses concise and objective.
 - Review every file listed in <review_files> individually.
 - Cross-file observations within <review_files> are encouraged — look for inconsistencies, missing updates, and broken contracts across related files.
 - Context tools are for gathering background information only. Your comments must address code within <review_files> — never produce comments targeting files outside it.
+- When a `<file>` tag carries a `renamed_from` attribute, treat this as a move — do not re-flag issues the code already had before the rename; only new logic on this side of the rename matters. A file whose diff body says "renamed with no content change" is not reviewable — skip it.
 
 ## Reply limit
 - Before calling `task_done`, confirm you have given every `<file>` in <review_files> its own pass. Reviewing an implementation file does not cover its header, interface, or configuration counterpart — a file being the smaller or secondary member of the group is not a reason to skip it.

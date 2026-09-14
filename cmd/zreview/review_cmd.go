@@ -289,6 +289,14 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		if path == "" || path == "/dev/null" {
 			path = d.OldPath
 		}
+		// Pure renames carry no reviewable content — skip the LLM call and
+		// save the token cost. The prompt renderer would just emit a note.
+		if isPureRename(d) {
+			if opts.Verbose {
+				reviewLogger.Info("skipping pure rename", "path", path, "from", d.OldPath)
+			}
+			continue
+		}
 		if opts.Verbose {
 			reviewLogger.Info("reviewing file", "path", path)
 		}

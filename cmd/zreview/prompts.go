@@ -69,7 +69,10 @@ func buildReviewMessages(sys, userTmpl, systemRule, reviewCtx, knownIssues, chan
 }
 
 // renderDiffsForFile produces the <file>...</file> block for one diff, the
-// shape the OCR system prompt expects.
+// shape the OCR system prompt expects. Renamed files gain a renamed_from
+// attribute so the reviewer treats the change as a move and does not re-flag
+// issues that already existed pre-rename. Pure renames (no line changes)
+// collapse to a single note line in place of the (empty) diff body.
 func renderDiffsForFile(d model.Diff) string {
 	path := d.NewPath
 	if path == "" || path == "/dev/null" {
@@ -78,13 +81,34 @@ func renderDiffsForFile(d model.Diff) string {
 	var b strings.Builder
 	b.WriteString("<file path=\"")
 	b.WriteString(path)
-	b.WriteString("\">\n")
-	b.WriteString(d.Diff)
-	if !strings.HasSuffix(d.Diff, "\n") {
-		b.WriteByte('\n')
+	b.WriteString("\"")
+	if d.IsRenamed && d.OldPath != "" && d.OldPath != path {
+		b.WriteString(" renamed_from=\"")
+		b.WriteString(d.OldPath)
+		b.WriteString("\"")
+	}
+	b.WriteString(">\n")
+	if isPureRename(d) {
+		b.WriteString("Renamed from ")
+		b.WriteString(d.OldPath)
+		b.WriteString(" to ")
+		b.WriteString(path)
+		b.WriteString(" with no content change.\n")
+	} else {
+		b.WriteString(d.Diff)
+		if !strings.HasSuffix(d.Diff, "\n") {
+			b.WriteByte('\n')
+		}
 	}
 	b.WriteString("</file>\n")
 	return b.String()
+}
+
+// isPureRename reports whether this diff is a rename/move with no line
+// changes on either side. Used to skip the LLM call for the file entirely —
+// there is nothing to review.
+func isPureRename(d model.Diff) bool {
+	return d.IsRenamed && d.Insertions == 0 && d.Deletions == 0
 }
 
 // renderChangedFilesJSON lists the paths of every diff in the run for the
