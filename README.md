@@ -537,18 +537,7 @@ Shipped: Phases 12-19 (tiering, scanners, cheap-tier, overlap, scoring, descript
 
 Full history: [`ROADMAP.md`](ROADMAP.md)
 
----
 
-## Attribution
-
-`zreview` builds on two Apache-2.0 upstream projects:
-
-- [alibaba/open-code-review](https://github.com/alibaba/open-code-review) — diff-precision layer, tool loop, prompt templates, comment-args-repair
-- [miracodeai/mira](https://github.com/miracodeai/mira) — persistent code index, JIT cross-file context, cross-PR overlap detector, business-rules injection
-
-Per-file attribution: [`NOTICE`](NOTICE) · Detailed port map: [`docs/PORTING.md`](docs/PORTING.md)
-
----
 
 <div align="center">
 
