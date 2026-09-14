@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/spf13/cobra"
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/index"
@@ -41,6 +42,8 @@ func newDoctorCmd() *cobra.Command {
 func runDoctor(ctx context.Context, cmd *cobra.Command) error {
 	checks := []doctorCheck{
 		checkProvider(),
+		checkDeepSeek(),
+		checkBedrock(ctx),
 		checkGit(ctx),
 		checkDBURL(ctx),
 		checkOrgRulesRepo(),
@@ -84,6 +87,112 @@ func checkProvider() doctorCheck {
 	}
 	c.Status = "ok"
 	c.Detail = fmt.Sprintf("%s (%s)", ep.Model, ep.Source)
+	return c
+}
+
+// checkDeepSeek reports whether DEEPSEEK_API_KEY is set and looks structurally
+// valid. It does NOT call the DeepSeek API — a doctor pass must never cost the
+// operator money. Keys are `sk-` prefixed on the DeepSeek platform.
+func checkDeepSeek() doctorCheck {
+	c := doctorCheck{Name: "deepseek key"}
+	key := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))
+	if key == "" {
+		c.Status = "skip"
+		c.Detail = "DEEPSEEK_API_KEY not set"
+		return c
+	}
+	// Structural sanity only. DeepSeek keys are `sk-` + ~32 chars; anything
+	// outside a reasonable band is almost certainly a copy-paste error.
+	if !strings.HasPrefix(key, "sk-") {
+		c.Status = "fail"
+		c.Detail = "DEEPSEEK_API_KEY does not start with sk-"
+		c.Suggestion = "regenerate at https://platform.deepseek.com/api_keys"
+		return c
+	}
+	if len(key) < 20 || len(key) > 100 {
+		c.Status = "fail"
+		c.Detail = fmt.Sprintf("DEEPSEEK_API_KEY length %d is out of the expected 20-100 range", len(key))
+		c.Suggestion = "regenerate at https://platform.deepseek.com/api_keys"
+		return c
+	}
+	c.Status = "ok"
+	c.Detail = fmt.Sprintf("key present (base URL https://api.deepseek.com)")
+	return c
+}
+
+// bedrockAuthMethod classifies which credential source the AWS default chain
+// is likely to use, based only on env vars — no SDK call. Order mirrors AWS
+// precedence: AWS_BEARER_TOKEN_BEDROCK wins in the bedrock middleware, then
+// static keys, then AWS_PROFILE, otherwise ambient (SSO cache, instance role,
+// container role, credential_process — resolved lazily at request time).
+func bedrockAuthMethod() string {
+	switch {
+	case os.Getenv("AWS_BEARER_TOKEN_BEDROCK") != "":
+		return "bearer token (AWS_BEARER_TOKEN_BEDROCK)"
+	case os.Getenv("AWS_ACCESS_KEY_ID") != "" && os.Getenv("AWS_SECRET_ACCESS_KEY") != "":
+		return "static keys (AWS_ACCESS_KEY_ID)"
+	case os.Getenv("AWS_PROFILE") != "":
+		return fmt.Sprintf("profile (AWS_PROFILE=%s)", os.Getenv("AWS_PROFILE"))
+	}
+	return "ambient chain (SSO cache / instance role / credential_process)"
+}
+
+// checkBedrock verifies the AWS credential chain resolves for the Bedrock code
+// path. It runs when ZREVIEW_PROVIDER=bedrock or when any AWS_* env var hints
+// that Bedrock is the intended provider; otherwise it skips.
+//
+// It does NOT call Bedrock — a doctor pass must not spend money. It also does
+// not call Retrieve() on the credential provider, because SSO refresh and IMDS
+// lookup are network calls and, in the SSO case, can pop an interactive login
+// prompt. Non-nil awsCfg.Credentials after LoadDefaultConfig is what the
+// Bedrock client itself relies on before the first signed request.
+func checkBedrock(ctx context.Context) doctorCheck {
+	c := doctorCheck{Name: "bedrock"}
+
+	provider := strings.ToLower(strings.TrimSpace(os.Getenv("ZREVIEW_PROVIDER")))
+	awsHint := os.Getenv("AWS_REGION") != "" ||
+		os.Getenv("AWS_PROFILE") != "" ||
+		os.Getenv("AWS_BEARER_TOKEN_BEDROCK") != "" ||
+		os.Getenv("AWS_ACCESS_KEY_ID") != ""
+	if provider != "bedrock" && !awsHint {
+		c.Status = "skip"
+		c.Detail = "ZREVIEW_PROVIDER != bedrock and no AWS_* env hints"
+		return c
+	}
+
+	// Bound the config load so a broken profile cannot stall doctor. Same
+	// timeout the client uses on the hot path.
+	loadCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	var loadOpts []func(*awsconfig.LoadOptions) error
+	if profile := os.Getenv("AWS_PROFILE"); profile != "" {
+		loadOpts = append(loadOpts, awsconfig.WithSharedConfigProfile(profile))
+	}
+	if region := os.Getenv("AWS_REGION"); region != "" {
+		loadOpts = append(loadOpts, awsconfig.WithRegion(region))
+	}
+	awsCfg, err := awsconfig.LoadDefaultConfig(loadCtx, loadOpts...)
+	if err != nil {
+		c.Status = "fail"
+		c.Detail = fmt.Sprintf("LoadDefaultConfig failed: %v", err)
+		c.Suggestion = "verify ~/.aws/config, AWS_PROFILE, or run `aws sso login`"
+		return c
+	}
+	if awsCfg.Credentials == nil {
+		c.Status = "fail"
+		c.Detail = "no credential provider resolved from the AWS default chain"
+		c.Suggestion = "set AWS_PROFILE, AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, or AWS_BEARER_TOKEN_BEDROCK"
+		return c
+	}
+	if awsCfg.Region == "" {
+		c.Status = "fail"
+		c.Detail = fmt.Sprintf("no AWS region resolved (auth=%s)", bedrockAuthMethod())
+		c.Suggestion = "export AWS_REGION=us-east-1 (or us-west-2); Bedrock requires a region to derive the runtime host"
+		return c
+	}
+	c.Status = "ok"
+	c.Detail = fmt.Sprintf("region=%s, auth=%s", awsCfg.Region, bedrockAuthMethod())
 	return c
 }
 

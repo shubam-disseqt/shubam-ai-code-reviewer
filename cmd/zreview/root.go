@@ -30,6 +30,6 @@ in the bundled offline docs site — run 'zreview docs' to browse it.`,
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newDocsCmd())
 	root.AddCommand(newReviewCmd(), newIndexCmd(), newOverlapCmd(),
-		newRulesCmd(), newDoctorCmd())
+		newRulesCmd(), newDoctorCmd(), newMetricsCmd())
 	return root
 }
