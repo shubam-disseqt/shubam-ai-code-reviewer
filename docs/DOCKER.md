@@ -1,0 +1,88 @@
+# Docker
+
+`zreview` ships as a static, multi-arch container image on GitHub Container Registry.
+
+## Image
+
+- Registry: `ghcr.io/shubam-disseqt/zreview`
+- Tags: `latest`, `vX.Y.Z` (matching release tags), `manual-<sha>` for workflow_dispatch builds
+- Platforms: `linux/amd64`, `linux/arm64`
+- Base: `alpine:3.19` with `ca-certificates` and `git`
+- Runs as UID/GID `1000:1000` (non-root, no shell escalation baked in)
+- Working directory: `/workspace` — mount your repo there
+- Entrypoint: `/usr/local/bin/zreview` (invoke subcommands directly, e.g. `review`, `overlap`)
+
+Images are published with Sigstore-backed **SBOM + provenance attestations** by
+[`docker.yml`](../.github/workflows/docker.yml). Verify with:
+
+```bash
+gh attestation verify oci://ghcr.io/shubam-disseqt/zreview:v1.0.0 \
+  --repo shubam-disseqt/z-code-reviewer
+```
+
+## Pin, don't float
+
+`:latest` is convenient for demos; for CI, pin to a version or a digest:
+
+```bash
+docker pull ghcr.io/shubam-disseqt/zreview:v1.0.0
+docker pull ghcr.io/shubam-disseqt/zreview@sha256:...
+```
+
+## Run against a local checkout
+
+```bash
+docker run --rm \
+  -v "$PWD:/workspace" \
+  -e OPENAI_API_KEY \
+  -e GITHUB_TOKEN \
+  -e GITHUB_REPOSITORY=owner/repo \
+  ghcr.io/shubam-disseqt/zreview:latest \
+  review --pr 42 --format github
+```
+
+Provider env vars are routed by name: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+`DEEPSEEK_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK` (+ `AWS_REGION`). Pass whichever
+matches the `--provider` you configure (default: `openai`).
+
+## Build locally
+
+Single-arch, tagged with your working commit:
+
+```bash
+docker build -t zreview:dev \
+  --build-arg ZREVIEW_VERSION=$(git describe --tags --always --dirty) .
+```
+
+Multi-arch (requires buildx + QEMU):
+
+```bash
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t zreview:dev \
+  --load .
+```
+
+## Adding scanners
+
+The image intentionally ships without `gitleaks` / `semgrep` / `trivy` to keep the
+attack surface small and the layers small. Two options:
+
+1. **Layered image (preferred):** derive your own image and add what you need.
+
+   ```dockerfile
+   FROM ghcr.io/shubam-disseqt/zreview:v1.0.0
+   USER root
+   RUN apk add --no-cache gitleaks
+   USER 1000:1000
+   ```
+
+2. **Sidecar step:** run scanners in a separate CI step and pass results into
+   zreview via the standard rule/finding channels.
+
+## Security notes
+
+- No shell in the entrypoint — the container executes `zreview` directly.
+- No secrets baked into layers; API keys arrive only via `-e` at runtime.
+- No writable paths outside `/workspace` (which is your mount) and `/tmp`.
+- The binary is `CGO_ENABLED=0` and `-trimpath`; no dynamic linker surface.

@@ -1,0 +1,57 @@
+{
+  "name": "zreview",
+  "displayName": "zreview — AI code reviewer",
+  "description": "Run zreview against the current diff or file and render findings in the Problems panel.",
+  "version": "0.1.0",
+  "publisher": "disseqt",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onCommand:zreview.reviewCurrentDiff",
+    "onCommand:zreview.reviewFile"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "zreview.reviewCurrentDiff",
+        "title": "zreview: Review Current Diff"
+      },
+      {
+        "command": "zreview.reviewFile",
+        "title": "zreview: Review Current File"
+      }
+    ],
+    "configuration": {
+      "title": "zreview",
+      "properties": {
+        "zreview.binaryPath": {
+          "type": "string",
+          "default": "zreview",
+          "description": "Path to the zreview binary. Use an absolute path if it is not on PATH."
+        },
+        "zreview.format": {
+          "type": "string",
+          "default": "json",
+          "enum": ["json"],
+          "description": "Output format zreview should emit. Only 'json' is consumed by this extension."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -p . --watch"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}
