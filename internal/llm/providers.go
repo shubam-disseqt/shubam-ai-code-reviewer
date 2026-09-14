@@ -114,9 +114,11 @@ var registry = []Provider{
 		BaseURL:     "https://api.deepseek.com",
 		EnvVar:      "DEEPSEEK_API_KEY",
 		Models: []string{
-			"deepseek-v4-pro",
-			"deepseek-v4-flash",
-			"deepseek-flash",
+			// Current DeepSeek catalog (2026). The reasoner tier costs a
+			// small premium vs chat but usually isn't needed for review;
+			// keep chat first so ZREVIEW_MODEL-less runs land on it.
+			"deepseek-chat",
+			"deepseek-reasoner",
 		},
 	},
 }

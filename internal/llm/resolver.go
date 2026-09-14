@@ -114,6 +114,18 @@ func ResolveEndpointWithOptions(configPath string, opts ResolveOptions) (Resolve
 			return ResolvedEndpoint{}, fmt.Errorf("resolve OCR config file: %w", err)
 		}
 		if !ok {
+			// AmbientAuth providers (e.g. Bedrock) have no api_key to
+			// configure — the SDK resolves credentials from the process
+			// environment (AWS credential chain). Fall through to the
+			// preset registry using ambient auth instead of demanding a
+			// config file that has nothing useful to configure.
+			if preset, isPreset := LookupProvider(opts.Provider); isPreset && preset.AmbientAuth {
+				ambient, ambientErr := resolveAmbientPreset(preset, opts.Model)
+				if ambientErr != nil {
+					return ResolvedEndpoint{}, ambientErr
+				}
+				return finalizeResolvedEndpoint("provider environment ("+opts.Provider+"/ambient)", ambient, env), nil
+			}
 			section := "custom_providers"
 			if _, isPreset := LookupProvider(opts.Provider); isPreset {
 				section = "providers"
@@ -736,6 +748,32 @@ func tryProviderEnv(modelOverride string) (ResolvedEndpoint, bool, error) {
 		}, true, nil
 	}
 	return ResolvedEndpoint{}, false, nil
+}
+
+// resolveAmbientPreset produces an endpoint for a provider that uses
+// ambient credentials (Bedrock's AWS SigV4 chain). No token is required;
+// the underlying SDK signs each request from the process environment.
+// Model preference matches tryProviderEnv: explicit override → ZREVIEW_MODEL
+// → first preset in the registry.
+func resolveAmbientPreset(p Provider, modelOverride string) (ResolvedEndpoint, error) {
+	model := modelOverride
+	if model == "" {
+		model = strings.TrimSpace(os.Getenv("ZREVIEW_MODEL"))
+	}
+	if model == "" && len(p.Models) > 0 {
+		model = p.Models[0]
+	}
+	if model == "" {
+		return ResolvedEndpoint{}, fmt.Errorf(
+			"provider %q uses ambient auth but no model is configured; set ZREVIEW_MODEL or pass --model",
+			p.Name)
+	}
+	return ResolvedEndpoint{
+		URL:        p.BaseURL,
+		Model:      model,
+		Protocol:   p.Protocol,
+		AuthHeader: p.AuthHeader,
+	}, nil
 }
 
 // tryCCEnv reads Claude Code environment variables.

@@ -151,13 +151,21 @@ func TestLookupProvider_OpenAIDetails(t *testing.T) {
 	}
 }
 
-func TestLookupProvider_DeepSeekFlash(t *testing.T) {
+func TestLookupProvider_DeepSeekCatalog(t *testing.T) {
 	p, ok := LookupProvider("deepseek")
 	if !ok {
 		t.Fatal("deepseek not found")
 	}
-	if !ModelListContains(p.Models, "deepseek-flash") {
-		t.Error(`deepseek models do not contain "deepseek-flash"`)
+	// deepseek-chat must be present and first — it's the default when no
+	// ZREVIEW_MODEL is set. deepseek-reasoner is the reasoning-tier variant.
+	// Previous fixtures used aspirational names (deepseek-v4-*, deepseek-flash)
+	// that don't exist on the live platform; keep the test grounded in what
+	// api.deepseek.com actually returns.
+	if len(p.Models) == 0 || p.Models[0] != "deepseek-chat" {
+		t.Errorf("deepseek default model should be deepseek-chat, got %v", p.Models)
+	}
+	if !ModelListContains(p.Models, "deepseek-reasoner") {
+		t.Error(`deepseek models do not contain "deepseek-reasoner"`)
 	}
 }
 

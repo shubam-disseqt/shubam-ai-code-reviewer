@@ -127,3 +127,38 @@ func TestRunScannersNoBinariesIsNonFatal(t *testing.T) {
 		t.Errorf("expected summary log line, got: %s", buf.String())
 	}
 }
+
+// TestFilterScannerFindingsToPaths guards the fix for the pilot bug where
+// gitleaks was flagging fixture secrets in .claude/worktrees/** and testdata/
+// files that weren't part of the PR diff.
+func TestFilterScannerFindingsToPaths(t *testing.T) {
+	findings := []scanner.ScannerFinding{
+		{Tool: "gitleaks", Path: "internal/auth/session.go", Line: 10},                     // in-scope
+		{Tool: "gitleaks", Path: "internal/scanner/testdata/gitleaks.json", Line: 5},        // not touched
+		{Tool: "gitleaks", Path: ".claude/worktrees/agent-abc/pricing.go", Line: 10},        // agent worktree
+		{Tool: "gitleaks", Path: "vendor/some-lib/creds.go", Line: 22},                      // vendor
+		{Tool: "gitleaks", Path: "node_modules/pkg/index.js", Line: 1},                      // node_modules
+	}
+	// Changed-paths set: only the auth file.
+	got := filterScannerFindingsToPaths(findings, []string{"internal/auth/session.go"})
+	if len(got) != 1 {
+		t.Fatalf("expected 1 finding after scope filter; got %d: %+v", len(got), got)
+	}
+	if got[0].Path != "internal/auth/session.go" {
+		t.Errorf("wrong finding survived; got %q", got[0].Path)
+	}
+}
+
+// TestFilterScannerFindingsToPaths_DefensiveExclusion verifies .claude/**
+// / vendor/** / node_modules/** are excluded even when a caller mistakenly
+// passes them in the changed-paths list.
+func TestFilterScannerFindingsToPaths_DefensiveExclusion(t *testing.T) {
+	findings := []scanner.ScannerFinding{
+		{Tool: "gitleaks", Path: ".claude/worktrees/agent-abc/pricing.go", Line: 10},
+	}
+	// Even if the caller mistakenly includes the .claude path in changed:
+	got := filterScannerFindingsToPaths(findings, []string{".claude/worktrees/agent-abc/pricing.go"})
+	if len(got) != 0 {
+		t.Errorf("defensive exclusion missing — .claude/** should never surface: %+v", got)
+	}
+}

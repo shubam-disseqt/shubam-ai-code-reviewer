@@ -44,7 +44,7 @@ func emitMetrics(logger *slog.Logger, m Metrics) {
 	// Compact text summary; keys chosen to match the JSON attr names so
 	// scripts written against one shape can reuse patterns for the other.
 	msg := fmt.Sprintf(
-		"duration=%s files=%d tokens=in:%d/out:%d cost=$%.2f findings=new:%d/carried:%d/resolved:%d scanner=%d comments=%d",
+		"duration=%s files=%d tokens=in:%d/out:%d cost=$%.4f findings=new:%d/carried:%d/resolved:%d scanner=%d comments=%d",
 		formatDurationMs(m.DurationMs),
 		m.FilesReviewed,
 		m.PromptTokens,

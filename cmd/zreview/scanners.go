@@ -36,6 +36,12 @@ func runScanners(ctx context.Context, repo string, kept []model.Diff, logger *sl
 		pipelineLog.Warn("continuing without scanner findings", "err", err.Error())
 		return nil
 	}
+	// Scope findings to changed paths only. Scanner adapters currently walk
+	// the whole repo (they ignore the `paths` arg), so a run picks up copies
+	// of testdata fixtures + agent worktrees under .claude/ that were never
+	// touched by this PR. Post-filter is the safe fix — no scanner adapter
+	// gets a new contract.
+	findings = filterScannerFindingsToPaths(findings, paths)
 	tally := scanner.TallyByTool(findings)
 	pipelineLog.Info(
 		fmt.Sprintf("%d findings from %s", len(findings), tally),
@@ -43,6 +49,43 @@ func runScanners(ctx context.Context, repo string, kept []model.Diff, logger *sl
 		"by_tool", tally,
 	)
 	return findings
+}
+
+// filterScannerFindingsToPaths drops findings whose path is not in the
+// changed-paths set. Also drops anything under .claude/ (agent worktrees)
+// and vendored / generated trees as defense in depth even if the caller
+// forgets to scope.
+func filterScannerFindingsToPaths(findings []scanner.ScannerFinding, changedPaths []string) []scanner.ScannerFinding {
+	if len(findings) == 0 {
+		return findings
+	}
+	changed := make(map[string]struct{}, len(changedPaths))
+	for _, p := range changedPaths {
+		changed[p] = struct{}{}
+	}
+	out := findings[:0]
+	for _, f := range findings {
+		if _, ok := changed[f.Path]; !ok {
+			continue
+		}
+		if isNonReviewablePath(f.Path) {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// isNonReviewablePath excludes paths that scanner runs should never
+// surface even if git happens to track them.
+func isNonReviewablePath(p string) bool {
+	lower := strings.ToLower(p)
+	return strings.HasPrefix(lower, ".claude/") ||
+		strings.Contains(lower, "/.claude/") ||
+		strings.HasPrefix(lower, "vendor/") ||
+		strings.Contains(lower, "/vendor/") ||
+		strings.HasPrefix(lower, "node_modules/") ||
+		strings.Contains(lower, "/node_modules/")
 }
 
 // scannerPathsFromDiffs mirrors changedPathsFromDiffs but is defined here

@@ -70,6 +70,10 @@ type emittedComment struct {
 // emit writes the comments in the chosen format. For "github" it posts each
 // comment to the given PR and prints a summary to stdout.
 func emit(ctx context.Context, cfg emitConfig) error {
+	// Dedupe same-location comments before any format sees them. Occasionally
+	// the LLM emits two comments at the exact same (path, line) — usually a
+	// paraphrase of the same finding. Keep the first, drop the rest.
+	cfg.Comments = dedupeCommentsByLocation(cfg.Comments)
 	switch cfg.Format {
 	case formatStdout:
 		return emitStdout(cfg.Stdout, cfg.Comments, cfg.Overlap)
@@ -82,6 +86,33 @@ func emit(ctx context.Context, cfg emitConfig) error {
 	default:
 		return fmt.Errorf("emit: unsupported format %q", cfg.Format)
 	}
+}
+
+// dedupeCommentsByLocation collapses comments that share the exact same
+// (path, start_line, end_line) into one — first wins. Scanner-sourced
+// findings and LLM findings at the same location survive independently
+// (they route to different destinations: SARIF vs inline).
+func dedupeCommentsByLocation(comments []model.LlmComment) []model.LlmComment {
+	if len(comments) < 2 {
+		return comments
+	}
+	type key struct {
+		path      string
+		start     int
+		end       int
+		isScanner bool
+	}
+	seen := make(map[key]bool, len(comments))
+	out := comments[:0]
+	for _, c := range comments {
+		k := key{c.Path, c.StartLine, c.EndLine, strings.HasPrefix(c.Source, "scanner:")}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, c)
+	}
+	return out
 }
 
 // emitConfig bundles the emit inputs — smaller signatures beat a long arg list.

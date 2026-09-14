@@ -85,15 +85,15 @@ func TestResolveTiers(t *testing.T) {
 					Provider: "anthropic",
 					Providers: map[string]providerEntryConfig{
 						"anthropic": {APIKey: "sk-anth", Model: "claude-sonnet-5"},
-						"deepseek":  {APIKey: "sk-ds", Model: "deepseek-flash"},
+						"deepseek":  {APIKey: "sk-ds", Model: "deepseek-chat"},
 					},
 				}
 				*cfgPath = writeConfig(t, cfg)
 				t.Setenv(envZReviewCheapProvider, "deepseek")
-				t.Setenv(envZReviewCheapModel, "deepseek-flash")
+				t.Setenv(envZReviewCheapModel, "deepseek-chat")
 			},
 			wantMain:   "claude-sonnet-5",
-			wantCheap:  "deepseek-flash",
+			wantCheap:  "deepseek-chat",
 			wantShared: false,
 		},
 	}

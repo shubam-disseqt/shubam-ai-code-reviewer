@@ -360,3 +360,34 @@ func TestFormatGithubBodySkipsSuggestionWithoutExisting(t *testing.T) {
 		t.Errorf("suggestion block should require ExistingCode: %s", body)
 	}
 }
+
+// TestDedupeCommentsByLocation guards the collapse of same-line LLM
+// duplicates without eating a scanner finding that happens to sit on the
+// same location (they route to different destinations).
+func TestDedupeCommentsByLocation(t *testing.T) {
+	in := []model.LlmComment{
+		{Path: "a.go", StartLine: 10, EndLine: 10, Content: "first"},
+		{Path: "a.go", StartLine: 10, EndLine: 10, Content: "duplicate — paraphrase"},
+		{Path: "a.go", StartLine: 10, EndLine: 10, Content: "scanner", Source: "scanner:gitleaks"},
+		{Path: "a.go", StartLine: 11, EndLine: 11, Content: "different line"},
+		{Path: "b.go", StartLine: 10, EndLine: 10, Content: "different file"},
+	}
+	out := dedupeCommentsByLocation(in)
+	if len(out) != 4 {
+		t.Fatalf("expected 4 comments after dedupe (dropped 1 LLM dup, kept scanner at same loc); got %d: %+v", len(out), out)
+	}
+	if out[0].Content != "first" {
+		t.Errorf("first LLM finding should survive; got %q", out[0].Content)
+	}
+	// The scanner finding at the same (path, line) must not have been
+	// collapsed with the LLM finding — they have different Source prefixes.
+	sawScanner := false
+	for _, c := range out {
+		if c.Source == "scanner:gitleaks" {
+			sawScanner = true
+		}
+	}
+	if !sawScanner {
+		t.Errorf("scanner finding must survive dedupe alongside LLM finding at same location: %+v", out)
+	}
+}
