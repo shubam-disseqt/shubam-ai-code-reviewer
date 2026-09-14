@@ -279,18 +279,20 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 	//
 	// Non-zreview comments (human reviewers, other bots) have neither the
 	// marker nor the prefix and are left alone.
+	//
+	// Same-fp duplication guard: when GitHub already has a comment whose
+	// fp is in the fresh set, we still re-post from this run's batch. To
+	// avoid ending up with two copies at the same location, we DELETE
+	// every existing zreview-authored comment (any fp) — the fresh batch
+	// becomes the sole source of truth. The old logic tried to preserve
+	// same-fp existing comments as an optimization but caused visible
+	// duplicates when the reviewer's wording drifted between runs.
 	deleted := 0
 	if existing, err := cfg.GHClient.ListReviewComments(ctx, cfg.Owner, cfg.Repo, cfg.PRNumber); err == nil {
 		for _, e := range existing {
 			fp := extractZreviewFingerprint(e.Body)
-			switch {
-			case fp != "":
-				if _, keep := freshFPs[fp]; keep {
-					continue // still-valid finding
-				}
-			case looksLikeLegacyZreviewComment(e.Body):
-				// pre-marker zreview comment — delete unconditionally
-			default:
+			isZreview := fp != "" || looksLikeLegacyZreviewComment(e.Body)
+			if !isZreview {
 				continue // human or other bot
 			}
 			if err := cfg.GHClient.DeleteReviewComment(ctx, cfg.Owner, cfg.Repo, e.ID); err == nil {
@@ -298,6 +300,7 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 			}
 		}
 	}
+	_ = freshFPs // freshFPs still tracks what we're about to post — kept for future scoring/audit hooks
 	// Batch inline comments into review submissions of up to 20 each.
 	// One-shot submission is preferable (avoids the per-comment 422
 	// "submitted too quickly" secondary rate limit) but GitHub's review
