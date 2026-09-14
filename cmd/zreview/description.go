@@ -29,6 +29,10 @@ type prBodyClient interface {
 	GetPRBody(ctx context.Context, owner, repo string, number int) (string, error)
 	UpdatePRBody(ctx context.Context, owner, repo string, number int, body string) error
 	AddLabels(ctx context.Context, owner, repo string, number int, labels []string) error
+	// Used to clean up stale exclusive labels (e.g. an old risk/* tag)
+	// before applying the fresh set. Both methods are best-effort.
+	ListLabels(ctx context.Context, owner, repo string, number int) ([]string, error)
+	RemoveLabel(ctx context.Context, owner, repo string, number int, label string) error
 }
 
 // UpdateDescription reads the current PR body, replaces (or appends) the
@@ -56,6 +60,13 @@ func UpdateDescription(
 		return fmt.Errorf("update description: owner/repo/pr required")
 	}
 
+	// Escalate the labeler's risk tag when scanner or scoring evidence
+	// says the real risk is higher. The labeler only reads the diff, so a
+	// PR that adds a hardcoded secret gets tagged risk/low ("just a
+	// config file") even though a HIGH-severity gitleaks finding lives
+	// inside it. This is UX confusion the operator would hit on day one.
+	labels = escalateRiskFromFindings(labels, scoreCounts, scannerFindings)
+
 	current, err := client.GetPRBody(ctx, owner, repo, pr)
 	if err != nil {
 		return fmt.Errorf("update description: %w", err)
@@ -67,11 +78,43 @@ func UpdateDescription(
 		}
 	}
 	if lbls := labelSet(labels); len(lbls) > 0 {
+		// Clean up stale exclusive labels (risk/*) before applying the
+		// fresh set. Missing labels or a list error is a no-op — we still
+		// try to add.
+		if existing, err := client.ListLabels(ctx, owner, repo, pr); err == nil {
+			for _, drop := range staleExclusiveLabels(existing, lbls) {
+				_ = client.RemoveLabel(ctx, owner, repo, pr, drop)
+			}
+		}
 		if err := client.AddLabels(ctx, owner, repo, pr, lbls); err != nil {
 			return fmt.Errorf("update description: %w", err)
 		}
 	}
 	return nil
+}
+
+// staleExclusiveLabels returns the subset of `existing` that belongs to an
+// exclusive namespace (currently `risk/*`) and is NOT in the fresh set. The
+// labeler emits at most one per namespace, so any others are stale. Non-
+// exclusive labels (domains, ownership hints, PR type) are additive and
+// left alone.
+func staleExclusiveLabels(existing, fresh []string) []string {
+	freshSet := make(map[string]struct{}, len(fresh))
+	for _, f := range fresh {
+		freshSet[strings.ToLower(f)] = struct{}{}
+	}
+	var drop []string
+	for _, e := range existing {
+		lower := strings.ToLower(e)
+		if !strings.HasPrefix(lower, "risk/") {
+			continue
+		}
+		if _, keep := freshSet[lower]; keep {
+			continue
+		}
+		drop = append(drop, e)
+	}
+	return drop
 }
 
 // replaceZreviewBlock swaps the content between the ZREVIEW markers with
@@ -167,6 +210,58 @@ func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[s
 	}
 
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// escalateRiskFromFindings raises Labels.RiskTag to reflect what the
+// downstream evidence actually shows. Rules:
+//   - any CRITICAL score → risk/critical
+//   - any HIGH score OR any scanner finding of severity HIGH+ → risk/high
+//   - otherwise the labeler's original tag is left alone
+//
+// Ordering (low < medium < high < critical) uses the string order below.
+// The function never DE-escalates — if the labeler already said high but
+// the evidence says low, keep the higher signal.
+func escalateRiskFromFindings(l model.Labels, counts map[scoring.Severity]int, scanners []model.LlmComment) model.Labels {
+	rank := map[string]int{
+		"risk/low":      1,
+		"risk/medium":   2,
+		"risk/high":     3,
+		"risk/critical": 4,
+	}
+	current := rank[strings.ToLower(strings.TrimSpace(l.RiskTag))]
+
+	target := 0
+	if counts[scoring.SeverityCritical] > 0 {
+		target = rank["risk/critical"]
+	} else if counts[scoring.SeverityHigh] > 0 {
+		target = rank["risk/high"]
+	}
+	for _, c := range scanners {
+		if !strings.HasPrefix(c.Source, "scanner:") {
+			continue
+		}
+		switch strings.ToUpper(strings.TrimSpace(string(c.Severity))) {
+		case "CRITICAL":
+			if target < rank["risk/critical"] {
+				target = rank["risk/critical"]
+			}
+		case "HIGH", "ERROR":
+			if target < rank["risk/high"] {
+				target = rank["risk/high"]
+			}
+		}
+	}
+
+	if target == 0 || target <= current {
+		return l
+	}
+	for tag, r := range rank {
+		if r == target {
+			l.RiskTag = tag
+			break
+		}
+	}
+	return l
 }
 
 // renderScannerFindings prints a compact markdown table of the scanner

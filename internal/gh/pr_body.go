@@ -54,6 +54,38 @@ func (c *Client) AddLabels(ctx context.Context, owner, repo string, number int, 
 	return nil
 }
 
+// RemoveLabel removes a single label from a PR. Returns nil when the label
+// is absent (404-tolerant) — matches the labeler's best-effort semantics.
+func (c *Client) RemoveLabel(ctx context.Context, owner, repo string, number int, label string) error {
+	c.warnIfUnauth()
+	resp, err := c.sdk.Issues.RemoveLabelForIssue(ctx, owner, repo, number, label)
+	if err != nil {
+		if isNotFound(resp, err) {
+			return nil
+		}
+		return fmt.Errorf("gh: remove label %q: %w", label, err)
+	}
+	return nil
+}
+
+// ListLabels returns the current label names on a PR (issue). Used by the
+// description-update flow to remove stale exclusive labels (e.g. an old
+// risk/* tag) before applying the fresh set.
+func (c *Client) ListLabels(ctx context.Context, owner, repo string, number int) ([]string, error) {
+	c.warnIfUnauth()
+	labels, _, err := c.sdk.Issues.ListLabelsByIssue(ctx, owner, repo, number, &github.ListOptions{PerPage: 100})
+	if err != nil {
+		return nil, fmt.Errorf("gh: list labels: %w", err)
+	}
+	out := make([]string, 0, len(labels))
+	for _, l := range labels {
+		if n := l.GetName(); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out, nil
+}
+
 // UploadSARIF POSTs a SARIF blob to /repos/:owner/:repo/code-scanning/sarifs.
 // The `sarif` field is base64(gzip(json)) per the GitHub REST spec:
 // https://docs.github.com/en/rest/code-scanning/code-scanning#upload-an-analysis-as-sarif-data

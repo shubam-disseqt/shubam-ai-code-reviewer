@@ -51,6 +51,14 @@ func (f *fakePRClient) AddLabels(ctx context.Context, owner, repo string, number
 	return nil
 }
 
+func (f *fakePRClient) ListLabels(ctx context.Context, owner, repo string, number int) ([]string, error) {
+	return nil, nil
+}
+
+func (f *fakePRClient) RemoveLabel(ctx context.Context, owner, repo string, number int, label string) error {
+	return nil
+}
+
 func TestUpdateDescription_AppendsBlockWhenMissing(t *testing.T) {
 	f := &fakePRClient{body: "Original PR description here.\n\nCloses #1."}
 	err := UpdateDescription(context.Background(), f, "o", "r", 7,
