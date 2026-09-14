@@ -14,19 +14,23 @@
 
 base: 0.5           # non-trivial floor when there's any diff at all
 
-# Diff-shape signals — how big and how spread.
+# Diff-shape signals — how big and how spread. Caps are tuned so a
+# large-but-clean PR tops out around 6.5 (medium-high) rather than 10,
+# leaving headroom for findings to be the dominant signal when they exist.
+# This means a 20-file PR that fixed all its bugs scores medium-high, not
+# heavy — matching the reviewer's actual remaining work.
 loc_churn:
-  points_per_10_lines: 0.10
-  cap: 4.0
-files_changed:
-  points_per_file: 0.10
-  cap: 3.0
-new_files:
-  points_per_file: 0.15
-  cap: 2.0
-max_file_churn:
   points_per_10_lines: 0.05
+  cap: 2.5
+files_changed:
+  points_per_file: 0.05
   cap: 1.5
+new_files:
+  points_per_file: 0.10
+  cap: 1.5
+max_file_churn:
+  points_per_10_lines: 0.03
+  cap: 1.0
 
 # Test-file ratio (test files / code files). More tests = lower effort.
 # Bonus is applied as a NEGATIVE contribution.
@@ -48,9 +52,12 @@ overlap:
   cap: 1.5
 
 # Findings by severity — the reviewer has to read and verify each one.
+# Weights + cap intentionally higher than diff-size signals so a PR with
+# real problems overpowers a big-but-clean PR: 3 critical findings alone
+# reaches +4.5, and combined with size can pin the score at 10.
 findings:
-  points_per_critical: 1.0
-  points_per_high: 0.5
-  points_per_medium: 0.2
+  points_per_critical: 1.5
+  points_per_high: 0.75
+  points_per_medium: 0.30
   points_per_low: 0.05
-  cap: 3.0
+  cap: 4.0

@@ -234,6 +234,9 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 	}
 	var skipped, scannerCount int
 	batch := make([]gh.ReviewComment, 0, len(cfg.Comments))
+	// freshFPs tracks fingerprints we're about to post so the cleanup can
+	// tell "still valid" from "stale".
+	freshFPs := make(map[string]struct{}, len(cfg.Comments))
 	for _, c := range cfg.Comments {
 		if isScannerSource(c.Source) {
 			scannerCount++
@@ -247,13 +250,47 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 		if line == 0 {
 			line = c.StartLine
 		}
+		fp := commentFingerprint(cfg.Owner, cfg.Repo, c)
+		freshFPs[fp] = struct{}{}
 		batch = append(batch, gh.ReviewComment{
 			Path:      c.Path,
-			Body:      formatGithubBody(c),
+			Body:      formatGithubBodyWithFP(c, fp),
 			Line:      line,
 			StartLine: c.StartLine,
 			CommitSHA: cfg.CommitSHA,
 		})
+	}
+	// Delete stale zreview-authored comments before posting the new batch.
+	// A comment is stale when its fingerprint marker is NOT in freshFPs —
+	// meaning the finding was resolved (fixed, or code moved) since the
+	// last review run.
+	//
+	// Legacy: comments posted before zreview learned to embed a
+	// fingerprint marker are identified by the "**[SEV / category]** "
+	// prefix pattern our own formatter uses. They have no marker to
+	// reconcile against, so we treat them all as stale — the fresh batch
+	// posted this run becomes the new source of truth.
+	//
+	// Non-zreview comments (human reviewers, other bots) have neither the
+	// marker nor the prefix and are left alone.
+	deleted := 0
+	if existing, err := cfg.GHClient.ListReviewComments(ctx, cfg.Owner, cfg.Repo, cfg.PRNumber); err == nil {
+		for _, e := range existing {
+			fp := extractZreviewFingerprint(e.Body)
+			switch {
+			case fp != "":
+				if _, keep := freshFPs[fp]; keep {
+					continue // still-valid finding
+				}
+			case looksLikeLegacyZreviewComment(e.Body):
+				// pre-marker zreview comment — delete unconditionally
+			default:
+				continue // human or other bot
+			}
+			if err := cfg.GHClient.DeleteReviewComment(ctx, cfg.Owner, cfg.Repo, e.ID); err == nil {
+				deleted++
+			}
+		}
 	}
 	// Batch inline comments into review submissions of up to 20 each.
 	// One-shot submission is preferable (avoids the per-comment 422
@@ -278,8 +315,8 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
-	fmt.Fprintf(cfg.Stdout, "Posted %d comment(s) to %s/%s#%d (skipped %d unresolved, %d scanner→SARIF).\n",
-		len(batch), cfg.Owner, cfg.Repo, cfg.PRNumber, skipped, scannerCount)
+	fmt.Fprintf(cfg.Stdout, "Posted %d comment(s) to %s/%s#%d (skipped %d unresolved, %d scanner→SARIF, deleted %d stale).\n",
+		len(batch), cfg.Owner, cfg.Repo, cfg.PRNumber, skipped, scannerCount, deleted)
 
 	// Best-effort SARIF upload when the operator has opted in.
 	if scannerCount > 0 && os.Getenv("ZREVIEW_UPLOAD_SARIF") == "1" {
@@ -430,6 +467,19 @@ func emitSARIF(cfg emitConfig) error {
 // formatGithubBody wraps content, category and suggestion for GitHub's
 // inline comment surface.
 func formatGithubBody(c model.LlmComment) string {
+	return formatGithubBodyWithFP(c, "")
+}
+
+// zreviewFPMarkerPrefix is the HTML-comment marker prefix that zreview
+// injects into every posted comment body so the NEXT review run can find
+// its own past comments and delete the stale ones. Kept as a distinctive
+// constant so operators can grep for it and downstream tooling can find
+// zreview-authored comments without a bot-user lookup.
+const zreviewFPMarkerPrefix = "<!-- zreview:fp:"
+
+// formatGithubBodyWithFP appends a hidden fingerprint marker used by the
+// stale-comment cleanup on subsequent runs. Empty fp skips the marker.
+func formatGithubBodyWithFP(c model.LlmComment, fp string) string {
 	var b strings.Builder
 	if c.Severity != "" || c.Category != "" {
 		fmt.Fprintf(&b, "**[%s / %s]** ", c.Severity, c.Category)
@@ -443,7 +493,45 @@ func formatGithubBody(c model.LlmComment) string {
 		}
 		b.WriteString("```")
 	}
+	if fp != "" {
+		fmt.Fprintf(&b, "\n\n%s%s -->", zreviewFPMarkerPrefix, fp)
+	}
 	return b.String()
+}
+
+// looksLikeLegacyZreviewComment matches the prefix zreview's formatter
+// emits ("**[<severity> / <category>]** ") without a fingerprint marker.
+// Used to clean up pre-marker comments from earlier releases.
+func looksLikeLegacyZreviewComment(body string) bool {
+	if strings.Contains(body, zreviewFPMarkerPrefix) {
+		return false
+	}
+	trimmed := strings.TrimSpace(body)
+	if !strings.HasPrefix(trimmed, "**[") {
+		return false
+	}
+	// Look for "**[X / Y]** " where the closing "]** " lives within the
+	// first ~80 chars. Anything wider is unlikely to be our formatter.
+	close := strings.Index(trimmed, "]** ")
+	if close < 0 || close > 80 {
+		return false
+	}
+	return strings.Contains(trimmed[:close], " / ")
+}
+
+// extractZreviewFingerprint pulls the fingerprint hex from an existing
+// comment body, or "" if the comment isn't zreview-authored.
+func extractZreviewFingerprint(body string) string {
+	i := strings.Index(body, zreviewFPMarkerPrefix)
+	if i < 0 {
+		return ""
+	}
+	rest := body[i+len(zreviewFPMarkerPrefix):]
+	j := strings.Index(rest, " -->")
+	if j < 0 {
+		return ""
+	}
+	return strings.TrimSpace(rest[:j])
 }
 
 // isZeroSummary reports whether a Summary carries no signal — used so the

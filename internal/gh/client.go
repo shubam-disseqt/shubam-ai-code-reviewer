@@ -260,6 +260,60 @@ func (c *Client) PostReview(ctx context.Context, owner, repo string, number int,
 	return nil
 }
 
+// ExistingComment is a lightweight view of an already-posted PR review
+// comment, used by the stale-comment cleanup path in the emitter.
+type ExistingComment struct {
+	ID   int64
+	Body string
+	Path string
+	Line int
+}
+
+// ListReviewComments returns every inline review comment currently on the
+// PR. The caller cross-references fingerprints embedded in the body to
+// decide which are stale.
+func (c *Client) ListReviewComments(ctx context.Context, owner, repo string, number int) ([]ExistingComment, error) {
+	c.warnIfUnauth()
+	var out []ExistingComment
+	opt := &github.PullRequestListCommentsOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
+	}
+	for {
+		batch, resp, err := c.sdk.PullRequests.ListComments(ctx, owner, repo, number, opt)
+		if err != nil {
+			return nil, fmt.Errorf("gh: list review comments: %w", err)
+		}
+		for _, c := range batch {
+			ec := ExistingComment{
+				ID:   c.GetID(),
+				Body: c.GetBody(),
+				Path: c.GetPath(),
+				Line: c.GetLine(),
+			}
+			out = append(out, ec)
+		}
+		if resp == nil || resp.NextPage == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
+	}
+	return out, nil
+}
+
+// DeleteReviewComment deletes one inline review comment by its ID. 404s
+// (already deleted) are treated as success — the goal is idempotence.
+func (c *Client) DeleteReviewComment(ctx context.Context, owner, repo string, commentID int64) error {
+	c.warnIfUnauth()
+	resp, err := c.sdk.PullRequests.DeleteComment(ctx, owner, repo, commentID)
+	if err != nil {
+		if isNotFound(resp, err) {
+			return nil
+		}
+		return fmt.Errorf("gh: delete review comment %d: %w", commentID, err)
+	}
+	return nil
+}
+
 // prToRef flattens go-github's PullRequest into our lightweight ref.
 // Every getter tolerates nil, so we do too.
 func prToRef(pr *github.PullRequest) OpenPRRef {
