@@ -227,7 +227,8 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 	if cfg.PRNumber == 0 || cfg.Owner == "" || cfg.Repo == "" {
 		return fmt.Errorf("emit github: --pr, owner, and repo are required")
 	}
-	var posted, skipped, scannerCount int
+	var skipped, scannerCount int
+	batch := make([]gh.ReviewComment, 0, len(cfg.Comments))
 	for _, c := range cfg.Comments {
 		if isScannerSource(c.Source) {
 			scannerCount++
@@ -241,20 +242,39 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 		if line == 0 {
 			line = c.StartLine
 		}
-		rc := gh.ReviewComment{
+		batch = append(batch, gh.ReviewComment{
 			Path:      c.Path,
 			Body:      formatGithubBody(c),
 			Line:      line,
 			StartLine: c.StartLine,
 			CommitSHA: cfg.CommitSHA,
+		})
+	}
+	// Batch inline comments into review submissions of up to 20 each.
+	// One-shot submission is preferable (avoids the per-comment 422
+	// "submitted too quickly" secondary rate limit) but GitHub's review
+	// endpoint drops payloads above ~30-40 comments with a stream reset.
+	// 20 is a conservative ceiling that keeps the wall time low on large
+	// PRs while staying inside the endpoint's soft limits.
+	const reviewBatchSize = 20
+	for i := 0; i < len(batch); i += reviewBatchSize {
+		end := i + reviewBatchSize
+		if end > len(batch) {
+			end = len(batch)
 		}
-		if err := cfg.GHClient.PostReviewComment(ctx, cfg.Owner, cfg.Repo, cfg.PRNumber, rc); err != nil {
-			return fmt.Errorf("emit github: post to %s:%d: %w", c.Path, line, err)
+		chunk := batch[i:end]
+		summary := fmt.Sprintf("zreview review (%d–%d of %d)", i+1, end, len(batch))
+		if err := cfg.GHClient.PostReview(ctx, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.CommitSHA, summary, chunk); err != nil {
+			return fmt.Errorf("emit github: post review batch %d-%d: %w", i+1, end, err)
 		}
-		posted++
+		// Small pause between batches — belt-and-braces against the
+		// secondary rate limit on rapid review submissions.
+		if end < len(batch) {
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
 	fmt.Fprintf(cfg.Stdout, "Posted %d comment(s) to %s/%s#%d (skipped %d unresolved, %d scanner→SARIF).\n",
-		posted, cfg.Owner, cfg.Repo, cfg.PRNumber, skipped, scannerCount)
+		len(batch), cfg.Owner, cfg.Repo, cfg.PRNumber, skipped, scannerCount)
 
 	// Best-effort SARIF upload when the operator has opted in.
 	if scannerCount > 0 && os.Getenv("ZREVIEW_UPLOAD_SARIF") == "1" {

@@ -215,6 +215,51 @@ func (c *Client) PostReviewComment(ctx context.Context, owner, repo string, numb
 	return nil
 }
 
+// PostReview batches many inline comments into a single "review" submission
+// via POST /pulls/N/reviews. This is one API call regardless of the number
+// of comments, avoiding the GitHub secondary rate limit that fires on rapid
+// per-comment POSTs (422 "was submitted too quickly"). Prefer this over
+// PostReviewComment when the review carries more than one finding.
+//
+// commitSHA is required by GitHub; empty triggers 422. body is the review
+// summary shown at the top; empty is allowed but discouraged.
+func (c *Client) PostReview(ctx context.Context, owner, repo string, number int, commitSHA, body string, comments []ReviewComment) error {
+	if len(comments) == 0 {
+		return nil
+	}
+	c.warnIfUnauth()
+	drafts := make([]*github.DraftReviewComment, 0, len(comments))
+	for _, cm := range comments {
+		side := cm.Side
+		if side == "" {
+			side = "RIGHT"
+		}
+		d := &github.DraftReviewComment{
+			Path: github.String(cm.Path),
+			Body: github.String(cm.Body),
+			Side: github.String(side),
+			Line: github.Int(cm.Line),
+		}
+		if cm.StartLine > 0 && cm.StartLine != cm.Line {
+			d.StartLine = github.Int(cm.StartLine)
+			d.StartSide = github.String(side)
+		}
+		drafts = append(drafts, d)
+	}
+	// "COMMENT" — post as a review, do not approve or request changes.
+	req := &github.PullRequestReviewRequest{
+		CommitID: github.String(commitSHA),
+		Body:     github.String(body),
+		Event:    github.String("COMMENT"),
+		Comments: drafts,
+	}
+	_, _, err := c.sdk.PullRequests.CreateReview(ctx, owner, repo, number, req)
+	if err != nil {
+		return fmt.Errorf("gh: post review: %w", err)
+	}
+	return nil
+}
+
 // prToRef flattens go-github's PullRequest into our lightweight ref.
 // Every getter tolerates nil, so we do too.
 func prToRef(pr *github.PullRequest) OpenPRRef {
