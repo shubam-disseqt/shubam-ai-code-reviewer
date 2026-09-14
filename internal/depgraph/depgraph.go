@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 disseqt
 
-// Package depgraph builds a deterministic Go import graph from the source
+// Package depgraph builds a deterministic import graph from the source
 // text of a PR's changed files. Every edge in the output corresponds to a
-// literal `import` line in the parsed Go source — no LLM inference, no
+// literal `import` line in the parsed source — no LLM inference, no
 // architecture-from-filenames guessing.
+//
+// Supported languages: Go (`go/parser`), TypeScript (`.ts/.tsx/.mts/.cts`,
+// regex-based), and Python (`.py`, regex-based). Files in other languages
+// are silently skipped.
 //
 // The output is a Mermaid flowchart body ready to drop inside a
 // ```mermaid``` fence. Empty output when there are no cross-package edges
@@ -21,10 +25,10 @@ import (
 )
 
 // Options tune the graph. ModulePrefix is the module path of the repo (e.g.
-// "github.com/shubam-disseqt/z-code-reviewer"); imports that share this
-// prefix are considered "in-repo" and get their package path rendered
-// stripped of the prefix. External imports (stdlib, third-party) are
-// dropped unless IncludeExternal is true.
+// "github.com/shubam-disseqt/z-code-reviewer") for Go imports. For
+// TypeScript and Python it acts as an optional path-prefix that marks
+// non-relative imports as in-repo (e.g. "@app/" or "myapp."). External
+// imports (stdlib, third-party) are dropped unless IncludeExternal is true.
 type Options struct {
 	ModulePrefix    string
 	IncludeExternal bool
@@ -44,17 +48,17 @@ func DefaultOptions(modulePrefix string) Options {
 }
 
 // File represents one changed file the caller wants included in the graph.
-// Path is repo-relative (e.g. "cmd/api/main.go"); Content is the raw Go
+// Path is repo-relative (e.g. "cmd/api/main.go"); Content is the raw
 // source at the reviewed head.
 type File struct {
 	Path    string
 	Content []byte
 }
 
-// Render parses each Go file's imports and returns a Mermaid flowchart
-// body. Non-Go files are ignored silently. Empty return means either no Go
-// files, or no cross-package imports worth drawing — the caller should
-// omit the section in that case.
+// Render parses each supported file's imports and returns a Mermaid
+// flowchart body. Unsupported languages are ignored silently. Empty return
+// means either no supported files, or no cross-package imports worth
+// drawing — the caller should omit the section in that case.
 func Render(files []File, opts Options) string {
 	edges := extractEdges(files, opts)
 	if len(edges) == 0 {
@@ -69,32 +73,19 @@ type edge struct {
 	Src, Dst string
 }
 
-// extractEdges parses every changed file and returns unique directed
-// import edges. Duplicate imports across multiple files in the same
-// package collapse into one edge.
+// extractEdges dispatches each file to the extractor matching its
+// extension and returns unique, deterministically-ordered edges.
 func extractEdges(files []File, opts Options) []edge {
 	seen := make(map[edge]struct{})
 	fset := token.NewFileSet()
 	for _, f := range files {
-		if !strings.HasSuffix(f.Path, ".go") {
-			continue
-		}
-		ast, err := parser.ParseFile(fset, f.Path, f.Content, parser.ImportsOnly)
-		if err != nil {
-			// Malformed source: skip this file, not the whole diff.
-			continue
-		}
-		srcPkg := shortPackage(path.Dir(f.Path), opts.ModulePrefix)
-		for _, imp := range ast.Imports {
-			raw := strings.Trim(imp.Path.Value, `"`)
-			if !opts.IncludeExternal && !isInRepo(raw, opts.ModulePrefix) {
-				continue
-			}
-			dstPkg := shortPackage(strings.TrimPrefix(raw, opts.ModulePrefix+"/"), opts.ModulePrefix)
-			if dstPkg == "" || srcPkg == "" || srcPkg == dstPkg {
-				continue
-			}
-			seen[edge{Src: srcPkg, Dst: dstPkg}] = struct{}{}
+		switch {
+		case strings.HasSuffix(f.Path, ".go"):
+			extractGo(fset, f, opts, seen)
+		case hasAnySuffix(f.Path, ".ts", ".tsx", ".mts", ".cts"):
+			extractTypeScript(f, opts, seen)
+		case strings.HasSuffix(f.Path, ".py"):
+			extractPython(f, opts, seen)
 		}
 	}
 	out := make([]edge, 0, len(seen))
@@ -108,6 +99,38 @@ func extractEdges(files []File, opts Options) []edge {
 		return out[i].Dst < out[j].Dst
 	})
 	return out
+}
+
+// extractGo parses Go imports via go/parser. Behavior unchanged from the
+// pre-multi-language version — same edge conditions and skip rules.
+func extractGo(fset *token.FileSet, f File, opts Options, seen map[edge]struct{}) {
+	ast, err := parser.ParseFile(fset, f.Path, f.Content, parser.ImportsOnly)
+	if err != nil {
+		// Malformed source: skip this file, not the whole diff.
+		return
+	}
+	srcPkg := shortPackage(path.Dir(f.Path), opts.ModulePrefix)
+	for _, imp := range ast.Imports {
+		raw := strings.Trim(imp.Path.Value, `"`)
+		if !opts.IncludeExternal && !isInRepo(raw, opts.ModulePrefix) {
+			continue
+		}
+		dstPkg := shortPackage(strings.TrimPrefix(raw, opts.ModulePrefix+"/"), opts.ModulePrefix)
+		if dstPkg == "" || srcPkg == "" || srcPkg == dstPkg {
+			continue
+		}
+		seen[edge{Src: srcPkg, Dst: dstPkg}] = struct{}{}
+	}
+}
+
+// hasAnySuffix returns true if s ends with any of the supplied suffixes.
+func hasAnySuffix(s string, suffixes ...string) bool {
+	for _, sfx := range suffixes {
+		if strings.HasSuffix(s, sfx) {
+			return true
+		}
+	}
+	return false
 }
 
 // isInRepo tells whether an import path belongs to the current repo's

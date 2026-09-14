@@ -140,6 +140,105 @@ var _ = service.X
 	}
 }
 
+func TestRender_TypeScriptImports(t *testing.T) {
+	handlerSrc := `import { helper } from './helper';
+import type { Config } from '../config/types';
+export { util } from './util';
+const lazy = import('./lazy');
+`
+	got := Render([]File{
+		{Path: "src/handler/handler.ts", Content: []byte(handlerSrc)},
+		{Path: "src/handler/helper.ts", Content: []byte(`export const helper = 1;`)},
+	}, DefaultOptions(testModule))
+	if got == "" {
+		t.Fatal("expected non-empty diagram for TS relative imports")
+	}
+	if !strings.Contains(got, "\"src/handler\"") {
+		t.Errorf("missing source node src/handler:\n%s", got)
+	}
+	if !strings.Contains(got, "\"src/config/types\"") {
+		t.Errorf("missing target src/config/types (parent-relative):\n%s", got)
+	}
+	if !strings.Contains(got, "\"src/handler/util\"") {
+		t.Errorf("missing target src/handler/util (export-from):\n%s", got)
+	}
+	if !strings.Contains(got, "\"src/handler/lazy\"") {
+		t.Errorf("missing dynamic import src/handler/lazy:\n%s", got)
+	}
+}
+
+func TestRender_PythonImports(t *testing.T) {
+	src := `from .helper import Thing
+from ..config import settings
+import os
+`
+	got := Render([]File{
+		{Path: "myapp/handler/service.py", Content: []byte(src)},
+	}, DefaultOptions(testModule))
+	if got == "" {
+		t.Fatal("expected non-empty diagram for Python relative imports")
+	}
+	if !strings.Contains(got, "\"myapp/handler\"") {
+		t.Errorf("missing source node myapp/handler:\n%s", got)
+	}
+	if !strings.Contains(got, "\"myapp/handler/helper\"") {
+		t.Errorf("missing sibling-relative target myapp/handler/helper:\n%s", got)
+	}
+	if !strings.Contains(got, "\"myapp/config\"") {
+		t.Errorf("missing parent-relative target myapp/config:\n%s", got)
+	}
+	if strings.Contains(got, "\"os\"") {
+		t.Errorf("stdlib import 'os' should be dropped:\n%s", got)
+	}
+}
+
+func TestRender_MixedLanguages(t *testing.T) {
+	tsSrc := `import { x } from './x';`
+	pySrc := `from .helper import Y`
+	got := Render([]File{
+		{Path: "web/src/app.ts", Content: []byte(tsSrc)},
+		{Path: "api/handler.py", Content: []byte(pySrc)},
+	}, DefaultOptions(testModule))
+	if !strings.Contains(got, "\"web/src\"") || !strings.Contains(got, "\"web/src/x\"") {
+		t.Errorf("expected TS edge web/src → web/src/x:\n%s", got)
+	}
+	if !strings.Contains(got, "\"api\"") || !strings.Contains(got, "\"api/helper\"") {
+		t.Errorf("expected Python edge api → api/helper:\n%s", got)
+	}
+}
+
+func TestRender_ExternalTSDropped(t *testing.T) {
+	src := `import React from 'react';
+import { useState } from 'react';
+`
+	opts := DefaultOptions(testModule)
+	got := Render([]File{{Path: "web/src/app.tsx", Content: []byte(src)}}, opts)
+	if got != "" {
+		t.Errorf("bare specifier 'react' should not appear without IncludeExternal:\n%s", got)
+	}
+	opts.IncludeExternal = true
+	got = Render([]File{{Path: "web/src/app.tsx", Content: []byte(src)}}, opts)
+	if !strings.Contains(got, "\"react\"") {
+		t.Errorf("expected 'react' node when IncludeExternal is set:\n%s", got)
+	}
+}
+
+func TestRender_ExternalPythonDropped(t *testing.T) {
+	src := `import numpy
+from pandas import DataFrame
+`
+	opts := DefaultOptions(testModule)
+	got := Render([]File{{Path: "analytics/report.py", Content: []byte(src)}}, opts)
+	if got != "" {
+		t.Errorf("third-party imports should not appear without IncludeExternal:\n%s", got)
+	}
+	opts.IncludeExternal = true
+	got = Render([]File{{Path: "analytics/report.py", Content: []byte(src)}}, opts)
+	if !strings.Contains(got, "\"numpy\"") {
+		t.Errorf("expected 'numpy' node when IncludeExternal is set:\n%s", got)
+	}
+}
+
 func TestRender_SelfEdgeSuppressed(t *testing.T) {
 	// A package importing itself would be malformed Go — but the
 	// heuristic that turns a file path into "cmd/api" could produce a
