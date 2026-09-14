@@ -139,6 +139,35 @@ func TestComputeReviewerEffort_NewFilePropagates(t *testing.T) {
 	}
 }
 
+// TestLabelForNonReviewablePaths guards the classification used by the
+// no-reviewable-changes block so a docs-only PR gets `docs` and a
+// go.mod-only PR gets `chore` (not silent no-op).
+func TestLabelForNonReviewablePaths(t *testing.T) {
+	tests := []struct {
+		name  string
+		paths []string
+		want  string
+	}{
+		{"docs only md", []string{"docs/architecture.md", "README.md"}, "docs"},
+		{"go.mod + go.sum", []string{"go.mod", "go.sum"}, "chore"},
+		{"package.json", []string{"package.json", "package-lock.json"}, "chore"},
+		{"mixed docs and deps", []string{"README.md", "go.mod"}, "chore"},
+		{"empty", []string{}, "chore"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			diffs := make([]model.Diff, len(tc.paths))
+			for i, p := range tc.paths {
+				diffs[i] = model.Diff{NewPath: p}
+			}
+			got := labelForNonReviewablePaths(diffs)
+			if got != tc.want {
+				t.Errorf("labelForNonReviewablePaths(%v) = %q, want %q", tc.paths, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestReviewCmdRejectsCommitPlusRange(t *testing.T) {
 	root := newRootCmd()
 	root.SetArgs([]string{"review", "--commit", "abc", "--from", "main"})

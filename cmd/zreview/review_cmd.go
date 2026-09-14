@@ -153,6 +153,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	}
 	if len(diffs) == 0 {
 		logutil.WithStage(logger, "diff").Info("no changes to review")
+		emitNoReviewableChanges(ctx, opts, diffs, "no source changes in this PR", logger)
 		return nil
 	}
 
@@ -164,6 +165,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	}
 	if len(kept) == 0 {
 		logutil.WithStage(logger, "selector").Info("every diff was filtered out")
+		emitNoReviewableChanges(ctx, opts, diffs, "all changed files were filtered out (docs/config/generated)", logger)
 		return nil
 	}
 	metrics.FilesReviewed = len(kept)
@@ -827,4 +829,92 @@ func readModulePath(repo string) string {
 		}
 	}
 	return ""
+}
+
+// emitNoReviewableChanges writes a minimal zreview block + label for PRs
+// that have no source changes to review (docs-only, deps-only, config-only,
+// generated files, everything filtered by the selector). Without this, the
+// pipeline silently exits and reviewers can't tell whether zreview ran or
+// crashed. Only fires in github format with a PR number set — stdout / json
+// / sarif callers still get a silent return.
+func emitNoReviewableChanges(ctx context.Context, opts *reviewOpts, diffs []model.Diff, reason string, logger *slog.Logger) {
+	if opts.Format != formatGithub || opts.PR == 0 {
+		return
+	}
+	owner, repo := ownerRepoFromEnv()
+	if owner == "" || repo == "" {
+		return
+	}
+	client, err := newGithubClient()
+	if err != nil || client == nil {
+		return
+	}
+	prType := labelForNonReviewablePaths(diffs)
+	labels := model.Labels{
+		PRType:  prType,
+		RiskTag: "risk/low",
+	}
+	summary := model.Summary{
+		Walkthrough:  "No reviewable source changes detected. " + reason + ".",
+		Risk:         "low: no code to review",
+		TestingNotes: "No source behavior changed — CI checks are sufficient.",
+	}
+	effortScore := effort.Score{
+		Value: 1,
+		Raw:   0.5,
+		Label: "trivial",
+		Dot:   "🟢",
+		Contributions: []effort.Contribution{
+			{Signal: "Base", Points: 0.5, Detail: "no reviewable changes"},
+		},
+	}
+	if err := UpdateDescription(ctx, client, owner, repo, opts.PR,
+		summary, labels, map[scoring.Severity]int{}, nil, nil, effortScore, ""); err != nil {
+		logutil.WithStage(logger, "emit").Warn("no-reviewable-changes block failed", "err", err.Error())
+		return
+	}
+	logutil.WithStage(logger, "emit").Info("posted no-reviewable-changes block", "label", prType)
+	fmt.Fprintf(os.Stderr, "[zreview] metrics: duration=0s files=0 tokens=in:0/out:0 cost=$0.0000 findings=new:0/carried:0/resolved:0 scanner=0 comments=0 no_reviewable_changes=true\n")
+}
+
+// labelForNonReviewablePaths inspects the changed paths and picks a plausible
+// pr_type. Docs-only → "docs"; go.mod/go.sum or requirements.txt-only →
+// "chore"; anything else falls back to "chore".
+func labelForNonReviewablePaths(diffs []model.Diff) string {
+	allDocs := true
+	allDeps := true
+	seen := 0
+	for _, d := range diffs {
+		p := d.NewPath
+		if p == "" || p == "/dev/null" {
+			p = d.OldPath
+		}
+		if p == "" {
+			continue
+		}
+		seen++
+		lower := strings.ToLower(p)
+		isDocs := strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".rst") ||
+			strings.HasSuffix(lower, ".txt") || strings.Contains(lower, "/docs/")
+		isDeps := strings.HasSuffix(lower, "go.mod") || strings.HasSuffix(lower, "go.sum") ||
+			strings.HasSuffix(lower, "package.json") || strings.HasSuffix(lower, "package-lock.json") ||
+			strings.HasSuffix(lower, "requirements.txt") || strings.HasSuffix(lower, "cargo.toml") ||
+			strings.HasSuffix(lower, "cargo.lock") || strings.HasSuffix(lower, "poetry.lock")
+		if !isDocs {
+			allDocs = false
+		}
+		if !isDeps {
+			allDeps = false
+		}
+	}
+	if seen == 0 {
+		return "chore"
+	}
+	if allDocs {
+		return "docs"
+	}
+	if allDeps {
+		return "chore"
+	}
+	return "chore"
 }
