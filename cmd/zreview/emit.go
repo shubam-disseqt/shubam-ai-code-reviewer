@@ -264,9 +264,11 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 	}
 
 	// PR description block — best-effort; a failure logs and lets the
-	// review exit succeed.
+	// review exit succeed. Overlap findings are threaded in so the "PR#2
+	// collides with this one" warning surfaces where the author will see
+	// it, not just in the standalone `zreview overlap` command's stdout.
 	counts := scoreCountsFromMap(cfg.Scores)
-	if err := UpdateDescription(ctx, cfg.GHClient, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.Summary, cfg.Labels, counts); err != nil {
+	if err := UpdateDescription(ctx, cfg.GHClient, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.Summary, cfg.Labels, counts, cfg.Overlap); err != nil {
 		fmt.Fprintf(cfg.Stdout, "emit github: description update failed: %v (continuing)\n", err)
 	}
 	return nil

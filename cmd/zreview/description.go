@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/overlap"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/scoring"
 )
 
@@ -45,6 +46,7 @@ func UpdateDescription(
 	summary model.Summary,
 	labels model.Labels,
 	scoreCounts map[scoring.Severity]int,
+	overlapFindings []overlap.Finding,
 ) error {
 	if client == nil {
 		return fmt.Errorf("update description: nil client")
@@ -57,7 +59,7 @@ func UpdateDescription(
 	if err != nil {
 		return fmt.Errorf("update description: %w", err)
 	}
-	updated := replaceZreviewBlock(current, renderZreviewBlock(summary, labels, scoreCounts))
+	updated := replaceZreviewBlock(current, renderZreviewBlock(summary, labels, scoreCounts, overlapFindings))
 	if updated != current {
 		if err := client.UpdatePRBody(ctx, owner, repo, pr, updated); err != nil {
 			return fmt.Errorf("update description: %w", err)
@@ -97,12 +99,21 @@ func replaceZreviewBlock(body, block string) string {
 // Kept intentionally small: a walkthrough paragraph, a severity table, the
 // risk tag, and a change-groups list. Every section is optional so a
 // summary that came back mostly-empty still produces a sane block.
-func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[scoring.Severity]int) string {
+func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[scoring.Severity]int, overlapFindings []overlap.Finding) string {
 	var b strings.Builder
 	b.WriteString("## Automated review by zreview\n\n")
 
 	if summary.Walkthrough != "" {
 		b.WriteString(strings.TrimSpace(summary.Walkthrough))
+		b.WriteString("\n\n")
+	}
+
+	// Overlap goes above the severity table because a merge collision is
+	// more actionable than a per-finding count — the author needs to know
+	// to coordinate BEFORE spending time on the review comments.
+	if md := overlap.Render(overlapFindings); md != "" {
+		b.WriteString("### Potential overlap with other PRs\n\n")
+		b.WriteString(strings.TrimSpace(md))
 		b.WriteString("\n\n")
 	}
 
