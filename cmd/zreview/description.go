@@ -54,6 +54,7 @@ func UpdateDescription(
 	overlapFindings []overlap.Finding,
 	scannerFindings []model.LlmComment,
 	effortScore effort.Score,
+	pkgDiagram string,
 ) error {
 	if client == nil {
 		return fmt.Errorf("update description: nil client")
@@ -73,7 +74,7 @@ func UpdateDescription(
 	if err != nil {
 		return fmt.Errorf("update description: %w", err)
 	}
-	updated := replaceZreviewBlock(current, renderZreviewBlock(summary, labels, scoreCounts, overlapFindings, scannerFindings, effortScore))
+	updated := replaceZreviewBlock(current, renderZreviewBlock(summary, labels, scoreCounts, overlapFindings, scannerFindings, effortScore, pkgDiagram))
 	if updated != current {
 		if err := client.UpdatePRBody(ctx, owner, repo, pr, updated); err != nil {
 			return fmt.Errorf("update description: %w", err)
@@ -145,7 +146,7 @@ func replaceZreviewBlock(body, block string) string {
 // Kept intentionally small: a walkthrough paragraph, a severity table, the
 // risk tag, and a change-groups list. Every section is optional so a
 // summary that came back mostly-empty still produces a sane block.
-func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[scoring.Severity]int, overlapFindings []overlap.Finding, scannerFindings []model.LlmComment, effortScore effort.Score) string {
+func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[scoring.Severity]int, overlapFindings []overlap.Finding, scannerFindings []model.LlmComment, effortScore effort.Score, pkgDiagram string) string {
 	var b strings.Builder
 	b.WriteString("## Automated review by zreview\n\n")
 
@@ -162,12 +163,14 @@ func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[s
 		b.WriteString("\n\n")
 	}
 
-	// Mermaid diagram of what the PR touches. GitHub renders this
-	// natively inside the markdown block. sanitizeMermaid strips edge-
-	// label `|` characters inside node labels because Mermaid's parser
-	// rejects the whole diagram otherwise (see README bug in this repo).
-	if d := sanitizeMermaid(summary.Diagram); d != "" {
-		b.WriteString("### PR flow\n\n```mermaid\n")
+	// Package import diagram — DETERMINISTIC. Parsed from the changed
+	// files' actual `import` lines by internal/depgraph, not the LLM. If
+	// the diff has no cross-package Go imports the section is omitted
+	// entirely. sanitizeMermaid strips edge-label `|` inside node labels
+	// as a defensive belt-and-suspenders — depgraph output shouldn't
+	// contain them but the sanitizer costs nothing.
+	if d := sanitizeMermaid(pkgDiagram); d != "" {
+		b.WriteString("### Package imports (parsed from source)\n\n```mermaid\n")
 		b.WriteString(d)
 		b.WriteString("\n```\n\n")
 	}

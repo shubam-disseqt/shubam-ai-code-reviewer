@@ -65,7 +65,7 @@ func TestUpdateDescription_AppendsBlockWhenMissing(t *testing.T) {
 	err := UpdateDescription(context.Background(), f, "o", "r", 7,
 		model.Summary{Walkthrough: "adds a widget"},
 		model.Labels{},
-		map[scoring.Severity]int{scoring.SeverityHigh: 1}, nil, nil, effort.Score{})
+		map[scoring.Severity]int{scoring.SeverityHigh: 1}, nil, nil, effort.Score{}, "")
 	if err != nil {
 		t.Fatalf("UpdateDescription: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestUpdateDescription_ReplacesExistingBlock(t *testing.T) {
 	err := UpdateDescription(context.Background(), f, "o", "r", 7,
 		model.Summary{Walkthrough: "fresh walkthrough"},
 		model.Labels{},
-		map[scoring.Severity]int{}, nil, nil, effort.Score{})
+		map[scoring.Severity]int{}, nil, nil, effort.Score{}, "")
 	if err != nil {
 		t.Fatalf("UpdateDescription: %v", err)
 	}
@@ -111,13 +111,13 @@ func TestUpdateDescription_ReplacesExistingBlock(t *testing.T) {
 func TestUpdateDescription_NoChangeSkipsUpdate(t *testing.T) {
 	// If the block already contains exactly what we would write, no PATCH
 	// should fire — saves an API call per idempotent re-run.
-	block := renderZreviewBlock(model.Summary{Walkthrough: "same"}, model.Labels{}, map[scoring.Severity]int{}, nil, nil, effort.Score{})
+	block := renderZreviewBlock(model.Summary{Walkthrough: "same"}, model.Labels{}, map[scoring.Severity]int{}, nil, nil, effort.Score{}, "")
 	initial := zreviewBlockBegin + "\n" + block + "\n" + zreviewBlockEnd
 	f := &fakePRClient{body: initial}
 	err := UpdateDescription(context.Background(), f, "o", "r", 7,
 		model.Summary{Walkthrough: "same"},
 		model.Labels{},
-		map[scoring.Severity]int{}, nil, nil, effort.Score{})
+		map[scoring.Severity]int{}, nil, nil, effort.Score{}, "")
 	if err != nil {
 		t.Fatalf("UpdateDescription: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestUpdateDescription_AppliesLabels(t *testing.T) {
 	err := UpdateDescription(context.Background(), f, "o", "r", 7,
 		model.Summary{},
 		model.Labels{PRType: "feat", RiskTag: "high", Domains: []string{"auth", "billing"}},
-		map[scoring.Severity]int{}, nil, nil, effort.Score{})
+		map[scoring.Severity]int{}, nil, nil, effort.Score{}, "")
 	if err != nil {
 		t.Fatalf("UpdateDescription: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestUpdateDescription_EmptyBodyGetsBlock(t *testing.T) {
 	err := UpdateDescription(context.Background(), f, "o", "r", 7,
 		model.Summary{Walkthrough: "hello"},
 		model.Labels{},
-		map[scoring.Severity]int{}, nil, nil, effort.Score{})
+		map[scoring.Severity]int{}, nil, nil, effort.Score{}, "")
 	if err != nil {
 		t.Fatalf("UpdateDescription: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestUpdateDescription_EmptyBodyGetsBlock(t *testing.T) {
 func TestUpdateDescription_GetErrorPropagates(t *testing.T) {
 	f := &fakePRClient{getErr: errors.New("boom")}
 	err := UpdateDescription(context.Background(), f, "o", "r", 7,
-		model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{})
+		model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{}, "")
 	if err == nil {
 		t.Fatalf("want error")
 	}
@@ -175,7 +175,7 @@ func TestUpdateDescription_GetErrorPropagates(t *testing.T) {
 func TestUpdateDescription_UpdateErrorPropagates(t *testing.T) {
 	f := &fakePRClient{updateErr: errors.New("nope")}
 	err := UpdateDescription(context.Background(), f, "o", "r", 7,
-		model.Summary{Walkthrough: "hi"}, model.Labels{}, nil, nil, nil, effort.Score{})
+		model.Summary{Walkthrough: "hi"}, model.Labels{}, nil, nil, nil, effort.Score{}, "")
 	if err == nil {
 		t.Fatalf("want error")
 	}
@@ -186,15 +186,15 @@ func TestUpdateDescription_UpdateErrorPropagates(t *testing.T) {
 
 func TestUpdateDescription_MissingIdentity(t *testing.T) {
 	f := &fakePRClient{}
-	err := UpdateDescription(context.Background(), f, "", "r", 7, model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{})
+	err := UpdateDescription(context.Background(), f, "", "r", 7, model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{}, "")
 	if err == nil {
 		t.Errorf("empty owner should error")
 	}
-	err = UpdateDescription(context.Background(), f, "o", "r", 0, model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{})
+	err = UpdateDescription(context.Background(), f, "o", "r", 0, model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{}, "")
 	if err == nil {
 		t.Errorf("zero pr should error")
 	}
-	err = UpdateDescription(context.Background(), nil, "o", "r", 7, model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{})
+	err = UpdateDescription(context.Background(), nil, "o", "r", 7, model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{}, "")
 	if err == nil {
 		t.Errorf("nil client should error")
 	}
@@ -211,8 +211,7 @@ func TestRenderZreviewBlock_ChangeGroups(t *testing.T) {
 		map[scoring.Severity]int{scoring.SeverityCritical: 2, scoring.SeverityLow: 1},
 		nil,
 		nil,
-		effort.Score{},
-	)
+		effort.Score{}, "")
 	for _, want := range []string{
 		"does two things",
 		"| Severity | Count |",

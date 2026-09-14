@@ -110,6 +110,12 @@ type emitConfig struct {
 	// up above the severity table in the PR description block.
 	Effort effort.Score
 
+	// PkgDiagram is the deterministic Go import graph (Mermaid body,
+	// unfenced). Rendered above the walkthrough. Empty when the diff has
+	// no cross-package Go imports — the description block just omits the
+	// section. Every edge here comes from `go/parser`, not the LLM.
+	PkgDiagram string
+
 	// GitHub-specific:
 	GHClient  *gh.Client
 	Owner     string
@@ -336,7 +342,7 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 			scannerComments = append(scannerComments, c)
 		}
 	}
-	if err := UpdateDescription(ctx, cfg.GHClient, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.Summary, cfg.Labels, counts, cfg.Overlap, scannerComments, cfg.Effort); err != nil {
+	if err := UpdateDescription(ctx, cfg.GHClient, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.Summary, cfg.Labels, counts, cfg.Overlap, scannerComments, cfg.Effort, cfg.PkgDiagram); err != nil {
 		fmt.Fprintf(cfg.Stdout, "emit github: description update failed: %v (continuing)\n", err)
 	}
 	return nil

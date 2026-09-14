@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/comment"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/depgraph"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/diff"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/effort"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
@@ -320,6 +321,13 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	// logs and continues with a zero-valued Score (empty audit).
 	reviewerEffort := computeReviewerEffort(opts.Repo, kept, scoreMap, len(overlapFindings), logger)
 
+	// 12.6) deterministic Go import graph. Parses actual imports from the
+	// changed files' source so every edge in the rendered diagram is
+	// grounded in the code, not inferred from filenames by an LLM.
+	// Empty string when the diff has no cross-package imports — the
+	// description block just omits the section in that case.
+	pkgDiagram := computeDepGraph(opts.Repo, kept)
+
 	// 13) emit
 	ghClient, _ := newGithubClient()
 	// GitHub's PR-comment API rejects an empty commit_id. Resolve the head
@@ -346,6 +354,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		Labels:       labels,
 		Scores:       scoreMap,
 		Effort:       reviewerEffort,
+		PkgDiagram:   pkgDiagram,
 	})
 	if err != nil {
 		return err
@@ -778,4 +787,44 @@ func countAddedDeleted(unifiedDiff string) (added, deleted int) {
 		}
 	}
 	return added, deleted
+}
+
+// computeDepGraph parses the changed Go files' actual imports and returns
+// a Mermaid flowchart body. Empty string on any error, or when no
+// cross-package edges exist — the description-block renderer omits the
+// section in that case.
+func computeDepGraph(repo string, kept []model.Diff) string {
+	modulePrefix := readModulePath(repo)
+	if modulePrefix == "" {
+		return ""
+	}
+	files := make([]depgraph.File, 0, len(kept))
+	for _, d := range kept {
+		p := d.NewPath
+		if p == "" || p == "/dev/null" {
+			p = d.OldPath
+		}
+		if d.NewFileContent == "" {
+			continue // deleted file or content unavailable
+		}
+		files = append(files, depgraph.File{Path: p, Content: []byte(d.NewFileContent)})
+	}
+	return depgraph.Render(files, depgraph.DefaultOptions(modulePrefix))
+}
+
+// readModulePath returns the module path from <repo>/go.mod, or "" if the
+// file is missing / malformed. Best-effort — a repo without go.mod just
+// gets no depgraph diagram.
+func readModulePath(repo string) string {
+	data, err := os.ReadFile(filepath.Join(repo, "go.mod"))
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		}
+	}
+	return ""
 }
