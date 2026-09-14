@@ -144,7 +144,7 @@ func TestExitCodeForBlockerFindings(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := exitCodeForComments(tt.cms, nil); got != tt.want {
+			if got := exitCodeForComments(tt.cms, nil, false); got != tt.want {
 				t.Errorf("got %d, want %d", got, tt.want)
 			}
 		})
@@ -267,6 +267,7 @@ func TestIsScannerSource(t *testing.T) {
 func TestFormatGithubBodyIncludesSuggestion(t *testing.T) {
 	c := model.LlmComment{
 		Content:        "use := not =",
+		ExistingCode:   "x = 1",
 		SuggestionCode: "x := 1",
 		Severity:       "high",
 		Category:       "bug",
@@ -276,5 +277,86 @@ func TestFormatGithubBodyIncludesSuggestion(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q: %s", want, body)
 		}
+	}
+}
+
+func TestFormatGithubBodyContentOnly(t *testing.T) {
+	// Comment with only content — no suggestion block, no nit prefix.
+	c := model.LlmComment{
+		Content:  "consider refactoring",
+		Severity: "medium",
+		Category: "maintainability",
+	}
+	body := formatGithubBody(c)
+	if strings.Contains(body, "```suggestion") {
+		t.Errorf("unexpected suggestion block: %s", body)
+	}
+	if strings.Contains(body, "**[nit]**") {
+		t.Errorf("unexpected nit prefix on medium severity: %s", body)
+	}
+	if !strings.Contains(body, "consider refactoring") {
+		t.Errorf("missing content: %s", body)
+	}
+}
+
+func TestFormatGithubBodyNitPrefix(t *testing.T) {
+	cases := []struct {
+		name     string
+		severity string
+		category string
+		wantNit  bool
+	}{
+		{"low style", "low", "style", true},
+		{"low maintainability", "low", "maintainability", true},
+		{"low test", "low", "test", true},
+		{"low documentation", "low", "documentation", true},
+		{"low bug is not a nit", "low", "bug", false},
+		{"medium style is not a nit", "medium", "style", false},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			body := formatGithubBody(model.LlmComment{
+				Content:  "x",
+				Severity: tt.severity,
+				Category: tt.category,
+			})
+			got := strings.Contains(body, "**[nit]**")
+			if got != tt.wantNit {
+				t.Errorf("nit prefix: got=%v want=%v body=%q", got, tt.wantNit, body)
+			}
+		})
+	}
+}
+
+func TestFormatGithubBodyDropsSuggestionWithBackticks(t *testing.T) {
+	// A suggestion containing ``` would break our fence — drop the block,
+	// keep the content.
+	c := model.LlmComment{
+		Content:        "escape the fence",
+		ExistingCode:   "old",
+		SuggestionCode: "before ``` after",
+		Severity:       "low",
+		Category:       "style",
+	}
+	body := formatGithubBody(c)
+	if strings.Contains(body, "```suggestion") {
+		t.Errorf("suggestion block should be dropped when code contains backticks: %s", body)
+	}
+	if !strings.Contains(body, "escape the fence") {
+		t.Errorf("content still expected in body: %s", body)
+	}
+}
+
+func TestFormatGithubBodySkipsSuggestionWithoutExisting(t *testing.T) {
+	// SuggestionCode without ExistingCode → no fence (anchor missing).
+	c := model.LlmComment{
+		Content:        "no anchor",
+		SuggestionCode: "x := 1",
+		Severity:       "low",
+		Category:       "style",
+	}
+	body := formatGithubBody(c)
+	if strings.Contains(body, "```suggestion") {
+		t.Errorf("suggestion block should require ExistingCode: %s", body)
 	}
 }

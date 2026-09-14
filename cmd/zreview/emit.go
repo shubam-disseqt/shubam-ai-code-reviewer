@@ -488,13 +488,28 @@ const zreviewFPMarkerPrefix = "<!-- zreview:fp:"
 
 // formatGithubBodyWithFP appends a hidden fingerprint marker used by the
 // stale-comment cleanup on subsequent runs. Empty fp skips the marker.
+// When both ExistingCode and SuggestionCode are set (and the suggestion
+// doesn't contain a triple-backtick fence that would break out of the
+// block), the body wraps SuggestionCode in GitHub's ```suggestion``` fence
+// so the PR gets a one-click "Commit suggestion" button. Low-severity
+// style/maintainability/test/documentation findings get a **[nit]** prefix
+// so reviewers can scan past them quickly.
 func formatGithubBodyWithFP(c model.LlmComment, fp string) string {
 	var b strings.Builder
+	if isNit(c) {
+		b.WriteString("**[nit]** ")
+	}
 	if c.Severity != "" || c.Category != "" {
 		fmt.Fprintf(&b, "**[%s / %s]** ", c.Severity, c.Category)
 	}
 	b.WriteString(strings.TrimSpace(c.Content))
-	if c.SuggestionCode != "" {
+	// Suggestion block requires BOTH existing_code and suggestion_code so we
+	// only render "Commit suggestion" fences for findings the LLM actually
+	// wrote a replacement for — not stray suggestion_code with no anchor.
+	// Guard: a suggestion containing ``` would terminate our fence early and
+	// spill raw markup into the comment. Drop the block in that case; the
+	// content still renders.
+	if c.SuggestionCode != "" && c.ExistingCode != "" && !strings.Contains(c.SuggestionCode, "```") {
 		b.WriteString("\n\n```suggestion\n")
 		b.WriteString(c.SuggestionCode)
 		if !strings.HasSuffix(c.SuggestionCode, "\n") {
@@ -506,6 +521,20 @@ func formatGithubBodyWithFP(c model.LlmComment, fp string) string {
 		fmt.Fprintf(&b, "\n\n%s%s -->", zreviewFPMarkerPrefix, fp)
 	}
 	return b.String()
+}
+
+// isNit reports whether a finding is low-severity noise the reviewer can
+// safely ignore. Used to prefix the comment body with **[nit]** so it's
+// visually distinct from real bugs.
+func isNit(c model.LlmComment) bool {
+	if c.Severity != "low" {
+		return false
+	}
+	switch c.Category {
+	case "style", "maintainability", "test", "documentation":
+		return true
+	}
+	return false
 }
 
 // looksLikeLegacyZreviewComment matches the prefix zreview's formatter
@@ -559,8 +588,13 @@ func isZeroLabels(l model.Labels) bool {
 // severity, mirroring the behaviour described in docs/security.html. When
 // scores are provided, the scoring-engine severity (authoritative) wins
 // over the raw LlmComment.Severity; otherwise the raw label is used.
-func exitCodeForComments(comments []model.LlmComment, scores map[string]scoring.Score) int {
-	for _, c := range comments {
+//
+// Suggestions (severity=low + style/maintainability categories with a
+// suggestion_code) are info-only unless suggestionsBlocking is true — the
+// caller sources that from zconfig.
+func exitCodeForComments(comments []model.LlmComment, scores map[string]scoring.Score, suggestionsBlocking bool) int {
+	filtered := scoring.FilterBlocking(comments, suggestionsBlocking)
+	for _, c := range filtered {
 		if sc, ok := scores[commentKey(c)]; ok {
 			if sc.Severity == scoring.SeverityCritical {
 				return 3

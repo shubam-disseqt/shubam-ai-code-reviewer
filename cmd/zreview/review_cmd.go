@@ -33,6 +33,7 @@ import (
 	"github.com/shubam-disseqt/z-code-reviewer/internal/selector"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/session"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/tool"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/zconfig"
 )
 
 // reviewOpts is the parsed CLI surface for `zreview review`.
@@ -143,6 +144,12 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	}
 	if opts.Verbose || policy.Source() != "embedded" {
 		logutil.WithStage(logger, "scoring").Info("policy loaded", "source", policy.Source())
+	}
+	// User-facing toggles (.zreview/config.yaml). Malformed file logs and
+	// continues with defaults — this is operator ergonomics, not policy.
+	zcfg, err := zconfig.Load(opts.Repo)
+	if err != nil {
+		logutil.WithStage(logger, "config").Warn("config load failed, using defaults", "err", err)
 	}
 	minSev, _ := scoring.ParseSeverity(opts.MinSeverity) // validated in opts.validate()
 
@@ -365,7 +372,19 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	metrics.DurationMs = time.Since(started).Milliseconds()
 	emitMetrics(logger, metrics)
 
-	if code := exitCodeForComments(comments, scoreMap); code != 0 {
+	// If suggestions are disabled entirely, drop them before evaluating
+	// the exit code — user opted out of the whole class.
+	if !zcfg.Suggestions.Enabled {
+		filtered := comments[:0]
+		for _, c := range comments {
+			if scoring.IsSuggestion(c) {
+				continue
+			}
+			filtered = append(filtered, c)
+		}
+		comments = filtered
+	}
+	if code := exitCodeForComments(comments, scoreMap, zcfg.Suggestions.Blocking); code != 0 {
 		// Return a typed error so main.go can pick up the special exit code.
 		return &blockerExitError{code: code}
 	}

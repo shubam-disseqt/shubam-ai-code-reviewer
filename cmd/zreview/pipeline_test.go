@@ -249,7 +249,7 @@ func TestExitCodeUsesScoredSeverity(t *testing.T) {
 	scores := map[string]scoring.Score{
 		commentKey(c): {Severity: scoring.SeverityCritical},
 	}
-	if got := exitCodeForComments([]model.LlmComment{c}, scores); got != 3 {
+	if got := exitCodeForComments([]model.LlmComment{c}, scores, false); got != 3 {
 		t.Errorf("scored CRITICAL should exit 3, got %d", got)
 	}
 }
