@@ -97,19 +97,34 @@ func UpdateDescription(
 }
 
 // staleExclusiveLabels returns the subset of `existing` that belongs to an
-// exclusive namespace (currently `risk/*`) and is NOT in the fresh set. The
-// labeler emits at most one per namespace, so any others are stale. Non-
-// exclusive labels (domains, ownership hints, PR type) are additive and
-// left alone.
+// exclusive namespace and is NOT in the fresh set. Exclusive namespaces:
+//   - risk/* (labeler emits exactly one)
+//   - pr_type (labeler emits exactly one of feat|fix|refactor|docs|test|
+//     chore|perf|ci|security). Only cleaned when the fresh set contains
+//     a pr_type value, so a labeler that emits nothing doesn't clobber
+//     human-applied labels like "test" on a code-only PR.
+//
+// Non-exclusive labels (domains, ownership hints) are additive and left
+// alone.
 func staleExclusiveLabels(existing, fresh []string) []string {
 	freshSet := make(map[string]struct{}, len(fresh))
 	for _, f := range fresh {
 		freshSet[strings.ToLower(f)] = struct{}{}
 	}
+	freshHasPRType := false
+	for f := range freshSet {
+		if _, ok := prTypeLabels[f]; ok {
+			freshHasPRType = true
+			break
+		}
+	}
 	var drop []string
 	for _, e := range existing {
 		lower := strings.ToLower(e)
-		if !strings.HasPrefix(lower, "risk/") {
+		isRisk := strings.HasPrefix(lower, "risk/")
+		_, isPRType := prTypeLabels[lower]
+		exclusive := isRisk || (freshHasPRType && isPRType)
+		if !exclusive {
 			continue
 		}
 		if _, keep := freshSet[lower]; keep {
@@ -118,6 +133,20 @@ func staleExclusiveLabels(existing, fresh []string) []string {
 		drop = append(drop, e)
 	}
 	return drop
+}
+
+// prTypeLabels enumerates the pr_type enum from the labeler prompt.
+// Keep in sync with internal/prompts/labeler.md.
+var prTypeLabels = map[string]struct{}{
+	"feat":     {},
+	"fix":      {},
+	"refactor": {},
+	"docs":     {},
+	"test":     {},
+	"chore":    {},
+	"perf":     {},
+	"ci":       {},
+	"security": {},
 }
 
 // replaceZreviewBlock swaps the content between the ZREVIEW markers with

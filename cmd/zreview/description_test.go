@@ -257,3 +257,44 @@ func TestLabelSet_Dedup(t *testing.T) {
 		t.Errorf("dedup failed: %v", got)
 	}
 }
+
+// TestStaleExclusiveLabels_DropsStalePRType guards against a reviewer's
+// pr_type flipping between runs (e.g. "fix" → "feat" after the labeler
+// prompt got tightened) leaving both labels applied. Regression: only
+// risk/* used to be treated as exclusive, so pr_type labels accumulated.
+func TestStaleExclusiveLabels_DropsStalePRType(t *testing.T) {
+	existing := []string{"backend", "fix", "risk/critical", "pricing"}
+	fresh := []string{"backend", "feat", "risk/high", "pricing"}
+
+	drop := staleExclusiveLabels(existing, fresh)
+	dropSet := make(map[string]bool, len(drop))
+	for _, d := range drop {
+		dropSet[d] = true
+	}
+
+	if !dropSet["fix"] {
+		t.Errorf("expected 'fix' to be dropped (stale pr_type replaced by 'feat'); got: %v", drop)
+	}
+	if !dropSet["risk/critical"] {
+		t.Errorf("expected 'risk/critical' to be dropped (stale risk replaced by 'risk/high'); got: %v", drop)
+	}
+	if dropSet["backend"] || dropSet["pricing"] {
+		t.Errorf("non-exclusive labels should not be dropped: %v", drop)
+	}
+}
+
+// TestStaleExclusiveLabels_LeavesPRTypeAloneWhenLabelerSilent verifies we
+// don't clobber a human's manually-applied pr_type label when the labeler
+// returns no pr_type. This protects mixed human+bot label workflows.
+func TestStaleExclusiveLabels_LeavesPRTypeAloneWhenLabelerSilent(t *testing.T) {
+	existing := []string{"test", "risk/medium"}
+	// Fresh set has no pr_type value (labeler failed / returned empty).
+	fresh := []string{"risk/high"}
+
+	drop := staleExclusiveLabels(existing, fresh)
+	for _, d := range drop {
+		if d == "test" {
+			t.Errorf("must not drop 'test' when fresh set has no pr_type; got drops: %v", drop)
+		}
+	}
+}

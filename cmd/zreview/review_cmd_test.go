@@ -5,8 +5,12 @@ package main
 
 import (
 	"bytes"
+	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/scoring"
 )
 
 func TestReviewOptsValidate(t *testing.T) {
@@ -104,6 +108,34 @@ func TestReviewCmdRejectsUnknownFormat(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--format must be") {
 		t.Fatalf("wrong error: %v", err)
+	}
+}
+
+// TestComputeReviewerEffort_NewFilePropagates guards the effort audit
+// table from silently dropping the "new files" contribution. Regression:
+// the translation used to re-derive IsNew from empty OldPath, but the diff
+// parser sets OldPath="a/foo.go" on new files and IsNew=true separately.
+func TestComputeReviewerEffort_NewFilePropagates(t *testing.T) {
+	diffs := []model.Diff{
+		{
+			OldPath: "pricing.go",
+			NewPath: "pricing.go",
+			IsNew:   true,
+			Diff:    "+package main\n+\n+func F() {}\n",
+		},
+	}
+	got := computeReviewerEffort("/tmp/nonexistent", diffs, map[string]scoring.Score{}, 0, slog.Default())
+	found := false
+	for _, c := range got.Contributions {
+		if c.Signal == "New files" {
+			found = true
+			if c.Points <= 0 {
+				t.Errorf("New files contribution present but zero: %+v", c)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("New files contribution missing; got %d rows: %+v", len(got.Contributions), got.Contributions)
 	}
 }
 

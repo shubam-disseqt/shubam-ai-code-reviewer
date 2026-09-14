@@ -747,9 +747,9 @@ func computeReviewerEffort(repo string, kept []model.Diff, scoreMap map[string]s
 			Path:         path,
 			LinesAdded:   added,
 			LinesDeleted: deleted,
-			IsNew:        d.OldPath == "" || d.OldPath == "/dev/null",
-			IsDeleted:    d.NewPath == "" || d.NewPath == "/dev/null",
-			IsRenamed:    d.OldPath != "" && d.NewPath != "" && d.OldPath != d.NewPath,
+			IsNew:        d.IsNew,
+			IsDeleted:    d.IsDeleted,
+			IsRenamed:    d.IsRenamed,
 			IsTest:       effort.IsTestFile(path),
 		})
 	}

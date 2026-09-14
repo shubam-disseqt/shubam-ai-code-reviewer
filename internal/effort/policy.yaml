@@ -44,7 +44,6 @@ paths:
   auth: 1.5             # auth, session, token, crypto, oauth, jwt, tls
   migration: 1.5        # migration, migrate, schema, .sql
   infra: 1.0            # dockerfile, k8s, helm, terraform
-  public_api: 0.5       # exported HTTP handlers / route registration
 
 # Cross-PR overlap — merge coordination is real reviewer work.
 overlap:
