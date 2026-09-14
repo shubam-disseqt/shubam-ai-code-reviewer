@@ -1,0 +1,138 @@
+## Curated Ruby / Rails security rules bundled with zreview.
+## Brakeman-inspired, kept small for signal density.
+## Override via ZREVIEW_SEMGREP_CONFIG. Disable via ZREVIEW_DISABLE_SEMGREP_PRESETS=1.
+rules:
+  - id: rb-eval-user-input
+    message: eval / instance_eval / class_eval on dynamic input can lead to RCE.
+    severity: ERROR
+    languages: [ruby]
+    pattern-either:
+      - pattern: eval($X)
+      - pattern: instance_eval($X)
+      - pattern: class_eval($X)
+      - pattern: module_eval($X)
+    metadata:
+      category: security
+      cwe: CWE-95
+
+  - id: rb-system-backticks-tainted
+    message: system() or backticks with unsanitized input is a command-injection vector. Use argv arrays.
+    severity: ERROR
+    languages: [ruby]
+    pattern-either:
+      - pattern: system("#{$X}")
+      - pattern: system($CMD + $X)
+      - pattern: '`#{$X}`'
+      - pattern: '%x{#{$X}}'
+      - pattern: exec("#{$X}")
+      - pattern: IO.popen("#{$X}")
+    metadata:
+      category: security
+      cwe: CWE-78
+
+  - id: rb-hardcoded-secret
+    message: Hardcoded credential-shaped literal. Move to Rails credentials or env.
+    severity: ERROR
+    languages: [ruby]
+    pattern-either:
+      - pattern-regex: '(?i)(api[_-]?key|secret|password|token)\s*=\s*["''][A-Za-z0-9_\-]{20,}["'']'
+    metadata:
+      category: security
+      cwe: CWE-798
+
+  - id: rb-marshal-load-untrusted
+    message: Marshal.load on untrusted data allows arbitrary code execution. Use JSON.
+    severity: ERROR
+    languages: [ruby]
+    pattern-either:
+      - pattern: Marshal.load($X)
+      - pattern: Marshal.restore($X)
+    metadata:
+      category: security
+      cwe: CWE-502
+
+  - id: rb-sql-string-interpolation
+    message: SQL query built by interpolation. Use parameterised queries or .where(hash) form.
+    severity: ERROR
+    languages: [ruby]
+    pattern-either:
+      - pattern: $M.where("... #{$X} ...")
+      - pattern: $M.where("... " + $X)
+      - pattern: $M.find_by_sql("... #{$X} ...")
+      - pattern: $M.execute("... #{$X} ...")
+    metadata:
+      category: security
+      cwe: CWE-89
+
+  - id: rb-weak-crypto-md5-sha1
+    message: MD5/SHA-1 are broken for security. Use OpenSSL::Digest::SHA256+.
+    severity: WARNING
+    languages: [ruby]
+    pattern-either:
+      - pattern: Digest::MD5.$M($X)
+      - pattern: Digest::SHA1.$M($X)
+      - pattern: OpenSSL::Digest::MD5.new
+      - pattern: OpenSSL::Digest::SHA1.new
+    metadata:
+      category: security
+      cwe: CWE-327
+
+  - id: rb-send-tainted-method
+    message: send / public_send with a user-controlled method name allows arbitrary method invocation.
+    severity: WARNING
+    languages: [ruby]
+    pattern-either:
+      - pattern: $OBJ.send(params[$K])
+      - pattern: $OBJ.send(params[$K], ...)
+      - pattern: $OBJ.public_send(params[$K])
+      - pattern: $OBJ.public_send(params[$K], ...)
+    metadata:
+      category: security
+      cwe: CWE-470
+
+  - id: rb-mass-assignment
+    message: Mass-assigning params bypasses strong parameters. Use params.require(...).permit(...).
+    severity: WARNING
+    languages: [ruby]
+    pattern-either:
+      - pattern: $M.new(params[$K])
+      - pattern: $M.create(params[$K])
+      - pattern: $M.update(params[$K])
+      - pattern: $M.update_attributes(params[$K])
+    metadata:
+      category: security
+      cwe: CWE-915
+
+  - id: rb-skip-csrf-check
+    message: skip_before_action :verify_authenticity_token disables CSRF protection. Restrict scope or add signature checks.
+    severity: WARNING
+    languages: [ruby]
+    pattern-either:
+      - pattern: skip_before_action :verify_authenticity_token
+      - pattern: skip_before_filter :verify_authenticity_token
+      - pattern: protect_from_forgery except: $X
+    metadata:
+      category: security
+      cwe: CWE-352
+
+  - id: rb-open-tainted-uri
+    message: Kernel#open with dynamic input can execute shell commands (OpenURI pitfall). Use URI.open + validation.
+    severity: WARNING
+    languages: [ruby]
+    pattern-either:
+      - pattern: open(params[$K])
+      - pattern: open("#{$X}")
+    metadata:
+      category: security
+      cwe: CWE-78
+
+  - id: rb-yaml-load-unsafe
+    message: YAML.load on untrusted input can instantiate arbitrary Ruby objects. Use YAML.safe_load.
+    severity: ERROR
+    languages: [ruby]
+    pattern-either:
+      - pattern: YAML.load($X)
+      - pattern: YAML.load_file($X)
+    metadata:
+      category: security
+      cwe: CWE-502

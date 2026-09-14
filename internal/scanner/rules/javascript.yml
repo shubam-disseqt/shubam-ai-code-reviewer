@@ -1,0 +1,159 @@
+## Curated JS/TS security rules bundled with zreview.
+## Bandit/Snyk-caliber but intentionally small — only high-signal patterns.
+## To override, set ZREVIEW_SEMGREP_CONFIG=<path>.
+## To disable presets entirely, set ZREVIEW_DISABLE_SEMGREP_PRESETS=1.
+rules:
+  - id: js-eval-user-input
+    message: eval() / new Function() on dynamic input can lead to RCE. Use JSON.parse or a proper parser.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: eval($X)
+      - pattern: new Function($...ARGS)
+    metadata:
+      category: security
+      cwe: CWE-95
+
+  - id: js-child-process-exec-tainted
+    message: child_process.exec with dynamic input is a command-injection vector. Use execFile with an argv array.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: |
+          require('child_process').exec($CMD, ...)
+      - pattern: |
+          $CP.exec($CMD + $X, ...)
+      - pattern: |
+          $CP.exec(`...${$X}...`, ...)
+    metadata:
+      category: security
+      cwe: CWE-78
+
+  - id: js-hardcoded-secret
+    message: Hardcoded credential-shaped literal. Move secrets to env or a secret manager.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern-regex: '(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*["''][A-Za-z0-9_\-]{20,}["'']'
+    metadata:
+      category: security
+      cwe: CWE-798
+
+  - id: js-dangerously-set-inner-html
+    message: dangerouslySetInnerHTML with unsanitized input allows XSS. Sanitize with DOMPurify first.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: |
+          <$EL dangerouslySetInnerHTML={{__html: $X}} />
+      - pattern: |
+          {dangerouslySetInnerHTML: {__html: $X}}
+    metadata:
+      category: security
+      cwe: CWE-79
+
+  - id: js-sql-string-concat
+    message: SQL query built by string concatenation or template literal. Use parameterised queries.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: $DB.query("SELECT " + $X, ...)
+      - pattern: $DB.query(`SELECT ...${$X}...`, ...)
+      - pattern: $DB.query("INSERT " + $X, ...)
+      - pattern: $DB.query("UPDATE " + $X, ...)
+      - pattern: $DB.query("DELETE " + $X, ...)
+    metadata:
+      category: security
+      cwe: CWE-89
+
+  - id: js-math-random-for-security
+    message: Math.random() is not cryptographically secure. Use crypto.randomBytes / crypto.randomUUID for tokens.
+    severity: WARNING
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: |
+          $TOKEN = Math.random()
+      - pattern: |
+          const $TOKEN = Math.random().toString(...)
+      - pattern: |
+          let $TOKEN = Math.random().toString(...)
+    metadata:
+      category: security
+      cwe: CWE-338
+
+  - id: js-prototype-pollution-merge
+    message: Recursive merge into a user-controlled object enables prototype pollution. Freeze prototypes or use a vetted merge.
+    severity: WARNING
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: Object.assign($TARGET, JSON.parse($REQ))
+      - pattern: |
+          $TARGET[$KEY] = $VAL
+          ...
+          $TARGET[$KEY][$KEY2] = $VAL2
+    metadata:
+      category: security
+      cwe: CWE-1321
+
+  - id: js-timing-attack-string-compare
+    message: "== / === on secrets is timing-attack vulnerable. Use crypto.timingSafeEqual on Buffers."
+    severity: WARNING
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: $SECRET === $USER_PROVIDED
+      - pattern: $SECRET == $USER_PROVIDED
+      - pattern: token === $X
+      - pattern: apiKey === $X
+      - pattern: password === $X
+    metadata:
+      category: security
+      cwe: CWE-208
+
+  - id: js-cors-wildcard
+    message: CORS wildcard with credentials allows any origin to read authenticated responses.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: |
+          {origin: "*", credentials: true}
+      - pattern: |
+          res.setHeader("Access-Control-Allow-Origin", "*")
+    metadata:
+      category: security
+      cwe: CWE-942
+
+  - id: js-weak-crypto-md5-sha1
+    message: MD5/SHA-1 are cryptographically broken. Use SHA-256+ for security-sensitive hashing.
+    severity: WARNING
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: crypto.createHash("md5")
+      - pattern: crypto.createHash("sha1")
+      - pattern: crypto.createHash('md5')
+      - pattern: crypto.createHash('sha1')
+    metadata:
+      category: security
+      cwe: CWE-327
+
+  - id: js-jwt-none-algorithm
+    message: JWT verified with algorithm "none" or without algorithms allowlist accepts unsigned tokens.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: jwt.verify($TOKEN, $SECRET, {algorithms: ["none"]})
+      - pattern: jwt.decode($TOKEN)
+    metadata:
+      category: security
+      cwe: CWE-347
+
+  - id: js-fs-path-traversal
+    message: fs operations on unsanitized user input allow path traversal. Resolve + prefix-check the path.
+    severity: WARNING
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: fs.readFile(req.$X, ...)
+      - pattern: fs.readFileSync(req.$X, ...)
+      - pattern: fs.createReadStream(req.$X)
+    metadata:
+      category: security
+      cwe: CWE-22

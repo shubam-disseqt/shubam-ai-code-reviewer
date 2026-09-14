@@ -1,0 +1,171 @@
+## Curated Python security rules bundled with zreview.
+## Bandit-inspired but scoped to high-signal issues.
+## Override via ZREVIEW_SEMGREP_CONFIG. Disable via ZREVIEW_DISABLE_SEMGREP_PRESETS=1.
+rules:
+  - id: py-eval-exec-user-input
+    message: eval()/exec() on dynamic input can lead to RCE. Use ast.literal_eval or a real parser.
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: eval($X)
+      - pattern: exec($X)
+    metadata:
+      category: security
+      cwe: CWE-95
+
+  - id: py-pickle-loads-untrusted
+    message: pickle.loads on untrusted data allows arbitrary code execution. Use JSON or msgpack.
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: pickle.loads($X)
+      - pattern: pickle.load($X)
+      - pattern: cPickle.loads($X)
+    metadata:
+      category: security
+      cwe: CWE-502
+
+  - id: py-subprocess-shell-true
+    message: subprocess with shell=True is a command-injection vector when args are dynamic. Pass argv list instead.
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: subprocess.run(..., shell=True, ...)
+      - pattern: subprocess.call(..., shell=True, ...)
+      - pattern: subprocess.check_output(..., shell=True, ...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+      - pattern: os.system($CMD)
+    metadata:
+      category: security
+      cwe: CWE-78
+
+  - id: py-sql-fstring-concat
+    message: SQL query built by f-string or concatenation. Use parameterised queries.
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: $CUR.execute(f"...{$X}...")
+      - pattern: $CUR.execute("SELECT " + $X)
+      - pattern: $CUR.execute("SELECT %s" % $X)
+      - pattern: $CUR.execute("INSERT " + $X)
+      - pattern: $CUR.execute("UPDATE " + $X)
+    metadata:
+      category: security
+      cwe: CWE-89
+
+  - id: py-hardcoded-secret
+    message: Hardcoded credential-shaped literal. Move to env or a secret manager.
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern-regex: '(?i)(api[_-]?key|secret|password|token)\s*=\s*["''][A-Za-z0-9_\-]{20,}["'']'
+    metadata:
+      category: security
+      cwe: CWE-798
+
+  - id: py-insecure-random-for-security
+    message: random.random / random.choice is not cryptographically secure. Use the `secrets` module for tokens.
+    severity: WARNING
+    languages: [python]
+    pattern-either:
+      - pattern: |
+          token = random.random()
+      - pattern: |
+          $TOKEN = random.choice($X)
+      - pattern: |
+          $TOKEN = random.randint($A, $B)
+      - pattern: |
+          $TOKEN = "".join(random.choice($X) for _ in range($N))
+    metadata:
+      category: security
+      cwe: CWE-338
+
+  - id: py-yaml-load-unsafe
+    message: yaml.load without SafeLoader can execute arbitrary code. Use yaml.safe_load.
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: yaml.load($X)
+      - pattern: yaml.load($X, Loader=yaml.Loader)
+      - pattern: yaml.load($X, Loader=yaml.FullLoader)
+    metadata:
+      category: security
+      cwe: CWE-502
+
+  - id: py-weak-crypto-md5-sha1
+    message: MD5/SHA-1 are broken for security. Use hashlib.sha256+ (or `usedforsecurity=False` for checksums).
+    severity: WARNING
+    languages: [python]
+    pattern-either:
+      - pattern: hashlib.md5($X)
+      - pattern: hashlib.sha1($X)
+      - pattern: hashlib.new("md5", ...)
+      - pattern: hashlib.new("sha1", ...)
+    metadata:
+      category: security
+      cwe: CWE-327
+
+  - id: py-open-user-input-path-traversal
+    message: open() on unvalidated user input allows path traversal. Resolve + prefix-check the path.
+    severity: WARNING
+    languages: [python]
+    pattern-either:
+      - pattern: open(request.$X, ...)
+      - pattern: open(request.args.get($K), ...)
+      - pattern: open(request.form[$K], ...)
+      - pattern: open(request.GET[$K], ...)
+      - pattern: open(request.POST[$K], ...)
+    metadata:
+      category: security
+      cwe: CWE-22
+
+  - id: py-django-csrf-exempt
+    message: csrf_exempt disables CSRF protection. Only use for webhooks with their own signature verification.
+    severity: WARNING
+    languages: [python]
+    pattern-either:
+      - pattern: |
+          @csrf_exempt
+          def $F(...):
+              ...
+      - pattern: |
+          @method_decorator(csrf_exempt)
+          def $F(...):
+              ...
+    metadata:
+      category: security
+      cwe: CWE-352
+
+  - id: py-flask-debug-true
+    message: Flask debug=True in production leaks stack traces and enables the Werkzeug debugger (RCE).
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: app.run(..., debug=True, ...)
+      - pattern: app.run(debug=True)
+    metadata:
+      category: security
+      cwe: CWE-489
+
+  - id: py-requests-verify-false
+    message: requests(..., verify=False) disables TLS certificate validation.
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: requests.get(..., verify=False, ...)
+      - pattern: requests.post(..., verify=False, ...)
+      - pattern: requests.request(..., verify=False, ...)
+    metadata:
+      category: security
+      cwe: CWE-295
+
+  - id: py-jwt-verify-false
+    message: jwt.decode with verify=False accepts unsigned tokens.
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: jwt.decode($T, ..., verify=False, ...)
+      - pattern: jwt.decode($T, ..., options={"verify_signature": False}, ...)
+    metadata:
+      category: security
+      cwe: CWE-347
