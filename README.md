@@ -529,13 +529,6 @@ AGENTS.md              Rules for AI-assisted contributions
 
 ---
 
-## Roadmap
-
-Shipped: Phases 12-19 (tiering, scanners, cheap-tier, overlap, scoring, description block, effort, depgraph, suggestion mode, provider audits, distribution channels, refactor detection).
-
-**Phase 20** — v1.0 pilot: one-week dogfood on this repo, then tag v1.
-
-Full history: [`ROADMAP.md`](ROADMAP.md)
 
 
 
