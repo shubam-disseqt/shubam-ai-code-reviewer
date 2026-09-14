@@ -1,73 +1,80 @@
-name: 'z-code-reviewer'
-description: 'AI-powered pull-request review as a self-hosted CLI'
-author: 'shubam-disseqt'
+# SPDX-License-Identifier: Apache-2.0
+name: zreview
+description: AI-powered PR review — inline comments, effort score, depgraph
+author: shubam-disseqt
 branding:
-  icon: 'git-pull-request'
-  color: 'purple'
+  icon: check-circle
+  color: purple
 
 inputs:
-  version:
-    description: 'zreview version to install (default: latest)'
-    required: false
-    default: ''
+  pr-number:
+    description: Pull request number
+    required: true
   provider:
-    description: 'LLM provider: anthropic | openai | bedrock | deepseek | openai-responses'
+    description: LLM provider (anthropic|openai|bedrock|deepseek)
     required: false
-    default: 'anthropic'
+    default: openai
   model:
-    description: 'Model name (e.g. claude-sonnet-4-6)'
+    description: Main-tier model
+    required: false
+    default: gpt-4o-mini
+  cheap-model:
+    description: Cheap-tier model (defaults to main-tier if unset)
     required: false
     default: ''
-  from:
-    description: 'Base ref for the diff (default: PR base)'
+  api-key:
+    description: LLM API key (routed to the provider's env var)
+    required: true
+  github-token:
+    description: GITHUB_TOKEN with PR write access
+    required: true
+  min-severity:
+    description: Drop findings below this bucket (LOW|MEDIUM|HIGH|CRITICAL)
     required: false
-    default: ''
-  to:
-    description: 'Head ref for the diff (default: PR head)'
-    required: false
-    default: ''
+    default: MEDIUM
   format:
-    description: 'Output format: stdout | json | github'
+    description: Output format (stdout|json|github|sarif)
     required: false
-    default: 'github'
-  db-url:
-    description: 'ZREVIEW_DB_URL — SQLite DSN for the index (optional)'
+    default: github
+  image:
+    description: Override the zreview image (tag or full ref)
     required: false
-    default: ''
-  rules-repo:
-    description: 'ZREVIEW_ORG_RULES_REPO — owner/repo[@ref] for org rules'
-    required: false
-    default: ''
-  extra-args:
-    description: 'Additional flags to pass to zreview review'
-    required: false
-    default: ''
+    default: ghcr.io/shubam-disseqt/zreview:latest
 
 runs:
-  using: 'composite'
+  using: composite
   steps:
-    - name: Install zreview
+    - name: Route API key to provider env var
       shell: bash
-      run: curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/scripts/install.sh | ZREVIEW_VERSION=${{ inputs.version }} sh
-    - name: Run review
-      shell: bash
-      env:
-        ZREVIEW_PROVIDER: ${{ inputs.provider }}
-        ZREVIEW_MODEL: ${{ inputs.model }}
-        ZREVIEW_DB_URL: ${{ inputs.db-url }}
-        ZREVIEW_ORG_RULES_REPO: ${{ inputs.rules-repo }}
       run: |
         set -euo pipefail
-        FROM="${{ inputs.from }}"
-        TO="${{ inputs.to }}"
-        if [ -z "$FROM" ] && [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-          FROM="$GITHUB_BASE_REF"
-        fi
-        if [ -z "$TO" ]; then
-          TO="$GITHUB_HEAD_REF"
-        fi
-        PR_NUM=""
-        if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-          PR_NUM="--pr ${{ github.event.pull_request.number }}"
-        fi
-        zreview review --from "$FROM" --to "$TO" --format ${{ inputs.format }} $PR_NUM ${{ inputs.extra-args }}
+        case "${{ inputs.provider }}" in
+          openai)    echo "OPENAI_API_KEY=${{ inputs.api-key }}"        >> "$GITHUB_ENV" ;;
+          anthropic) echo "ANTHROPIC_API_KEY=${{ inputs.api-key }}"     >> "$GITHUB_ENV" ;;
+          deepseek)  echo "DEEPSEEK_API_KEY=${{ inputs.api-key }}"      >> "$GITHUB_ENV" ;;
+          bedrock)   echo "AWS_BEARER_TOKEN_BEDROCK=${{ inputs.api-key }}" >> "$GITHUB_ENV" ;;
+          *) echo "::error::unknown provider '${{ inputs.provider }}'"; exit 1 ;;
+        esac
+
+    - name: Run zreview via Docker
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        ZREVIEW_PROVIDER: ${{ inputs.provider }}
+        ZREVIEW_MODEL: ${{ inputs.model }}
+        ZREVIEW_CHEAP_MODEL: ${{ inputs.cheap-model }}
+      run: |
+        set -euo pipefail
+        docker run --rm \
+          -v "${GITHUB_WORKSPACE}:/workspace" \
+          -w /workspace \
+          -e OPENAI_API_KEY -e ANTHROPIC_API_KEY -e DEEPSEEK_API_KEY \
+          -e AWS_BEARER_TOKEN_BEDROCK -e AWS_REGION \
+          -e GITHUB_TOKEN -e GITHUB_REPOSITORY \
+          -e ZREVIEW_PROVIDER -e ZREVIEW_MODEL -e ZREVIEW_CHEAP_MODEL \
+          "${{ inputs.image }}" \
+          review \
+            --pr "${{ inputs.pr-number }}" \
+            --format "${{ inputs.format }}" \
+            --min-severity "${{ inputs.min-severity }}"

@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: build ${{ matrix.os }}/${{ matrix.arch }}
@@ -17,22 +20,22 @@ jobs:
         include:
           - os: linux
             arch: amd64
-            suffix: ''
+            ext: tar.gz
           - os: linux
             arch: arm64
-            suffix: ''
+            ext: tar.gz
           - os: darwin
             arch: amd64
-            suffix: ''
+            ext: tar.gz
           - os: darwin
             arch: arm64
-            suffix: ''
+            ext: tar.gz
           - os: windows
             arch: amd64
-            suffix: '.exe'
+            ext: zip
           - os: windows
             arch: arm64
-            suffix: '.exe'
+            ext: zip
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,26 +47,46 @@ jobs:
         with:
           go-version: '1.26'
 
-      - name: Build
+      - name: Build archive
         env:
           CGO_ENABLED: '0'
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
+          MATRIX_EXT: ${{ matrix.ext }}
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          BIN="zreview-${GOOS}-${GOARCH}${{ matrix.suffix }}"
+          VERSION="${TAG#v}"
           COMMIT="$(git rev-parse --short HEAD)"
           DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          go build -trimpath \
-            -ldflags "-s -w -X main.Version=${{ github.ref_name }} -X main.GitCommit=${COMMIT} -X main.BuildDate=${DATE}" \
-            -o "${BIN}" ./cmd/zreview
-          echo "BIN=${BIN}" >> "$GITHUB_ENV"
+          BIN="zreview"
+          [ "$GOOS" = "windows" ] && BIN="zreview.exe"
 
-      - name: Upload binary artifact
+          STAGE="$(mktemp -d)"
+          go build -trimpath \
+            -ldflags "-s -w -X main.Version=${VERSION} -X main.GitCommit=${COMMIT} -X main.BuildDate=${DATE}" \
+            -o "${STAGE}/${BIN}" ./cmd/zreview
+
+          # Include LICENSE + NOTICE alongside the binary — mandatory for
+          # Apache-2.0 redistribution.
+          cp LICENSE NOTICE README.md "${STAGE}/"
+
+          ARCHIVE="zreview_${VERSION}_${GOOS}_${GOARCH}.${MATRIX_EXT}"
+          if [ "$MATRIX_EXT" = "zip" ]; then
+            (cd "$STAGE" && zip -qr "${GITHUB_WORKSPACE}/${ARCHIVE}" .)
+          else
+            tar -C "$STAGE" -czf "${ARCHIVE}" .
+          fi
+          sha256sum "${ARCHIVE}" | tee "${ARCHIVE}.sha256"
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+
+      - name: Upload archive artifact
         uses: actions/upload-artifact@v4
         with:
           name: zreview-${{ matrix.os }}-${{ matrix.arch }}
-          path: ${{ env.BIN }}
+          path: |
+            ${{ env.ARCHIVE }}
+            ${{ env.ARCHIVE }}.sha256
           if-no-files-found: error
           retention-days: 7
 
@@ -75,6 +98,12 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      sha_darwin_arm64: ${{ steps.checksums.outputs.darwin_arm64 }}
+      sha_darwin_amd64: ${{ steps.checksums.outputs.darwin_amd64 }}
+      sha_linux_arm64: ${{ steps.checksums.outputs.linux_arm64 }}
+      sha_linux_amd64: ${{ steps.checksums.outputs.linux_amd64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -87,27 +116,47 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Generate checksums
+      - name: Meta
+        id: meta
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Aggregate checksums
+        id: checksums
         working-directory: dist
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
           set -euo pipefail
-          shopt -s nullglob
           : > sha256sum.txt
-          for f in zreview-*; do
+          for f in zreview_*; do
+            case "$f" in
+              *.sha256) continue ;;
+            esac
             [ -f "$f" ] || continue
             sha256sum "$f" >> sha256sum.txt
           done
           echo "== sha256sum.txt =="
           cat sha256sum.txt
 
+          extract_sha() {
+            awk -v pat="$1" '$2 == pat { print $1 }' sha256sum.txt
+          }
+          echo "darwin_arm64=$(extract_sha "zreview_${VERSION}_darwin_arm64.tar.gz")" >> "$GITHUB_OUTPUT"
+          echo "darwin_amd64=$(extract_sha "zreview_${VERSION}_darwin_amd64.tar.gz")" >> "$GITHUB_OUTPUT"
+          echo "linux_arm64=$(extract_sha "zreview_${VERSION}_linux_arm64.tar.gz")" >> "$GITHUB_OUTPUT"
+          echo "linux_amd64=$(extract_sha "zreview_${VERSION}_linux_amd64.tar.gz")" >> "$GITHUB_OUTPUT"
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
-            dist/zreview-*
+            dist/zreview_*
             dist/sha256sum.txt
 
-      - name: Generate release notes
+      - name: Release notes
         id: notes
         env:
           CURRENT_TAG: ${{ github.ref_name }}
@@ -116,24 +165,22 @@ jobs:
           PREV_TAG="$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || true)"
           notes_file="$(mktemp)"
           {
-            echo "## Release ${CURRENT_TAG}"
+            echo "## ${CURRENT_TAG}"
             echo
             if [ -z "$PREV_TAG" ]; then
               echo "Initial release."
-              echo
             else
-              feats="$(git log --oneline --no-merges "${PREV_TAG}..${CURRENT_TAG}" --grep='^feat' || true)"
-              fixes="$(git log --oneline --no-merges "${PREV_TAG}..${CURRENT_TAG}" --grep='^fix' || true)"
-              refactors="$(git log --oneline --no-merges "${PREV_TAG}..${CURRENT_TAG}" --grep='^refactor' || true)"
-              docs="$(git log --oneline --no-merges "${PREV_TAG}..${CURRENT_TAG}" --grep='^docs' || true)"
-              other="$(git log --oneline --no-merges "${PREV_TAG}..${CURRENT_TAG}" --invert-grep --grep='^feat' --grep='^fix' --grep='^refactor' --grep='^docs' || true)"
-              if [ -n "$feats" ];     then echo "### Features";       echo; echo "$feats"     | sed 's/^/- /'; echo; fi
-              if [ -n "$fixes" ];     then echo "### Fixes";          echo; echo "$fixes"     | sed 's/^/- /'; echo; fi
-              if [ -n "$refactors" ]; then echo "### Refactors";      echo; echo "$refactors" | sed 's/^/- /'; echo; fi
-              if [ -n "$docs" ];      then echo "### Docs";           echo; echo "$docs"      | sed 's/^/- /'; echo; fi
-              if [ -n "$other" ];     then echo "### Other";          echo; echo "$other"     | sed 's/^/- /'; echo; fi
-              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...${CURRENT_TAG}"
+              echo "**Changes**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...${CURRENT_TAG}"
+              echo
+              git log --oneline --no-merges "${PREV_TAG}..${CURRENT_TAG}" | sed 's/^/- /'
             fi
+            echo
+            echo "### Install"
+            echo
+            echo '```sh'
+            echo "brew install shubam-disseqt/tap/zreview"
+            echo "npm i -g zreview"
+            echo '```'
           } > "$notes_file"
           echo "notes_file=${notes_file}" >> "$GITHUB_OUTPUT"
 
@@ -144,98 +191,153 @@ jobs:
           name: ${{ github.ref_name }}
           body_path: ${{ steps.notes.outputs.notes_file }}
           files: |
-            dist/zreview-*
+            dist/zreview_*
             dist/sha256sum.txt
           fail_on_unmatched_files: true
 
   npm-publish:
-    name: publish npm packages
+    name: publish to npm
     needs: release
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     steps:
+      - name: Guard on NPM_TOKEN
+        id: guard
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NPM_TOKEN:-}" ]; then
+            echo "::warning::NPM_TOKEN not set; skipping npm publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
+        if: steps.guard.outputs.skip == 'false'
         uses: actions/checkout@v4
 
       - name: Set up Node
+        if: steps.guard.outputs.skip == 'false'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Download all binary artifacts
-        uses: actions/download-artifact@v4
+      - name: Set package version
+        if: steps.guard.outputs.skip == 'false'
+        working-directory: packaging/npm
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Publish
+        if: steps.guard.outputs.skip == 'false'
+        working-directory: packaging/npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
+
+  homebrew-bump:
+    name: bump homebrew tap
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Guard on HOMEBREW_TAP_TOKEN
+        id: guard
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "${HOMEBREW_TAP_TOKEN:-}" ]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN not set; skipping tap bump."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout tap
+        if: steps.guard.outputs.skip == 'false'
+        uses: actions/checkout@v4
         with:
-          path: dist
-          merge-multiple: true
+          repository: shubam-disseqt/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
 
-      - name: Stage platform binaries into npm/
-        run: |
-          set -euo pipefail
-          # Map Go GOOS/GOARCH to npm platform/cpu.
-          declare -A PAIRS=(
-            [zreview-linux-amd64]="zreview-linux-x64/bin/zreview"
-            [zreview-linux-arm64]="zreview-linux-arm64/bin/zreview"
-            [zreview-darwin-amd64]="zreview-darwin-x64/bin/zreview"
-            [zreview-darwin-arm64]="zreview-darwin-arm64/bin/zreview"
-            [zreview-windows-amd64.exe]="zreview-win32-x64/bin/zreview.exe"
-            [zreview-windows-arm64.exe]="zreview-win32-arm64/bin/zreview.exe"
-          )
-          for src in "${!PAIRS[@]}"; do
-            dst="npm/${PAIRS[$src]}"
-            mkdir -p "$(dirname "$dst")"
-            cp "dist/$src" "$dst"
-            chmod +x "$dst" || true
-          done
-          ls -R npm/*/bin
-
-      - name: Set version on every package
+      - name: Update formula
+        if: steps.guard.outputs.skip == 'false'
+        working-directory: tap
         env:
-          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.release.outputs.version }}
+          SHA_DARWIN_ARM64: ${{ needs.release.outputs.sha_darwin_arm64 }}
+          SHA_DARWIN_AMD64: ${{ needs.release.outputs.sha_darwin_amd64 }}
+          SHA_LINUX_ARM64: ${{ needs.release.outputs.sha_linux_arm64 }}
+          SHA_LINUX_AMD64: ${{ needs.release.outputs.sha_linux_amd64 }}
         run: |
           set -euo pipefail
-          # Strip a leading 'v' from the tag ("v0.1.0" -> "0.1.0"). npm rejects
-          # a leading 'v' in package.json versions.
-          VERSION="${TAG#v}"
-          export VERSION
-          for pkg in npm/zreview-linux-x64 npm/zreview-linux-arm64 \
-                     npm/zreview-darwin-x64 npm/zreview-darwin-arm64 \
-                     npm/zreview-win32-x64 npm/zreview-win32-arm64 \
-                     npm/zreview; do
-            (
-              cd "$pkg"
-              npm version "$VERSION" --no-git-tag-version --allow-same-version
-            )
-          done
-          # Meta package's optionalDependencies must pin the same VERSION.
-          node -e '
-            const fs = require("fs");
-            const path = "npm/zreview/package.json";
-            const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
-            for (const name of Object.keys(pkg.optionalDependencies || {})) {
-              pkg.optionalDependencies[name] = process.env.VERSION;
-            }
-            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
-          '
+          FORMULA="Formula/zreview.rb"
+          if [ ! -f "$FORMULA" ]; then
+            echo "::error::$FORMULA missing in tap repo — bootstrap it first (see packaging/homebrew/README.md)."
+            exit 1
+          fi
+          # Replace either the placeholder tokens (first release) or the
+          # previous version/sha lines (subsequent releases).
+          python3 - "$FORMULA" <<'PY'
+          import os, re, sys
+          path = sys.argv[1]
+          src = open(path).read()
 
-      - name: Publish platform packages
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -euo pipefail
-          for pkg in npm/zreview-linux-x64 npm/zreview-linux-arm64 \
-                     npm/zreview-darwin-x64 npm/zreview-darwin-arm64 \
-                     npm/zreview-win32-x64 npm/zreview-win32-arm64; do
-            echo ">>> publishing $pkg"
-            (cd "$pkg" && npm publish --provenance --access public)
-          done
+          version = os.environ["VERSION"]
+          shas = {
+              "darwin_arm64": os.environ["SHA_DARWIN_ARM64"],
+              "darwin_amd64": os.environ["SHA_DARWIN_AMD64"],
+              "linux_arm64":  os.environ["SHA_LINUX_ARM64"],
+              "linux_amd64":  os.environ["SHA_LINUX_AMD64"],
+          }
 
-      - name: Publish meta package
+          # version line
+          src = re.sub(r'version\s+"[^"]+"', f'version "{version}"', src, count=1)
+
+          # Each url/sha block is anchored by its filename suffix. Rewrite the
+          # sha256 that follows each matching url.
+          def replace_block(text, suffix, sha):
+              pattern = re.compile(
+                  r'(url\s+"[^"]*_' + re.escape(suffix) + r'\.tar\.gz"\s*\n\s*sha256\s+")[0-9a-fA-F]{64}(")',
+                  re.MULTILINE,
+              )
+              return pattern.sub(lambda m: m.group(1) + sha + m.group(2), text)
+
+          for suffix, sha in shas.items():
+              src = replace_block(src, suffix, sha)
+
+          # First-release placeholders
+          src = src.replace("RELEASE_VERSION", version)
+          for suffix, sha in shas.items():
+              src = src.replace(f"RELEASE_SHA256_{suffix.upper()}", sha)
+
+          open(path, "w").write(src)
+          PY
+
+          git config user.name "zreview-release-bot"
+          git config user.email "zreview-release-bot@users.noreply.github.com"
+          BRANCH="bump-zreview-${VERSION}"
+          git checkout -b "$BRANCH"
+          git add "$FORMULA"
+          git commit -m "zreview ${VERSION}"
+          git push origin "$BRANCH"
+
+      - name: Open PR against tap
+        if: steps.guard.outputs.skip == 'false'
+        working-directory: tap
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
         run: |
-          set -euo pipefail
-          cd npm/zreview
-          npm publish --provenance --access public
+          gh pr create \
+            --title "zreview ${VERSION}" \
+            --body "Automated bump from https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}" \
+            --head "bump-zreview-${VERSION}" \
+            --base main

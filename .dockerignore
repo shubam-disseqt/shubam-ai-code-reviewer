@@ -1,0 +1,36 @@
+# VCS / CI / editor cruft
+.git
+.github
+.gitignore
+.gitattributes
+.editorconfig
+.vscode
+.idea
+
+# Node / build outputs that live in this repo
+node_modules
+dist
+bin
+out
+coverage
+coverage.out
+*.log
+*.tmp
+
+# Local runtime state
+.claude
+.zreview
+
+# Docs site build artifacts (source .md is still copied for embed.go)
+docs/_site
+
+# Packaging/marketing/ide assets — not needed to build the binary
+ide
+marketing
+packaging/npm/bin
+packaging/**/dist
+
+# Test worktrees / scratch
+tmp
+tmp-*
+scratch

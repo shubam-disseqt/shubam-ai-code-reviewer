@@ -1,0 +1,45 @@
+{
+  "name": "zreview",
+  "version": "0.2.0",
+  "description": "Deterministic, LLM-free code review CLI",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/shubam-disseqt/z-code-reviewer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shubam-disseqt/z-code-reviewer.git",
+    "directory": "packaging/npm"
+  },
+  "bugs": {
+    "url": "https://github.com/shubam-disseqt/z-code-reviewer/issues"
+  },
+  "keywords": [
+    "code-review",
+    "static-analysis",
+    "linter",
+    "cli",
+    "sarif"
+  ],
+  "bin": {
+    "zreview": "./bin/zreview.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "files": [
+    "install.js",
+    "bin/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}

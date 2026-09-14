@@ -1,0 +1,84 @@
+name: ci-windows
+
+# Windows-parity CI. Runs build + race tests on windows-latest so we catch
+# path-separator, case-sensitivity, line-ending, and subprocess bugs that
+# ubuntu-latest silently hides.
+#
+# continue-on-error is on for now: this job is informational until we've
+# triaged and fixed the first wave of Windows-specific failures. Do not
+# gate branch protection on it yet.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  GO_TEST_TIMEOUT: 10m
+
+jobs:
+  windows:
+    name: build + test (windows)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # autocrlf mangles Go source, testdata, and golden files. Force LF.
+          # ponytail: repo-wide autocrlf=false, revisit if a contributor needs mixed line endings.
+          fetch-depth: 1
+
+      - name: Disable autocrlf
+        shell: bash
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: false
+
+      - name: Cache Go build + module cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: go env
+        run: go env
+
+      - name: go mod download
+        run: go mod download
+
+      - name: Build
+        run: go build -trimpath ./...
+
+      - name: Test with race
+        run: go test -race -count=1 -timeout ${{ env.GO_TEST_TIMEOUT }} ./...
+
+      - name: Targeted path/OS tests (verbose)
+        if: always()
+        run: go test -run "Path|Windows|Filepath|Canonical|WithinBase" -v -timeout ${{ env.GO_TEST_TIMEOUT }} ./...
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-test-logs
+          path: |
+            **/*.test.log
+            coverage.out
+          if-no-files-found: ignore
+          retention-days: 7

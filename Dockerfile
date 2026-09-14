@@ -1,13 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 disseqt
 #
-# Build a static zreview binary and ship it in a minimal runtime image.
-# Multi-arch: pass --platform=linux/amd64,linux/arm64 to `docker buildx build`.
-# The build stage is pinned to the BUILDPLATFORM so a native toolchain
-# cross-compiles for TARGETARCH via GOOS/GOARCH.
+# Multi-stage, multi-arch build for the zreview CLI.
+# Build with: docker buildx build --platform linux/amd64,linux/arm64 -t zreview:dev .
 
 ARG ZREVIEW_VERSION=dev
 
+# ---- build stage --------------------------------------------------------
 FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
@@ -25,12 +24,13 @@ RUN set -eux; \
       -ldflags "-s -w -X main.Version=${ZREVIEW_VERSION} -X main.GitCommit=${COMMIT} -X main.BuildDate=${DATE}" \
       -o /out/zreview ./cmd/zreview
 
-FROM alpine:3.20
+# ---- runtime stage ------------------------------------------------------
+FROM alpine:3.19
 RUN apk add --no-cache ca-certificates git \
  && addgroup -g 1000 -S zreview \
  && adduser  -u 1000 -S -G zreview -h /home/zreview zreview \
- && mkdir -p /repo && chown zreview:zreview /repo
+ && mkdir -p /workspace && chown zreview:zreview /workspace
 COPY --from=build /out/zreview /usr/local/bin/zreview
 USER 1000:1000
-WORKDIR /repo
-ENTRYPOINT ["zreview"]
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/zreview"]
