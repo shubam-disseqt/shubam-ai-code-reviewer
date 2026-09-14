@@ -1,122 +1,86 @@
 <div align="center">
-  <h1>z-code-reviewer</h1>
-  <p><strong>An AI-powered code review CLI &mdash; deterministic engineering wrapped around a thin agent loop.</strong></p>
+
+# zreview
+
+**AI code review that ships with your PRs.**
+Deterministic engineering wrapped around a thin agent loop. One binary. Real bugs, not noise.
+
+[![CI](https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/ci.yml/badge.svg)](https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/ci.yml)
+[![govulncheck](https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/govulncheck.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=flat-square)](LICENSE)
+[![Go 1.26+](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&style=flat-square)](go.mod)
+[![SLSA](https://img.shields.io/badge/SLSA-build--provenance-D4AF37?style=flat-square)](https://slsa.dev)
+
+[Quick start](#quick-start) · [Architecture](#architecture) · [Docs](https://shubam-disseqt.github.io/z-code-reviewer/) · [Roadmap](ROADMAP.md)
+
 </div>
 
-<p align="center">
-  <a href="https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/ci.yml/badge.svg" /></a>
-  <a href="https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/govulncheck.yml"><img alt="govulncheck" src="https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/govulncheck.yml/badge.svg" /></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=flat-square" /></a>
-  <img alt="Go 1.26+" src="https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&style=flat-square" />
-  <img alt="SLSA build provenance" src="https://img.shields.io/badge/SLSA-build--provenance-D4AF37?style=flat-square" />
-</p>
-<p align="center">
-  <a href="#supported-platforms"><img alt="Windows" src="https://img.shields.io/badge/Windows-supported-blue.svg?style=flat-square" /></a>
-  <a href="#supported-platforms"><img alt="macOS" src="https://img.shields.io/badge/macOS-supported-blue.svg?style=flat-square" /></a>
-  <a href="#supported-platforms"><img alt="Linux" src="https://img.shields.io/badge/Linux-supported-blue.svg?style=flat-square" /></a>
-</p>
-<p align="center">
-  <a href="#providers"><img alt="Anthropic" src="https://img.shields.io/badge/Anthropic-supported-blueviolet.svg?style=flat-square" /></a>
-  <a href="#providers"><img alt="OpenAI" src="https://img.shields.io/badge/OpenAI-supported-blueviolet.svg?style=flat-square" /></a>
-  <a href="#providers"><img alt="AWS Bedrock" src="https://img.shields.io/badge/AWS%20Bedrock-supported-blueviolet.svg?style=flat-square" /></a>
-  <a href="#providers"><img alt="DeepSeek" src="https://img.shields.io/badge/DeepSeek-supported-blueviolet.svg?style=flat-square" /></a>
-</p>
-
 ---
 
-## Table of contents
+## At a glance
 
-- [What is z-code-reviewer](#what-is-z-code-reviewer)
-- [Feature matrix](#feature-matrix)
-- [Quick start](#quick-start)
-- [Architecture](#architecture)
-- [Review pipeline (13 stages)](#review-pipeline)
-- [Commands](#commands)
-- [Configuration](#configuration)
-- [Output formats](#output-formats)
-- [Effort scoring](#effort-scoring)
-- [Suggestion mode](#suggestion-mode)
-- [Overlap detection](#overlap-detection)
-- [Scanners](#scanners)
-- [Depgraph](#depgraph)
-- [Model tiering](#model-tiering)
-- [LLM loop](#llm-loop)
-- [Package map](#package-map)
-- [Audit results](#audit-results)
-- [Providers](#providers)
-- [Development](#development)
-- [Roadmap](#roadmap)
-- [Attribution](#attribution)
-
----
-
-## What is z-code-reviewer
-
-**zreview** is a single-binary AI PR reviewer. It reads a git diff, runs deterministic scanners, drives a small LLM agent loop over each file, deduplicates findings across pushes, scores reviewer effort, renders a package-import diagram, and posts either inline PR comments (GitHub), a JSON report, a SARIF file, or plain-text summary.
-
-**Design axes:**
-
-- **Deterministic engineering, thin LLM loop.** Scanners, scoring, fingerprints, depgraph, effort math, and dedup are all deterministic Go. The LLM only sees each file's diff plus targeted read/search tools and emits `code_comment`/`task_done`.
-- **Two-tier model routing.** Main tier (Sonnet-class) drives the review. Cheap tier (Haiku/Flash/DeepSeek) drives the summarizer and labeler in parallel. ~30-40% cost savings measured vs single-tier.
-- **Incremental re-review.** Every finding carries a stable content-hash fingerprint. Push a fix commit → resolved findings drop, unfixed carry, new bugs surface. Stale zreview comments are cleaned up before posting fresh ones.
-- **Every claim in the PR body is auditable.** Effort table rows sum to the shown score. Depgraph edges map to literal `import` lines. Labels defensible from touched paths. No LLM-fabricated content.
-- **Two output modes.** Bug/security/perf **findings** and proactive **suggestions** delivered as GitHub `suggestion` markdown blocks that reviewers apply with one click.
-
-**What zreview is NOT:**
-
-- Not a static analyzer replacement — it runs Gitleaks / Semgrep / govulncheck alongside the LLM and routes their output to SARIF.
-- Not a chat interface — no conversational surface; every run is one CLI invocation with deterministic inputs and outputs.
-- Not a code-generation tool — it never writes commits itself. Suggestion blocks let reviewers accept fixes via the GitHub UI.
-
----
-
-## Feature matrix
-
-| Feature | Status | Notes |
-|---|---|---|
-| Bug/security/perf findings via LLM | supported | Main tier, tool-loop, one file at a time |
-| Inline PR comments (GitHub) | supported | Batched review-post; stale-cleanup via fingerprint markers |
-| JSON output | supported | Structured envelope with severity/confidence/impact/state |
-| SARIF output (GitHub Code Scanning) | supported | Scanner findings only; LLM findings stay in-band |
-| Deterministic scanners | supported | Gitleaks, Semgrep, govulncheck (best-effort, gracefully absent) |
-| Content-hash fingerprints | supported | Whitespace/comment-stable; enables incremental re-review |
-| Carryover across pushes | supported | Resolved/carried/new counts posted with every run |
-| Reviewer-effort score 0-10 | supported | Deterministic, YAML-configurable, full audit table |
-| Depgraph (import diagram) | supported | Parsed by `go/parser`, every edge = literal `import` |
-| Overlap detection | supported | Cross-PR file-touch collisions surface in the description |
-| Cheap-tier summarizer + labeler | supported | Parallel, JSON-structured, fault-tolerant |
-| SQLite content-hash index | supported | Optional; skips re-indexing unchanged files |
-| Session persistence + `--resume` | supported | JSONL append-only log with secret redaction |
-| Code-quality suggestions | supported (v0.2) | GitHub `suggestion` markdown blocks; `.zreview/config.yaml` toggle |
-| No-source-changes handling | supported | Docs-only / deps-only PRs get a `docs`/`chore` label + minimal block |
-| Offline docs server | supported | `zreview docs` serves embedded HTML on loopback |
-| Multi-provider LLM | supported | Anthropic, OpenAI, Bedrock, DeepSeek — single binary |
+|  |  |
+|---|---|
+| **Recall** | 21 / 21 seeded bugs caught on the 10-PR audit (100%) |
+| **Precision** | ~1 false positive per 10 findings |
+| **Cost** | ~$0.006 per PR at `gpt-4o-mini`; $220/year at 100 PRs/day |
+| **Latency** | Median 20–30 s per PR; 150 s on a 40-file mega PR |
+| **Providers** | Anthropic · OpenAI · AWS Bedrock · DeepSeek |
+| **Languages** | Go · TypeScript · Python · Ruby · JavaScript |
+| **Platforms** | Linux · macOS · Windows |
+| **Distribution** | Homebrew · npm · Docker · GitHub Action · direct binary |
 
 ---
 
 ## Quick start
 
 ```bash
-# Install
-brew install shubam-disseqt/tap/zreview       # or: npm i -g zreview
-# or download from releases: https://github.com/shubam-disseqt/z-code-reviewer/releases
+# 1. Install
+brew install shubam-disseqt/tap/zreview      # or: npm i -g zreview
 
-# Configure your LLM
-export ANTHROPIC_API_KEY=sk-ant-...            # or OPENAI_API_KEY
-export ZREVIEW_MODEL=claude-sonnet-4-6         # main tier
-export ZREVIEW_CHEAP_MODEL=claude-haiku-4-5    # cheap tier
+# 2. Configure the LLM
+export OPENAI_API_KEY=sk-...
+export ZREVIEW_MODEL=gpt-4o-mini             # or claude-sonnet-4-6
 
-# Review the current workspace diff
-zreview review
+# 3. Review a diff
+zreview review                               # workspace diff (uncommitted)
+zreview review --from main --to feature/x    # branch range
+zreview review --commit abc123               # single commit
 
-# Review a branch
-zreview review --from main --to feature/x
-
-# Review a PR with inline comments (needs GITHUB_TOKEN)
+# 4. Post to a GitHub PR
 export GITHUB_TOKEN=ghp_...
 export GITHUB_REPOSITORY=owner/repo
 zreview review --pr 42 --format github
 ```
+
+### GitHub Actions
+
+```yaml
+- uses: shubam-disseqt/z-code-reviewer@v1
+  with:
+    pr-number: ${{ github.event.pull_request.number }}
+    api-key: ${{ secrets.OPENAI_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Three lines. Every PR gets an inline review with effort score, findings, and a package-imports diagram.
+
+---
+
+## What it does
+
+Every `zreview review` produces:
+
+1. **Inline PR comments** on the exact lines with real bugs, tagged by severity + category
+2. **A managed PR description block** with the walkthrough, findings table, and risk assessment
+3. **A reviewer-effort score (0-10)** with a full audit table showing every contribution
+4. **A package-imports Mermaid diagram** parsed from real `import` lines (Go, TypeScript, Python)
+5. **Cross-PR overlap warnings** when the diff collides with other open PRs
+6. **Committable suggestion blocks** for extract-helper, guard-clause, and error-wrap opportunities
+7. **SARIF output** for GitHub Code Scanning (gitleaks / semgrep / govulncheck findings)
+8. **Structured labels** (pr_type, domains, risk_tag, ownership_hints) with stale-cleanup
+
+Push a fix commit — the resolved findings drop, unfixed ones carry, new bugs surface. No stale comments, no re-run noise.
 
 ---
 
@@ -136,7 +100,7 @@ flowchart LR
     B3[scoring engine<br/>+ policy YAML]
     B4[fingerprint +<br/>carryover]
     B5[effort<br/>+ policy YAML]
-    B6[depgraph<br/>go/parser]
+    B6[depgraph<br/>go/parser/ts/py]
     B7[overlap<br/>cross-PR probe]
   end
 
@@ -175,15 +139,31 @@ flowchart LR
   C4 --> C5 --> C1
 ```
 
-- **Deterministic path** (scanners, scoring, fingerprints, effort, depgraph, overlap) never calls an LLM and always produces the same output for the same inputs.
-- **LLM path** runs the main-tier reviewer per-file, plus cheap-tier summarizer + labeler in parallel with the review.
-- **Emit** stitches everything together into the chosen output format.
+**Two layers with different guarantees:**
+
+- **Deterministic path** — scanners, scoring, fingerprints, effort, depgraph, overlap. All Go. Same input → same output every run. Reproducible, auditable, cheap.
+- **LLM path** — main-tier reviewer per file, plus cheap-tier summarizer + labeler in parallel. Judgement calls the deterministic path can't make.
+
+The LLM sees each file's diff and a small set of read/search tools; it emits `code_comment` or `task_done`. That's it. No agent chains, no reasoning loops, no LangGraph.
+
+---
+
+## Design principles
+
+| Axis | Choice | Why |
+|---|---|---|
+| **Determinism** | Deterministic engineering wraps a thin LLM loop | Scanners, scoring, math, dedup all Go — LLM only for judgement |
+| **Auditability** | Every claim in the PR body is verifiable | Effort table rows sum to shown score; depgraph edges = literal imports |
+| **Cost** | Two-tier model routing | Main tier for review; cheap tier for summarizer/labeler; ~30-40% saved |
+| **Idempotency** | Content-hash fingerprints | Fix commit → resolved findings drop cleanly; no re-run noise |
+| **Distribution** | Single Go binary | No Python runtime, no LangChain, no service to deploy |
+| **Composability** | Four output formats | stdout, JSON, GitHub, SARIF — pick what your pipeline consumes |
 
 ---
 
 ## Review pipeline
 
-`runReview()` in `cmd/zreview/review_cmd.go` runs 13 stages. Every stage wraps its error with a `stage:` prefix so a failure names the phase that hit it.
+`runReview()` runs 13 numbered stages. Every stage wraps its error with a `stage:` prefix so a failure names the phase.
 
 ```mermaid
 flowchart TD
@@ -195,16 +175,16 @@ flowchart TD
     P3["3 · Index store<br/>optional SQLite"]
     P32["3.2 · Deterministic scanners<br/>gitleaks / semgrep / govulncheck"]
     P33["3.3 · Cheap-tier agents<br/>summarizer + labeler parallel"]
-    P4["4 · Org rules load<br/>from external repo"]
+    P4["4 · Org rules load"]
     P5["5 · Repo context<br/>indexed OR JIT"]
     P6["6 · Session start<br/>or resume"]
-    P7["7 · LLM tier resolve<br/>Main + Cheap client"]
+    P7["7 · LLM tier resolve"]
     P8["8 · Prompts + tools load"]
     P9["9 · Tool registry"]
     P10["10 · LLM loop<br/>per file, tool-driven"]
     P11["11 · Post-process<br/>score, filter, dedup"]
     P115["11.5 · Carryover<br/>new/carried/resolved"]
-    P12["12 · Overlap detect<br/>cross-PR"]
+    P12["12 · Overlap detect"]
     P125["12.5 · Effort score 0-10"]
     P126["12.6 · Depgraph render"]
     P13["13 · Emit<br/>stdout/json/github/sarif"]
@@ -212,188 +192,58 @@ flowchart TD
     P0 --> P1 --> P15 --> P2 --> P25 --> P3 --> P32 --> P33 --> P4 --> P5 --> P6 --> P7 --> P8 --> P9 --> P10 --> P11 --> P115 --> P12 --> P125 --> P126 --> P13
 ```
 
-Every "best-effort" stage (scanners, cheap-tier, index, overlap, effort, depgraph) is fault-tolerant — a failure logs a WARN and continues with empty/default output. Only diff, scoring, session, LLM, prompts, tools, and emit are fatal.
+**Fault-tolerant stages** (log warning, continue with empty result): scanners, cheap-tier agents, index, overlap, effort, depgraph.
+**Fatal stages** (abort with wrapped error): diff, scoring, session, LLM, prompts, tools, emit.
 
 ---
 
-## Commands
+## Compared to alternatives
 
-| Command | Purpose | Key flags |
-|---|---|---|
-| `zreview review` | Run the full review pipeline | `--from`, `--to`, `--commit`, `--pr`, `--format`, `--output`, `--min-severity`, `--resume`, `--verbose`, `--wait-sarif` |
-| `zreview index` | Build/refresh SQLite code index | `--repo`, `--full`, `--paths` |
-| `zreview overlap` | Detect cross-PR collisions | `--owner`, `--repo`, `--pr` |
-| `zreview rules list` | List loaded org rules | `--source` |
-| `zreview rules sync` | Force-refresh org rules cache | — |
-| `zreview doctor` | Pre-flight environment check | — |
-| `zreview docs` | Serve embedded offline docs (loopback only) | `--addr`, `--open` |
-| `zreview version` | Print version / commit / build info | — |
+|  | zreview | CodeRabbit | Greptile | Ellipsis |
+|---|---|---|---|---|
+| Deployment model | Single binary | SaaS | SaaS | SaaS |
+| Cost per PR | ~$0.006 | $8-15 (unlimited) | $12/user/mo | $20/user/mo |
+| Deterministic scoring engine | Yes | No | No | No |
+| Auditable effort math | Yes | No | No | No |
+| Depgraph from real imports | Yes | No | No | No |
+| Cross-PR overlap detection | Yes | Partial | No | No |
+| Local-only mode (no cloud) | Yes | No | No | No |
+| Choice of LLM provider | 4 providers | Vendor-locked | Vendor-locked | Vendor-locked |
+| Custom scoring policy | YAML | No | No | No |
 
-**Diff-mode selection is mutually exclusive:**
-- `--commit <sha>` → single-commit
-- `--from <base> --to <head>` → range
-- neither → current workspace
-
-**Exit codes:**
-- `0` — success, no blockers
-- `1` — general error (CLI validation, fatal pipeline stage, untyped)
-- `3` — one or more CRITICAL findings
+zreview trades polish (no web dashboard, no chat interface) for **control** (bring your own model, own the data, verify every claim).
 
 ---
 
-## Configuration
+## Features
 
-Three layers, in decreasing precedence:
+### Effort scoring
+Every review produces a **0-10 reviewer-effort score** with a full audit table showing every contribution.
 
-**1. CLI flags** — see [Commands](#commands).
+```
+### Reviewer effort — 🟡 5 / 10 — medium
 
-**2. Environment variables** (grouped by purpose):
-
-| Category | Var | Purpose |
-|---|---|---|
-| **LLM auth** | `ANTHROPIC_API_KEY` | Anthropic Claude auth |
-| | `OPENAI_API_KEY` | OpenAI Chat Completions |
-| | `OPENAI_RESPONSES_API_KEY` | OpenAI Responses API |
-| | `DEEPSEEK_API_KEY` | DeepSeek auth |
-| | `AWS_REGION` + `AWS_PROFILE` + `AWS_BEARER_TOKEN_BEDROCK` | Bedrock |
-| **Model routing** | `ZREVIEW_PROVIDER` | Main-tier provider |
-| | `ZREVIEW_MODEL` | Main-tier model |
-| | `ZREVIEW_CHEAP_PROVIDER` | Cheap-tier provider (defaults to main) |
-| | `ZREVIEW_CHEAP_MODEL` | Cheap-tier model (defaults to main) |
-| **Storage** | `ZREVIEW_SESSION_DIR` | Session log dir (default `~/.zreview/sessions`) |
-| | `ZREVIEW_FINDINGS_DIR` | Findings cache (default `~/.zreview/findings`) |
-| | `ZREVIEW_DB_URL` | SQLite/Postgres index DSN |
-| **Policy** | `ZREVIEW_SCORING_POLICY` | Override scoring policy YAML path |
-| | `ZREVIEW_EFFORT_POLICY` | Override effort policy YAML path |
-| | `ZREVIEW_ORG_RULES_REPO` | Org-rules git spec |
-| **Feature gates** | `ZREVIEW_UPLOAD_SARIF=1` | Enable SARIF upload |
-| | `ZREVIEW_OVERLAP_ENABLED=0` | Disable overlap detection |
-| | `ZREVIEW_DISABLE_SCANNERS` | Comma list: `gitleaks,semgrep,govulncheck` |
-| | `ZREVIEW_LOG_FORMAT` | `text` (default) or `json` |
-| **GitHub** | `GITHUB_TOKEN` | PR posting, overlap, SARIF upload |
-| | `GITHUB_REPOSITORY` | `owner/repo` for cross-PR context |
-| | `GITHUB_REF` | Git ref for SARIF upload |
-
-The Alibaba-compatible `OCR_LLM_*` vars are still honored for the ported skeleton — see [`docs/PORTING.md`](docs/PORTING.md).
-
-**3. Repo-local YAML files** under `<repo>/.zreview/`:
-
-| File | Purpose |
-|---|---|
-| `.zreview/config.yaml` | User toggles: `suggestions.enabled`, `suggestions.blocking` |
-| `.zreview/scoring.yaml` | Per-repo scoring policy overrides |
-| `.zreview/effort.yaml` | Per-repo effort weights |
-
-Missing or malformed files log a WARN and fall back to the embedded defaults.
-
----
-
-## Output formats
-
-### `--format stdout` (default)
-Human-readable text, ANSI-colored, listed by severity. Good for local diagnosis. No writes to GitHub.
-
-### `--format json`
-Structured envelope suitable for CI / dashboards:
-
-```json
-{
-  "session_id": "...",
-  "comments": [
-    {
-      "path": "internal/auth/session.go",
-      "start_line": 17, "end_line": 17,
-      "severity": "high",
-      "category": "security",
-      "content": "8-byte token is insufficient entropy — use 32 bytes",
-      "existing_code": "raw := make([]byte, 8)",
-      "suggestion_code": "raw := make([]byte, 32)",
-      "state": "new",
-      "scored": { "severity": "HIGH", "confidence": 0.9, "impact": 0.7 }
-    }
-  ],
-  "summary": { "walkthrough": "...", "risk": "high: ..." },
-  "labels": { "pr_type": "feat", "risk_tag": "risk/high" },
-  "overlap": []
-}
+| Signal              | Detail                    | Contribution |
+| Base                |                           | +0.50        |
+| LOC churn           | +28 / −0 (28 lines)       | +0.14        |
+| Files changed       | 1 file                    | +0.05        |
+| New files           | 1 new                     | +0.10        |
+| Auth path touched   | internal/auth/session.go  | +1.50        |
+| Findings            | 1 CRIT / 5 HIGH           | +4.00 (cap)  |
 ```
 
-### `--format github`
-Posts **inline PR comments** on the diff hunks + **updates the PR description** with a managed block containing: effort score + audit table, walkthrough paragraph, scanner findings table, severity table, risk tag, change groups, testing notes, package-imports Mermaid diagram, cross-PR overlap block.
-
-- Inline comments batched via `POST /pulls/{n}/reviews` (avoids per-comment secondary rate limits)
-- Stale zreview comments identified via `<!-- zreview:fp:HEX -->` marker and deleted before posting fresh set
-- Labels (pr_type, domains, risk_tag, ownership_hints) applied with stale-cleanup on risk/* and pr_type namespaces
-
-### `--format sarif`
-SARIF 2.1.0 with **scanner findings only**. LLM findings stay in-band. Upload with `ZREVIEW_UPLOAD_SARIF=1` to publish to GitHub Code Scanning.
-
----
-
-## Effort scoring
-
-Every review produces a **0-10 reviewer-effort score** with a full audit table. The math is deterministic and reproducible: same diff + same policy → same score every time.
-
-**Policy** (`internal/effort/policy.yaml`, overridable via `.zreview/effort.yaml`):
-
-```yaml
-base: 0.5
-loc_churn:      { points_per_10_lines: 0.05, cap: 2.5 }
-files_changed:  { points_per_file: 0.05,     cap: 1.5 }
-new_files:      { points_per_file: 0.10,     cap: 1.5 }
-max_file_churn: { points_per_10_lines: 0.03, cap: 1.0 }
-test_ratio:     { bonus_at_25pct: -0.5, bonus_at_50pct: -1.0 }
-paths:
-  auth: 1.5          # files under auth/session/token/tls/etc
-  migration: 1.5     # .sql, migrations/, schema
-  infra: 1.0         # Dockerfile, k8s, terraform
-overlap:  { points_per_pr: 0.5,  cap: 1.5 }
-findings: { points_per_critical: 1.5, points_per_high: 0.75, points_per_medium: 0.30, points_per_low: 0.05, cap: 4.0 }
-```
-
-**Traffic light:**
+Deterministic — same diff + same policy → same score. Override the policy via `.zreview/effort.yaml`.
 
 | Score | Label | Dot |
 |---|---|---|
-| 0-2 | trivial | green |
-| 3-4 | light | green |
-| 5-6 | medium | yellow |
-| 7-8 | medium-high | yellow |
-| 9-10 | heavy | red |
+| 0-2 | trivial | 🟢 |
+| 3-4 | light | 🟢 |
+| 5-6 | medium | 🟡 |
+| 7-8 | medium-high | 🟡 |
+| 9-10 | heavy | 🔴 |
 
-Every table row shown in the PR description exists because a signal actually fired; test-ratio row shows a negative contribution when there are enough test files. On the 10-PR audit, all 8 productive PRs had table rows summing to the shown score within ±0.05.
-
----
-
-## Suggestion mode
-
-Beyond bugs, zreview emits **proactive improvement suggestions** as GitHub `suggestion` markdown blocks. Reviewers click **Commit suggestion** to apply the fix directly — zero custom UI.
-
-**Delivered categories:**
-- Extract helper (repeated ≥3-line block → function)
-- Guard-clause conversion (nested `if/else` → early return)
-- Error wrapping (`return err` → `fmt.Errorf("op: %w", err)`)
-- Idiomatic Go (`for i := 0; i < len(s); i++` → `for i, v := range s`)
-- Naming (generic `x`/`tmp`/`data` → domain-specific)
-- Missing test cases (new exported function → 1 table-driven test)
-- Missing docs (new exported symbol → 1-line doc)
-
-**Rules:**
-- `severity: "low"` + `category ∈ {style, maintainability, test, documentation}`
-- `existing_code` must be verbatim; `suggestion_code` must compile in place
-- Caps: **5 per file**, **20 per PR** total (bugs uncapped)
-- Never suggests logic changes, control flow, or subjective preference
-
-**Toggle:**
-
-```yaml
-# .zreview/config.yaml
-suggestions:
-  enabled: true     # default
-  blocking: false   # default — suggestions never break CI
-```
-
-**Rendered output on GitHub:**
+### Suggestion mode
+Committable improvement suggestions delivered as GitHub `suggestion` markdown blocks. Reviewers click **Commit suggestion** to apply — zero custom UI.
 
 ````
 **[nit]** **[low / style]** Early returns keep the happy path un-indented.
@@ -409,42 +259,18 @@ return process(user)
 ```
 ````
 
----
+**Categories:** extract helper · guard-clause conversion · error wrapping · idiomatic Go · naming · missing tests · missing docs.
 
-## Overlap detection
+Caps: 5 per file, 20 per PR. Toggle via `.zreview/config.yaml`:
 
-When multiple open PRs touch the same files, zreview surfaces a block in the PR description:
-
-```
-> Potential overlap with other open PRs — these may be stepping on this one:
-> - #9 (merge-conflict risk) — Both PRs modify internal/legacy/*
-> - #3 (merge-conflict risk) — Both PRs modify auth middleware
+```yaml
+suggestions:
+  enabled: true      # default
+  blocking: false    # default — never break CI
 ```
 
-Off unless `GITHUB_TOKEN` is set. Disable with `ZREVIEW_OVERLAP_ENABLED=0`. Contributes up to `+1.5` to the effort score.
-
----
-
-## Scanners
-
-Best-effort integration with deterministic tools:
-
-| Scanner | What it finds | Routing |
-|---|---|---|
-| **gitleaks** | Hardcoded secrets, API tokens | SARIF (never inline) |
-| **semgrep** | Pattern-based bug/security rules | SARIF |
-| **govulncheck** | Known CVEs in Go dependencies | SARIF |
-
-- Runs in parallel with bounded concurrency
-- Missing binaries logged as `skipping <tool> (not installed)` — never fatal
-- Disable specific ones via `ZREVIEW_DISABLE_SCANNERS=semgrep,govulncheck`
-- Findings tagged `source: "scanner:<tool>"`; the scoring engine's confidence bump for scanners is high
-
----
-
-## Depgraph
-
-Every PR that touches ≥2 Go packages with cross-package `import` lines gets a **package-import diagram** rendered as a Mermaid `flowchart LR` block. Every edge is a literal `import` line parsed by `go/parser` — **no LLM inference**.
+### Depgraph
+Every PR with ≥2 packages that import each other gets a Mermaid diagram of the real import graph. Parsed by `go/parser` (Go), regex (TypeScript, Python) — **every edge is a literal `import` line**, no LLM guessing.
 
 ```mermaid
 flowchart LR
@@ -456,147 +282,207 @@ flowchart LR
   N1 --> N2
 ```
 
-Single-package PRs and non-Go PRs get no depgraph section (correctly omitted). Deterministic: same source → byte-identical Mermaid output.
+### Overlap detection
+When multiple open PRs touch the same files, zreview surfaces the collision:
+
+```
+> Potential overlap with other open PRs:
+> - #9 (merge-conflict risk) — Both PRs modify internal/legacy/*
+> - #3 (merge-conflict risk) — Both PRs modify auth middleware
+```
+
+Contributes up to `+1.5` to the effort score. Disable with `ZREVIEW_OVERLAP_ENABLED=0`.
+
+### Deterministic scanners
+Best-effort integration with three tools:
+
+| Scanner | What it finds | Routing |
+|---|---|---|
+| **gitleaks** | Hardcoded secrets, API tokens | SARIF |
+| **semgrep** | Pattern-based bugs & security | SARIF (bundled rules for JS / Python / Ruby) |
+| **govulncheck** | Known CVEs in Go dependencies | SARIF |
+
+Missing binaries are logged and skipped — never fatal. Bundled semgrep rules ship for JavaScript, Python, and Ruby (36 curated rules). Override with `ZREVIEW_SEMGREP_CONFIG=<path>` or disable with `ZREVIEW_DISABLE_SEMGREP_PRESETS=1`.
+
+### Incremental re-review
+Every finding has a content-hash **fingerprint** stored in `~/.zreview/findings/`. On the next run:
+
+- **Resolved** — finding was in the previous run, not in this one → cleaned up
+- **Carried** — finding survives both runs → not re-posted, just tracked
+- **New** — finding introduced by the fix commit
+
+Stale zreview-authored comments are identified via a hidden `<!-- zreview:fp:HEX -->` marker in the comment body and deleted before the fresh batch posts. No duplicate spam across pushes.
+
+### Model tiering
+
+| Tier | Purpose | Cost profile |
+|---|---|---|
+| **Main** (`ZREVIEW_MODEL`) | Main task loop + memory compression | Sonnet-class |
+| **Cheap** (`ZREVIEW_CHEAP_MODEL`) | Summarizer + labeler (parallel) | Haiku / Flash / DeepSeek |
+
+Main tier has session-key affinity for prompt-cache reuse. Setting only `ZREVIEW_CHEAP_MODEL` re-uses the main client but overrides the model per call.
 
 ---
 
-## Model tiering
+## Commands
 
-Two independent LLM clients per review:
+| Command | Purpose |
+|---|---|
+| `zreview review` | Run the full review pipeline |
+| `zreview index` | Build/refresh SQLite code index |
+| `zreview overlap` | Detect cross-PR collisions |
+| `zreview metrics` | HTML dashboard of past runs (cost, findings, duration) |
+| `zreview rules list` | List loaded org rules |
+| `zreview rules sync` | Force-refresh org rules |
+| `zreview doctor` | Pre-flight environment check (Bedrock, DeepSeek, git, scanners) |
+| `zreview docs` | Serve embedded offline docs on loopback |
+| `zreview version` | Print version / commit / build info |
 
-| Tier | Env vars | Purpose | Cost profile |
-|---|---|---|---|
-| **Main** | `ZREVIEW_PROVIDER` + `ZREVIEW_MODEL` | Main task loop + memory compression | Sonnet-class |
-| **Cheap** | `ZREVIEW_CHEAP_PROVIDER` + `ZREVIEW_CHEAP_MODEL` | Summarizer + labeler (parallel) | Haiku / Flash / DeepSeek |
+**Exit codes:** `0` clean · `1` general error · `3` one or more CRITICAL findings
 
-**Routing logic** (`internal/llm/tiers.go`):
-- Both env vars set → independent clients, separate HTTP pools
-- Only `ZREVIEW_CHEAP_MODEL` set → reuse main client, override model per call
-- Neither set → cheap == main (no cost savings)
+---
 
-Main tier has session-key affinity for prompt-cache reuse. Cheap tier does not.
+## Configuration
+
+Three layers, decreasing precedence:
+
+**1. CLI flags** — `--from`, `--to`, `--commit`, `--pr`, `--format`, `--output`, `--min-severity`, `--resume`, `--verbose`, `--wait-sarif`.
+
+**2. Environment variables** (essentials):
+
+```bash
+# LLM auth (pick one)
+export ANTHROPIC_API_KEY=sk-ant-...
+export OPENAI_API_KEY=sk-...
+export DEEPSEEK_API_KEY=sk-...
+export AWS_REGION=us-east-1                    # + AWS_PROFILE for Bedrock
+
+# Model routing
+export ZREVIEW_PROVIDER=openai                 # anthropic | openai | bedrock | deepseek
+export ZREVIEW_MODEL=gpt-4o-mini
+export ZREVIEW_CHEAP_MODEL=deepseek-chat       # optional, saves ~30-40%
+
+# GitHub integration
+export GITHUB_TOKEN=ghp_...
+export GITHUB_REPOSITORY=owner/repo
+
+# Storage
+export ZREVIEW_DB_URL=sqlite:///~/.zreview/index.db   # optional index cache
+
+# Feature gates
+export ZREVIEW_UPLOAD_SARIF=1                  # publish scanner findings to Code Scanning
+export ZREVIEW_OVERLAP_ENABLED=0               # disable cross-PR probe
+export ZREVIEW_LOG_FORMAT=json                 # structured logs
+```
+
+**3. Repo-local YAML** under `<repo>/.zreview/`:
+
+| File | Purpose |
+|---|---|
+| `config.yaml` | Toggle suggestions on/off, gate CI on nits |
+| `scoring.yaml` | Per-repo scoring policy override |
+| `effort.yaml` | Per-repo effort weights override |
+
+Missing or malformed files log a warning and fall back to embedded defaults.
+
+Full env-var list: [`docs/configuration.html`](docs/configuration.html)
+
+---
+
+## Output formats
+
+| Format | Use case | Destination |
+|---|---|---|
+| `stdout` | Local diagnosis | Terminal (ANSI-colored) |
+| `json` | CI / dashboards | File or stdout |
+| `github` | PR review | Inline comments + description block + labels |
+| `sarif` | GitHub Code Scanning | File; upload via `ZREVIEW_UPLOAD_SARIF=1` |
+
+The `github` format posts inline comments batched via `POST /pulls/{n}/reviews` (avoids per-comment secondary rate limits), identifies stale zreview comments by fingerprint marker and deletes them before posting the fresh set, and updates the PR description in-place using `<!-- ZREVIEW:BEGIN -->` / `<!-- ZREVIEW:END -->` markers.
 
 ---
 
 ## LLM loop
 
-The main-task loop (`internal/llmloop/loop.go`) runs one review per file. Each iteration:
+The main-task loop runs one review per file. Each iteration:
 
-1. Send the current conversation to the model (prefix-extension for cache reuse)
-2. Parse tool calls; if none, log retry, append "try again", loop
+1. Send the conversation to the model (prefix extension for cache reuse)
+2. Parse tool calls; if none for 3 rounds in a row → stop
 3. Execute each tool call
-4. If memory usage crosses **60%** → trigger async compression; **80%** → sync emergency compression
+4. Compression: 60% context → async background; 80% → sync emergency
 5. Repeat until `task_done`, budget exhaustion, or context cancelled
 
-**Available tools** (`internal/tool/tools.json`, embedded):
+**Tools available:**
 
-| Tool | When | Purpose |
-|---|---|---|
-| `code_comment` | main_task | Emit a finding with severity/category/content, optional `suggestion_code` |
-| `task_done` | main_task | Signal "no more findings"; state=DONE or FAILED |
-| `code_search` | plan + main | Regex/literal search across the repo; capped at 100 hits |
-| `file_read` | main_task | Read a file with optional line range; capped at 500 lines/call |
-| `file_read_diff` | plan + main | View unified diffs for one or more paths |
-| `file_find` | plan + main | Find files by name/pattern; basename-first matching |
+| Tool | Purpose |
+|---|---|
+| `code_comment` | Emit a finding (severity, category, content, optional `suggestion_code`) |
+| `task_done` | Signal completion (DONE or FAILED) |
+| `code_search` | Regex/literal search across the repo; capped at 100 hits |
+| `file_read` | Read a file with optional line range; capped at 500 lines |
+| `file_read_diff` | View unified diffs for one or more paths |
+| `file_find` | Find files by name/pattern |
 
-**Budgets:**
-- **Round budget**: 100 rounds default per file
-- **Empty-round budget**: 3 consecutive rounds with no tool call → stop
-- **Token budget**: 80% of context = hard stop
-- **Grace round**: one final call with just `code_comment` + `task_done` if round budget hits zero
+**Budgets:** 100 rounds per file · 3 consecutive empty rounds → stop · 80% context = hard stop · grace round with just `code_comment` + `task_done` if budget exhausted.
 
 ---
 
-## Package map
+## Package layout
 
-34 internal packages. Every package has tests.
+34 internal packages, all tested. Organized by concern:
 
-| Package | Purpose | Key exports |
-|---|---|---|
-| `chunker` | Token-bounded diff batching | `Chunk`, `Item` |
-| `comment` | Parse LLM comments from tool call args | `ParseComments` |
-| `conventions` | Load `AGENTS.md`/`CONTRIBUTING.md` into prompts | `Load`, `Markdown` |
-| `depgraph` | Deterministic Mermaid import diagram | `Render`, `File`, `Options` |
-| `diff` | Parse git diffs, resolve line numbers | `Resolve`, `Hunk`, `Mode` |
-| `docsserver` | Loopback-only offline docs HTTP server | `Start`, `Options` |
-| `effort` | Compute 0-10 reviewer effort | `Compute`, `Score`, `Inputs` |
-| `extract` | Per-language AST extraction (Go/Py/JS/…) | `Extract`, `Registry` |
-| `filetype` | Path → language mapping (20+ langs) | `FromPath`, `Language` |
-| `filter` | Exclude patterns + generated-file detection | `ShouldInclude`, `IsGenerated` |
-| `findings` | Per-PR JSON cache for carryover | `Load`, `Save`, `Store` |
-| `fingerprint` | Content-hash finding identity | `Fingerprint`, `Input` |
-| `gh` | GitHub REST client (posts, SARIF, PRs) | `Client`, `PostReview`, `UploadSARIF` |
-| `gitcmd` | Semaphore-gated `git` subprocess runner | `Runner`, `Run`, `Stream` |
-| `index` | LLM-summarized SQLite code index | `Indexer`, `Store`, `FileSummary` |
-| `llm` | Multi-provider LLM client abstraction | `Client`, `CompletionsWithCtx` |
-| `llmloop` | Per-file review loop | `Runner`, `Deps`, `Template` |
-| `logutil` | slog wrapper (text/JSON, staged) | `New`, `FromEnv`, `WithStage` |
-| `manifests` | Package-lockfile parsers (npm, pip, go, cargo…) | `Parser`, `Registry`, `Dependency` |
-| `model` | Core types (`LlmComment`, `Diff`, `Summary`, `Labels`) | Everything data-shaped |
-| `overlap` | Cross-PR overlap probe | `Detect`, `Finding`, `Config` |
-| `pathutil` | Canonical + within-base path helpers | `CanonicalPath`, `WithinBase` |
-| `prompts` | Embedded prompt templates | `Templates` (embed.FS) |
-| `reviewctx` | Codebase context (indexed + JIT) | `Build`, `BuildIndexed`, `BuildJIT` |
-| `rules` | Org rules loader from git repo | `Loader`, `Load` |
-| `sarif` | SARIF 2.1.0 encoder | `Encode`, `Finding` |
-| `scanner` | Adapters for gitleaks/semgrep/govulncheck | `Run`, `Runner`, `ScannerFinding` |
-| `scoring` | Category+rule → severity policy | `ScoreOne`, `Policy`, `IsSuggestion`, `FilterBlocking` |
-| `selector` | Pre-dispatch file filter | `Select`, `Decision` |
-| `session` | Append-only JSONL run log | `Session`, `TaskRecord` |
-| `tool` | Load embedded tool definitions | `LoadToolsConfig`, `Registry` |
-| `zconfig` | Load `.zreview/config.yaml` toggles | `Load`, `Default`, `Config` |
+| Layer | Packages |
+|---|---|
+| **Data** | `filetype`, `model`, `filter`, `pathutil` |
+| **Diff & git** | `diff`, `gitcmd`, `rules` |
+| **LLM** | `llm`, `llmloop`, `index`, `tool`, `prompts` |
+| **Context** | `reviewctx`, `index` |
+| **Rules & config** | `rules`, `zconfig`, `scoring`, `effort` |
+| **Findings** | `comment`, `fingerprint`, `findings`, `scanner`, `chunker` |
+| **Output** | `gh`, `sarif`, `session`, `depgraph`, `overlap` |
+| **Utilities** | `conventions`, `docsserver`, `extract`, `logutil`, `manifests`, `selector` |
 
-**Layer view:**
-
-```
-Data:      filetype, model, filter, pathutil
-Diff/git:  diff, gitcmd, rules
-LLM:       llm, llmloop, index (summarizer), tool, prompts
-Context:   reviewctx, index
-Rules/Cfg: rules, zconfig, scoring, effort
-Findings:  comment, fingerprint, findings, scanner
-Output:    gh, sarif, session, depgraph, overlap
-Utility:   chunker, conventions, docsserver, extract, logutil, manifests, selector
-```
+Full package map with purpose and key exports: [`docs/architecture.html`](docs/architecture.html)
 
 ---
 
 ## Audit results
 
-Latest 10-PR + 1 mega-PR audit (Sep 2026, gpt-4o-mini):
+10-PR + 1 mega-PR audit (Sep 2026, `gpt-4o-mini`):
 
-| Metric | Result |
+|  | Result |
 |---|---|
-| Bugs seeded / caught | **21 / 21 → 100% recall** |
-| False positives | **~1 per 10 findings** |
-| Loop closure (fix → resolved) | **4/4** PRs with bugs closed cleanly |
-| Effort table sum vs shown score | **exact** (or correctly clamped at 10) |
-| Depgraph edge honesty | **100%** — every edge maps to literal `import` |
-| Labels defensibility | **all defensible** across 39 applied |
-| Score directionality on fix | **always drops** after real fix |
-| Total cost | **~$0.09** across 22 productive runs |
-| Per-PR cost | **~$0.006** average |
+| Bugs seeded / caught | 21 / 21 → **100% recall** |
+| False positives | ~1 per 10 findings |
+| Loop closure (fix → resolved) | 4 / 4 PRs cleanly closed |
+| Effort table sum vs shown score | exact (or correctly clamped at 10) |
+| Depgraph edge honesty | 100% — every edge maps to literal `import` |
+| Score directionality on fix | always drops |
+| Total cost across 22 runs | ~$0.09 |
 
-**Verified features per archetype:** trivial docs (silent-block emitted), small clean feat, small bug-heavy, cross-pkg refactor (depgraph), auth-touching (`paths.auth +1.5`), migration (`paths.migration +1.5`), test-heavy (`test_ratio -1.0`), large clean feat (size caps hold), large bug-heavy (findings cap engages), deps update (chore label).
+Verified per archetype: trivial docs · small clean feat · small bug-heavy · cross-pkg refactor (depgraph) · auth-touching · migration · test-heavy · large clean feat · large bug-heavy · deps update.
 
-**Known gaps:** LLM tier at gpt-4o-mini under-produces suggestions on clean files; effort calibration slightly cold on lone small feats; occasional duplicate finding on same line at very small quality tier.
+Detailed audit: [`docs/AUDIT.md`](docs/) (post-v1)
 
 ---
 
 ## Providers
 
-| Provider | Auth env | Notes |
+| Provider | Auth | Notes |
 |---|---|---|
 | **Anthropic** | `ANTHROPIC_API_KEY` | Claude Sonnet 4.6 / Opus 4.7 / Haiku 4.5 |
 | **OpenAI** | `OPENAI_API_KEY` | GPT-4o, GPT-4o-mini, o1, o3-mini |
 | **OpenAI Responses** | `OPENAI_RESPONSES_API_KEY` | For Responses API endpoints |
-| **AWS Bedrock** | `AWS_REGION`, `AWS_PROFILE` / `AWS_BEARER_TOKEN_BEDROCK` | Claude via Bedrock |
-| **DeepSeek** | `DEEPSEEK_API_KEY` | Low-cost cheap-tier option |
+| **AWS Bedrock** | `AWS_REGION` + `AWS_PROFILE` / SSO / IAM role | Claude via Bedrock — ambient AWS credential chain |
+| **DeepSeek** | `DEEPSEEK_API_KEY` | Low-cost cheap-tier option (`deepseek-chat`, `deepseek-reasoner`) |
 
-Recommended pairs:
-- **Best quality**: Sonnet 4.6 (main) + Haiku 4.5 (cheap)
-- **Best cost**: GPT-4o-mini (main) + DeepSeek-chat (cheap)
-- **Best balance**: Sonnet 4.6 (main) + GPT-4o-mini (cheap)
+**Recommended pairings:**
+
+- **Best quality** — Sonnet 4.6 (main) + Haiku 4.5 (cheap)
+- **Best cost** — GPT-4o-mini (main) + DeepSeek-chat (cheap)
+- **Best balance** — Sonnet 4.6 (main) + GPT-4o-mini (cheap)
+
+Manual provider-testing protocols: [`docs/PROVIDER_TESTING.md`](docs/PROVIDER_TESTING.md)
 
 ---
 
@@ -610,56 +496,62 @@ cd z-code-reviewer
 # Build
 go build ./cmd/zreview
 
-# Test (34 packages, all covered)
+# Test — 34 packages, all covered
 go test ./...
-
-# Test with race detector
 go test -race ./...
 
-# Run locally against this repo
+# Dogfood
 ./zreview review --from main --to HEAD
 ```
 
-**Contributing:** read [`AGENTS.md`](AGENTS.md) — it covers the rules for AI-assisted PRs (disclosure, self-review, no attribution trailers, no LICENSE edits via AI).
+**Contributing:** read [`AGENTS.md`](AGENTS.md) for rules on AI-assisted PRs.
 
 **Project layout:**
 
 ```
-cmd/zreview/           # CLI entry + review pipeline glue
-internal/              # 34 focused packages (see Package map above)
-docs/                  # Offline HTML docs (embedded into binary)
-  PORTING.md           # Per-file attribution to alibaba/open-code-review
-  THREAT_MODEL.md      # Attack surface + mitigations
-  ARCHITECTURE.md      # Longer architectural walkthrough
-ROADMAP.md             # Phase-by-phase status
-AGENTS.md              # Rules for AI-assisted contributions
+cmd/zreview/           CLI entry + pipeline glue
+internal/              34 focused packages
+docs/                  Offline HTML docs (embedded)
+  PORTING.md           Per-file attribution to upstream projects
+  THREAT_MODEL.md      Attack surface + mitigations
+  ARCHITECTURE.md      Long-form architectural walkthrough
+  BENCHMARK_PLAN.md    Sonnet 4.6 evaluation plan
+  PROVIDER_TESTING.md  Manual test protocols for Bedrock & DeepSeek
+  WINDOWS.md           Platform-specific setup + gotchas
+  DOCKER.md            Container distribution
+  GITHUB_ACTION.md     Reusable Action integration
+ide/vscode/            VS Code extension skeleton
+marketing/site/        Landing page
+packaging/             Homebrew formula + npm wrapper
+ROADMAP.md             Phase-by-phase status
+AGENTS.md              Rules for AI-assisted contributions
 ```
 
 ---
 
 ## Roadmap
 
-Recent phases:
+Shipped: Phases 12-19 (tiering, scanners, cheap-tier, overlap, scoring, description block, effort, depgraph, suggestion mode, provider audits, distribution channels, refactor detection).
 
-- **Phase 12** — Model tiering (main + cheap), incremental re-review via fingerprints (done)
-- **Phase 13** — Deterministic scanners (gitleaks/semgrep/govulncheck), SARIF output (done)
-- **Phase 14** — Cheap-tier summarizer + labeler agents (done)
-- **Phase 15** — Overlap detection, org-rules loader (done)
-- **Phase 16** — Scoring engine with policy YAML (done)
-- **Phase 17** — GitHub PR description block, effort score, depgraph (done)
-- **Phase 18** — Suggestion mode, no-source-changes handling, zconfig (done)
-- **Phase 19** — Prompt quality tuning at cheap-tier models (in progress)
-- **Phase 20** — v1.0 pilot: run zreview on this repo for one week; ship v1
+**Phase 20** — v1.0 pilot: one-week dogfood on this repo, then tag v1.
 
-See [`ROADMAP.md`](ROADMAP.md) for the full history.
+Full history: [`ROADMAP.md`](ROADMAP.md)
 
 ---
 
 ## Attribution
 
-`zreview` would not exist without the work of two upstream open-source projects, both under Apache-2.0:
+`zreview` builds on two Apache-2.0 upstream projects:
 
-- [alibaba/open-code-review](https://github.com/alibaba/open-code-review) — the diff-precision layer, tool loop, prompt templates, and comment-args-repair logic.
-- [miracodeai/mira](https://github.com/miracodeai/mira) — the persistent code index, JIT cross-file context, cross-PR overlap detector, and business-rules injection surface.
+- [alibaba/open-code-review](https://github.com/alibaba/open-code-review) — diff-precision layer, tool loop, prompt templates, comment-args-repair
+- [miracodeai/mira](https://github.com/miracodeai/mira) — persistent code index, JIT cross-file context, cross-PR overlap detector, business-rules injection
 
-Per-file attribution: [NOTICE](NOTICE). Detailed port map: [docs/PORTING.md](docs/PORTING.md).
+Per-file attribution: [`NOTICE`](NOTICE) · Detailed port map: [`docs/PORTING.md`](docs/PORTING.md)
+
+---
+
+<div align="center">
+
+**Apache-2.0** · [Documentation](https://shubam-disseqt.github.io/z-code-reviewer/) · [Issues](https://github.com/shubam-disseqt/z-code-reviewer/issues) · [Discussions](https://github.com/shubam-disseqt/z-code-reviewer/discussions)
+
+</div>
