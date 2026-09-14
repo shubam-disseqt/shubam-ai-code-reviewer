@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/shubam-disseqt/z-code-reviewer/internal/effort"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/overlap"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/scoring"
@@ -52,6 +53,7 @@ func UpdateDescription(
 	scoreCounts map[scoring.Severity]int,
 	overlapFindings []overlap.Finding,
 	scannerFindings []model.LlmComment,
+	effortScore effort.Score,
 ) error {
 	if client == nil {
 		return fmt.Errorf("update description: nil client")
@@ -71,7 +73,7 @@ func UpdateDescription(
 	if err != nil {
 		return fmt.Errorf("update description: %w", err)
 	}
-	updated := replaceZreviewBlock(current, renderZreviewBlock(summary, labels, scoreCounts, overlapFindings, scannerFindings))
+	updated := replaceZreviewBlock(current, renderZreviewBlock(summary, labels, scoreCounts, overlapFindings, scannerFindings, effortScore))
 	if updated != current {
 		if err := client.UpdatePRBody(ctx, owner, repo, pr, updated); err != nil {
 			return fmt.Errorf("update description: %w", err)
@@ -143,9 +145,17 @@ func replaceZreviewBlock(body, block string) string {
 // Kept intentionally small: a walkthrough paragraph, a severity table, the
 // risk tag, and a change-groups list. Every section is optional so a
 // summary that came back mostly-empty still produces a sane block.
-func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[scoring.Severity]int, overlapFindings []overlap.Finding, scannerFindings []model.LlmComment) string {
+func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[scoring.Severity]int, overlapFindings []overlap.Finding, scannerFindings []model.LlmComment, effortScore effort.Score) string {
 	var b strings.Builder
 	b.WriteString("## Automated review by zreview\n\n")
+
+	// Reviewer effort — top of the block. It's the single-number "how
+	// much work is this to review?" summary the author sees before any
+	// wall of finding text.
+	if md := renderEffort(effortScore); md != "" {
+		b.WriteString(md)
+		b.WriteString("\n")
+	}
 
 	if summary.Walkthrough != "" {
 		b.WriteString(strings.TrimSpace(summary.Walkthrough))
@@ -220,6 +230,36 @@ func renderZreviewBlock(summary model.Summary, labels model.Labels, counts map[s
 	}
 
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// renderEffort renders the reviewer-effort section: headline value + dot,
+// then a compact table of every input contribution (audit trail). Empty
+// Score returns "" so trivial or unpopulated runs omit the section.
+func renderEffort(s effort.Score) string {
+	if s.Value == 0 && len(s.Contributions) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("### Reviewer effort\n\n")
+	fmt.Fprintf(&b, "**%s %d / 10 — %s**\n\n", s.Dot, s.Value, s.Label)
+	b.WriteString("<details><summary>How this was calculated</summary>\n\n")
+	b.WriteString("| Signal | Detail | Contribution |\n| --- | --- | --- |\n")
+	for _, c := range s.Contributions {
+		note := ""
+		if c.Capped {
+			note = " (cap)"
+		}
+		fmt.Fprintf(&b, "| %s | %s | %+.2f%s |\n", c.Signal, escapePipes(c.Detail), c.Points, note)
+	}
+	b.WriteString("\n_Reproducible: same diff → same score. Weights configurable via `.zreview/effort.yaml` or `$ZREVIEW_EFFORT_POLICY`._\n")
+	b.WriteString("</details>\n")
+	return b.String()
+}
+
+// escapePipes keeps a `|` inside a Markdown table cell from being read as
+// a column break — same footgun as the Mermaid `|` fix.
+func escapePipes(s string) string {
+	return strings.ReplaceAll(s, "|", "\\|")
 }
 
 // sanitizeMermaid returns a Mermaid flowchart body safe to inline inside a

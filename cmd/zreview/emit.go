@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shubam-disseqt/z-code-reviewer/internal/effort"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/findings"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
@@ -104,6 +105,10 @@ type emitConfig struct {
 	// Scores maps commentKey(c) to the deterministic scoring output.
 	// Only populated for JSON emit in v1 — stdout / github stay compact.
 	Scores map[string]scoring.Score
+
+	// Effort is the reviewer-effort score (0-10 + audit trail) that ends
+	// up above the severity table in the PR description block.
+	Effort effort.Score
 
 	// GitHub-specific:
 	GHClient  *gh.Client
@@ -294,7 +299,7 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 			scannerComments = append(scannerComments, c)
 		}
 	}
-	if err := UpdateDescription(ctx, cfg.GHClient, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.Summary, cfg.Labels, counts, cfg.Overlap, scannerComments); err != nil {
+	if err := UpdateDescription(ctx, cfg.GHClient, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.Summary, cfg.Labels, counts, cfg.Overlap, scannerComments, cfg.Effort); err != nil {
 		fmt.Fprintf(cfg.Stdout, "emit github: description update failed: %v (continuing)\n", err)
 	}
 	return nil

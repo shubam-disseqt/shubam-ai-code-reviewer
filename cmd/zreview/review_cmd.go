@@ -17,6 +17,7 @@ import (
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/comment"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/diff"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/effort"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/gitcmd"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/index"
@@ -314,6 +315,11 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	// 12) overlap (best-effort)
 	overlapFindings := maybeDetectOverlap(ctx, opts, kept, llmClient)
 
+	// 12.5) reviewer effort score — deterministic 0-10 from the diff, the
+	// scored findings, and cross-PR overlap. Best-effort: a policy error
+	// logs and continues with a zero-valued Score (empty audit).
+	reviewerEffort := computeReviewerEffort(opts.Repo, kept, scoreMap, len(overlapFindings), logger)
+
 	// 13) emit
 	ghClient, _ := newGithubClient()
 	// GitHub's PR-comment API rejects an empty commit_id. Resolve the head
@@ -339,6 +345,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		Summary:      summary,
 		Labels:       labels,
 		Scores:       scoreMap,
+		Effort:       reviewerEffort,
 	})
 	if err != nil {
 		return err
@@ -519,7 +526,7 @@ func resolveHeadSHA(opts *reviewOpts) string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(out)
+	return strings.TrimSpace(string(out))
 }
 
 // buildToolRegistry wires the context-gathering tools the LLM can call
@@ -704,4 +711,71 @@ func newGithubClient() (*gh.Client, error) {
 		return nil, nil
 	}
 	return gh.NewClient(gh.Options{Token: token})
+}
+
+// computeReviewerEffort turns the diff, findings, and overlap counts into a
+// deterministic 0-10 score. Best-effort: a policy-load failure logs and
+// falls back to the embedded default; a total failure returns a zero Score
+// so the description block just omits the section.
+func computeReviewerEffort(repo string, kept []model.Diff, scoreMap map[string]scoring.Score, overlappingPRs int, logger *slog.Logger) effort.Score {
+	pol, err := effort.LoadPolicy(repo)
+	if err != nil {
+		logutil.WithStage(logger, "effort").Warn("policy load failed, using zero score", "err", err.Error())
+		return effort.Score{}
+	}
+	if pol.Source() != "embedded" {
+		logutil.WithStage(logger, "effort").Info("policy loaded", "source", pol.Source())
+	}
+
+	files := make([]effort.FileDelta, 0, len(kept))
+	for _, d := range kept {
+		path := d.NewPath
+		if path == "" || path == "/dev/null" {
+			path = d.OldPath
+		}
+		added, deleted := countAddedDeleted(d.Diff)
+		files = append(files, effort.FileDelta{
+			Path:         path,
+			LinesAdded:   added,
+			LinesDeleted: deleted,
+			IsNew:        d.OldPath == "" || d.OldPath == "/dev/null",
+			IsDeleted:    d.NewPath == "" || d.NewPath == "/dev/null",
+			IsRenamed:    d.OldPath != "" && d.NewPath != "" && d.OldPath != d.NewPath,
+			IsTest:       effort.IsTestFile(path),
+		})
+	}
+
+	sev := map[string]int{}
+	for _, s := range scoreMap {
+		sev[string(s.Severity)]++
+	}
+
+	return effort.Compute(effort.Inputs{
+		Files:          files,
+		FindingsBySev:  sev,
+		OverlappingPRs: overlappingPRs,
+	}, pol)
+}
+
+// countAddedDeleted counts + and - lines in a unified diff body, skipping
+// the `+++`/`---` file headers and `@@` hunk headers.
+func countAddedDeleted(unifiedDiff string) (added, deleted int) {
+	for _, line := range strings.Split(unifiedDiff, "\n") {
+		if len(line) == 0 {
+			continue
+		}
+		switch line[0] {
+		case '+':
+			if strings.HasPrefix(line, "+++") {
+				continue
+			}
+			added++
+		case '-':
+			if strings.HasPrefix(line, "---") {
+				continue
+			}
+			deleted++
+		}
+	}
+	return added, deleted
 }

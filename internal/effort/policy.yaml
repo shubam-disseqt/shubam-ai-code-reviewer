@@ -1,0 +1,56 @@
+# Reviewer-effort policy — deterministic weights.
+#
+# Every review invocation runs Compute(inputs, policy) → Score in [0, 10].
+# Total = base + sum of per-signal contributions, each capped individually
+# so a single dominant signal can't run away with the score.
+#
+# Override precedence:
+#   1. $ZREVIEW_EFFORT_POLICY  (absolute or repo-relative path)
+#   2. <repo>/.zreview/effort.yaml
+#   3. this embedded default
+#
+# Weights below reflect the "reviewer's brain load" heuristics on a mixed
+# Go/TypeScript codebase. Tune per language or per team by overriding.
+
+base: 0.5           # non-trivial floor when there's any diff at all
+
+# Diff-shape signals — how big and how spread.
+loc_churn:
+  points_per_10_lines: 0.10
+  cap: 4.0
+files_changed:
+  points_per_file: 0.10
+  cap: 3.0
+new_files:
+  points_per_file: 0.15
+  cap: 2.0
+max_file_churn:
+  points_per_10_lines: 0.05
+  cap: 1.5
+
+# Test-file ratio (test files / code files). More tests = lower effort.
+# Bonus is applied as a NEGATIVE contribution.
+test_ratio:
+  bonus_at_25pct: -0.5   # ≥ 25% test files
+  bonus_at_50pct: -1.0   # ≥ 50% test files (overrides the 25% bonus)
+
+# Path-touched signals — flat contributions triggered when ANY changed file
+# matches the path bucket. Overlapping matches accumulate.
+paths:
+  auth: 1.5             # auth, session, token, crypto, oauth, jwt, tls
+  migration: 1.5        # migration, migrate, schema, .sql
+  infra: 1.0            # dockerfile, k8s, helm, terraform
+  public_api: 0.5       # exported HTTP handlers / route registration
+
+# Cross-PR overlap — merge coordination is real reviewer work.
+overlap:
+  points_per_pr: 0.5
+  cap: 1.5
+
+# Findings by severity — the reviewer has to read and verify each one.
+findings:
+  points_per_critical: 1.0
+  points_per_high: 0.5
+  points_per_medium: 0.2
+  points_per_low: 0.05
+  cap: 3.0
