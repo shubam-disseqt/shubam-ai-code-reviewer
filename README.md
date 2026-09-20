@@ -94,6 +94,12 @@ Five choices that keep the tool honest. Full walkthrough in the
 
 ```mermaid
 flowchart LR
+  subgraph Offline["Offline (optional)"]
+    IX0["sacr index<br/>walk + parse repo"]
+    IX1[(SQLite / Postgres<br/>index store)]
+    IX0 --> IX1
+  end
+
   subgraph Input
     A1[git diff]
     A2[.sacr policy]
@@ -108,6 +114,7 @@ flowchart LR
     B5[effort 0–10]
     B6[depgraph]
     B7[overlap]
+    CTX["reviewctx<br/>indexed lookup OR<br/>JIT extract fallback"]
   end
 
   subgraph LLM
@@ -123,7 +130,10 @@ flowchart LR
     D4[sarif]
   end
 
-  A1 --> B1 --> C1
+  A1 --> B1
+  B1 --> CTX
+  IX1 -. read at review time .-> CTX
+  CTX --> C1
   A2 --> B3
   A3 --> C1
   B1 --> B2 --> B3

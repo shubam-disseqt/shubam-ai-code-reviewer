@@ -30,9 +30,12 @@ things that live longer than a single invocation.
 
 ```mermaid
 flowchart TD
+    IX0["sacr index (offline)<br/>walk + parse repo"] --> IX1[(SQLite / Postgres<br/>index store)]
+
     A[git diff / range / commit] --> B[deterministic<br/>file selection]
     B --> C[bundle<br/>related files]
-    C --> D[load index context<br/>+ JIT if index empty]
+    C --> D["reviewctx<br/>indexed lookup OR<br/>JIT extract fallback"]
+    IX1 -. read at review time .-> D
     D --> E[load matching<br/>org rules]
 
     E --> S1[cheap tier:<br/>summarizer]
