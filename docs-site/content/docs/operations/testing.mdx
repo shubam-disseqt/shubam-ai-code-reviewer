@@ -7,9 +7,9 @@ The unit-test tree covers every internal package in isolation. A single end-to-e
 
 ## Why an e2e test exists
 
-The audit-blocker phrasing was *"every LLM test uses `httptest` in-process; no commit has run `sacr review` against a real Anthropic / OpenAI / Bedrock / DeepSeek endpoint"*. The e2e test does not remove that gap on paper, but it closes the practical part of it: a real subprocess, a real git diff, a real HTTP round trip through the resolver → SDK → wire → response → tool dispatch → scoring → JSON emit chain. If any link regresses, this test fails on the next PR.
+Unit tests use `httptest` in-process; they don't exercise `sacr review` against a real Anthropic / OpenAI / Bedrock / DeepSeek endpoint. The e2e test closes the practical part of that gap: a real subprocess, a real git diff, a real HTTP round trip through the resolver → SDK → wire → response → tool dispatch → scoring → JSON emit chain. If any link regresses, this test fails on the next PR.
 
-Everything that a hosted-provider test would additionally catch (auth quirks, model-specific quirks, throttling behavior) still needs a manual run against a real key. See the manual repro below.
+Everything a hosted-provider test would additionally catch (auth quirks, model-specific quirks, throttling behavior) still needs a manual run against a real key. See the manual repro below.
 
 ## Running the test
 
@@ -33,19 +33,19 @@ The test skips itself if `go` or `git` is not on `PATH`, so it stays green in a 
 1. Spins up `httptest.NewServer` that returns a hard-coded Anthropic Messages response with two `tool_use` blocks: `code_comment` on `main.go`, then `task_done`.
 2. Creates a fresh git repo under `t.TempDir()`. First commit is `main.go` with an empty `main()`; the second change is staged (not committed) so workspace-mode diff picks it up.
 3. Runs `go build -o <tmp>/sacr ./cmd/sacr`. Clean build every run — slow but reproducible.
-4. Runs the binary as a subprocess with a scrubbed env: `OCR_LLM_URL` pointed at the httptest URL (highest-priority resolver strategy wins here), `ANTHROPIC_API_KEY` set alongside to keep the friendly-var path warm, `HOME` and `SACR_SESSION_DIR` forced to temp dirs so nothing leaks from the developer's real config.
+4. Runs the binary as a subprocess with a scrubbed env: a highest-priority direct-endpoint env var points at the httptest URL, `ANTHROPIC_API_KEY` is set alongside to keep the friendly-var path warm, and `HOME` and `SACR_SESSION_DIR` are forced to temp dirs so nothing leaks from the developer's real config.
 5. Asserts: exit 0, stdout is a valid `emitResult` JSON envelope, at least one request reached the fake, one `*.jsonl` session log was written.
 
 ## Env priority the test relies on
 
 The resolver walks strategies in order (see `internal/llm/resolver.go`):
 
-1. **OCR config file** — skipped, `HOME` is a fresh temp dir
-2. **OCR environment** — `OCR_LLM_URL`/`OCR_LLM_TOKEN`/`OCR_LLM_MODEL` resolve first, forcing the httptest URL through the pipeline
-3. **provider environment** — `ANTHROPIC_API_KEY` would resolve here (validating the fix from `fix(llm): accept ANTHROPIC_API_KEY...`), but the OCR path wins
+1. **Config file** — skipped, `HOME` is a fresh temp dir
+2. **Direct endpoint env vars** — resolve first, forcing the httptest URL through the pipeline
+3. **Provider env vars** — `ANTHROPIC_API_KEY` would resolve here, but the direct-endpoint path wins
 4. Claude Code / shell rc — unreached
 
-The friendly `ANTHROPIC_API_KEY` variable is left set on purpose so a regression that breaks the friendly path (e.g. resolver rejects it) still surfaces in the fake request logs.
+`ANTHROPIC_API_KEY` is left set on purpose so a regression that breaks the friendly path (e.g. resolver rejects it) still surfaces in the fake request logs.
 
 ## Manual repro against a real API
 

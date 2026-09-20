@@ -181,10 +181,10 @@ JSON mode (one line, formatted here for clarity):
 Coverage reports show `internal/llm` sitting around 40%.
 
 ### Diagnosis
-Not a bug. After the OCR provider trim, `internal/llm` is smaller than the original upstream code but a lot of retained provider glue is only exercised end-to-end — not by unit tests yet.
+Not a bug. Provider glue in `internal/llm` is only exercised end-to-end — not by unit tests yet.
 
 ### Fix
-Coverage rises as Phase 6+ wires the retained providers into the review path. Track progress on the [roadmap](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/ROADMAP.md).
+Coverage rises as Phase 6+ wires more providers into the review path. Track progress on the [roadmap](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/ROADMAP.md).
 
 ## How to file a bug
 

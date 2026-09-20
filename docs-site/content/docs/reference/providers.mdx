@@ -54,7 +54,7 @@ Bedrock model IDs are prefixed by region-family (`us.*`, `global.*`). Run `aws b
 `sacr` resolves the endpoint from, in order:
 
 1. `SACR_PROVIDER` + `SACR_MODEL` if set.
-2. `~/.opencodereview/config.json` if present (inherited from the upstream OCR project).
+2. `~/.opencodereview/config.json` if present.
 3. The first provider whose API key env var is set. Anthropic wins on ties.
 
 Bedrock is treated specially: it has no api_key, so its readiness comes from the AWS credential chain. If `AWS_REGION` and any AWS credential source are present, Bedrock will resolve without an explicit `SACR_PROVIDER=bedrock`.
