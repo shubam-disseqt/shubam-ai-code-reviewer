@@ -14,9 +14,9 @@ func TestLoad(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		yaml    string  // if empty and !write, file is not created
-		write   bool    // create the file (even with empty contents)
-		want    Config  // expected config
+		yaml    string // if empty and !write, file is not created
+		write   bool   // create the file (even with empty contents)
+		want    Config // expected config
 		wantErr bool
 	}{
 		{
@@ -62,7 +62,7 @@ func TestLoad(t *testing.T) {
 
 			repo := t.TempDir()
 			if tc.write {
-				dir := filepath.Join(repo, ".zreview")
+				dir := filepath.Join(repo, ".sacr")
 				if err := os.MkdirAll(dir, 0o755); err != nil {
 					t.Fatalf("mkdir: %v", err)
 				}
