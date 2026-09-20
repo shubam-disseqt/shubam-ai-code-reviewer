@@ -17,68 +17,6 @@ import (
 	"time"
 )
 
-func TestGetPRBody(t *testing.T) {
-	c, _ := newFakeGitHub(t, func(w http.ResponseWriter, r *http.Request) {
-		if got, want := r.URL.Path, "/api/v3/repos/o/r/pulls/7"; got != want {
-			t.Errorf("path = %q, want %q", got, want)
-		}
-		mustJSON(w, map[string]any{"number": 7, "body": "hello world"})
-	})
-	body, err := c.GetPRBody(context.Background(), "o", "r", 7)
-	if err != nil {
-		t.Fatalf("GetPRBody: %v", err)
-	}
-	if body != "hello world" {
-		t.Errorf("body = %q, want hello world", body)
-	}
-}
-
-func TestGetPRBody_WrapsError(t *testing.T) {
-	c, _ := newFakeGitHub(t, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"message":"boom"}`))
-	})
-	_, err := c.GetPRBody(context.Background(), "o", "r", 7)
-	if err == nil || !strings.Contains(err.Error(), "gh:") {
-		t.Errorf("err = %v, want wrapped", err)
-	}
-}
-
-func TestUpdatePRBody(t *testing.T) {
-	var body map[string]any
-	c, _ := newFakeGitHub(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPatch {
-			t.Errorf("method = %q, want PATCH", r.Method)
-		}
-		if got, want := r.URL.Path, "/api/v3/repos/o/r/pulls/7"; got != want {
-			t.Errorf("path = %q, want %q", got, want)
-		}
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		mustJSON(w, map[string]any{"number": 7, "body": body["body"]})
-	})
-	if err := c.UpdatePRBody(context.Background(), "o", "r", 7, "new body text"); err != nil {
-		t.Fatalf("UpdatePRBody: %v", err)
-	}
-	if body["body"] != "new body text" {
-		t.Errorf("payload body = %v, want new body text", body["body"])
-	}
-	// Only the body field should be sent — no title, no state.
-	if _, has := body["title"]; has {
-		t.Errorf("payload should not include title: %v", body)
-	}
-}
-
-func TestUpdatePRBody_WrapsError(t *testing.T) {
-	c, _ := newFakeGitHub(t, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-		_, _ = w.Write([]byte(`{"message":"nope"}`))
-	})
-	err := c.UpdatePRBody(context.Background(), "o", "r", 7, "x")
-	if err == nil || !strings.Contains(err.Error(), "gh:") {
-		t.Errorf("err = %v, want wrapped", err)
-	}
-}
-
 func TestAddLabels(t *testing.T) {
 	var got []string
 	c, _ := newFakeGitHub(t, func(w http.ResponseWriter, r *http.Request) {

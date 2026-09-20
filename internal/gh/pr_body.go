@@ -14,32 +14,6 @@ import (
 	"github.com/google/go-github/v63/github"
 )
 
-// GetPRBody returns the current markdown body of PR `number`. Empty body is
-// returned as ("", nil) — GitHub's default for un-authored PRs.
-func (c *Client) GetPRBody(ctx context.Context, owner, repo string, number int) (string, error) {
-	c.warnIfUnauth()
-	pr, _, err := c.sdk.PullRequests.Get(ctx, owner, repo, number)
-	if err != nil {
-		return "", fmt.Errorf("gh: get PR body: %w", err)
-	}
-	if pr == nil {
-		return "", nil
-	}
-	return pr.GetBody(), nil
-}
-
-// UpdatePRBody replaces the PR description with `body`. Only the body field
-// is sent — go-github's Edit merges into the existing PR, so other fields
-// (title, base, state) are untouched.
-func (c *Client) UpdatePRBody(ctx context.Context, owner, repo string, number int, body string) error {
-	c.warnIfUnauth()
-	patch := &github.PullRequest{Body: github.String(body)}
-	if _, _, err := c.sdk.PullRequests.Edit(ctx, owner, repo, number, patch); err != nil {
-		return fmt.Errorf("gh: update PR body: %w", err)
-	}
-	return nil
-}
-
 // AddLabels adds `labels` to PR (issue) `number`. GitHub deduplicates by
 // name server-side, so this call is idempotent per label. Empty input is a
 // no-op — matches Phase 15 labeler semantics (zero label output on failure).

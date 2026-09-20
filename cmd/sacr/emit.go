@@ -376,8 +376,13 @@ func emitGithub(ctx context.Context, cfg emitConfig) error {
 			scannerComments = append(scannerComments, c)
 		}
 	}
-	if err := UpdateDescription(ctx, cfg.GHClient, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.Summary, cfg.Labels, counts, cfg.Overlap, scannerComments, cfg.Effort, cfg.PkgDiagram); err != nil {
-		fmt.Fprintf(cfg.Stdout, "emit github: description update failed: %v (continuing)\n", err)
+	// Summary now lands as a separate github-actions[bot] PR comment
+	// instead of overwriting the author's description. Labels still apply.
+	if err := PostSummaryReview(ctx, cfg.GHClient, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.Summary, cfg.Labels, counts, cfg.Overlap, scannerComments, cfg.Effort, cfg.PkgDiagram); err != nil {
+		fmt.Fprintf(cfg.Stdout, "emit github: post summary failed: %v (continuing)\n", err)
+	}
+	if err := ApplyLabels(ctx, cfg.GHClient, cfg.Owner, cfg.Repo, cfg.PRNumber, cfg.Labels, counts, scannerComments); err != nil {
+		fmt.Fprintf(cfg.Stdout, "emit github: apply labels failed: %v (continuing)\n", err)
 	}
 	return nil
 }
