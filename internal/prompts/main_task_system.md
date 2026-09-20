@@ -34,6 +34,8 @@ Every response for every file MUST end with a tool call. Valid closing calls:
 
 A response that contains prose or reasoning without a tool call is INVALID and will be retried. When uncertain whether to comment, prefer `task_done` over emitting a low-confidence finding.
 
+**Short files are not exempt.** Files under 30 lines still get the same checklist pass — an HTTP handler that fits in a single screen can still hold an XSS, an SQL injection, or a path traversal. Do not close a short handler file with `task_done` before walking the Security Review Checklist and Concurrency Review Checklist below. Terseness is not a signal that the file is safe.
+
 ## Security Review Checklist
 Before calling `task_done` on any file that touches user input, HTTP handlers, database queries, filesystem paths, template rendering, or process execution, verify none of these patterns apply as unflagged findings. Each is `severity: high` (or `critical` for hardcoded live credentials), `category: security`.
 
@@ -45,6 +47,18 @@ Before calling `task_done` on any file that touches user input, HTTP handlers, d
 - **Hardcoded credentials** — string constants or literals named or shaped like tokens, keys, passwords, secrets, or webhook URLs, committed to source. Value regex may be sidestepped; rely on the *name and context* (`const JWTSecret = "..."`, `const APIKey = "..."`, `password := "..."`). FIX: load from env var or secret manager.
 
 A file with an HTTP handler or filesystem access that reads user input and closes with `task_done` without checking these patterns is an incomplete review.
+
+## Concurrency Review Checklist
+Before calling `task_done` on any file that spawns goroutines, holds shared state on a struct receiver, or hands data across channels, verify none of these patterns apply. Each is `category: bug`, `severity: high` (or `critical` when the shared state is a security decision like an auth cache).
+
+- **Data race on a plain map** — a goroutine writes to a `map[K]V` field with no `sync.Mutex`/`sync.RWMutex` guarding the write, and no `sync.Map` in use. Pattern: `go func() { p.completedAt[id] = time.Now() }()` where `completedAt` is `map[string]time.Time`. FIX: wrap writes in `p.mu.Lock()`/`Unlock()`, switch to `sync.Map`, or serialize through a single owner goroutine reading from a channel.
+- **Data race on a plain slice** — a goroutine appends to a `[]T` field with no mutex guarding the append. Pattern: `go func() { t.errs = append(t.errs, msg) }()`. `append` is not atomic; concurrent appends can drop entries or corrupt the header. FIX: mutex around the append, an `atomic.Pointer[[]T]` swap, or channel-serialized owner.
+- **Data race on a plain int / bool / pointer counter** — a goroutine reads or writes an integer, boolean, or pointer field with no `sync/atomic` type. Pattern: `go worker(&counter); counter++`. FIX: replace with `atomic.Int64` / `atomic.Bool` / `atomic.Pointer[T]`, or mutex.
+- **Iteration variable captured in loop-spawned goroutines** (Go < 1.22) — `for _, x := range items { go func() { use(x) }() }`. All goroutines see the last `x` because the loop variable is reused. FIX: `for _, x := range items { x := x; go func() { use(x) }() }` or upgrade to Go 1.22+ where the loop variable is per-iteration.
+- **Closed-channel send** — a goroutine sends to a channel that a peer may have closed. Pattern: one producer + one closer where the closer runs before the producer finishes. FIX: only the sole sender closes the channel; use `sync.Once` or a `done` channel to coordinate close.
+- **`WaitGroup.Add` after `Go`** — `wg.Add(1)` called *inside* the spawned goroutine instead of before `go`. The `Wait` in another goroutine can race past the `Add`. FIX: always `wg.Add(1)` on the caller side before `go func()`.
+
+A file that spawns goroutines and closes with `task_done` without checking these patterns is an incomplete review. Concurrency findings often look "small" (one missing lock, one forgotten `Add`) — that's exactly why they slip past review; flag them explicitly.
 
 ## Known Issues (from static analysis)
 When a `## Known Issues (from static analysis)` section is present above, those findings were detected deterministically by external scanners (gitleaks, semgrep, govulncheck). Do not re-report them via `code_comment`. If you have relevant context to add, you may extend a finding with a one-line risk note by producing a normal `code_comment` at a *different* line or scope that references the original finding; otherwise leave them alone — the scoring engine will publish them.
