@@ -43,18 +43,13 @@
     </div>
 
     <h2>What it is</h2>
-    <p><code>shubam-ai-code-reviewer</code> is a self-hosted, Go-native CLI that combines the best of two Apache-2.0 open source projects into one tool:</p>
-    <table>
-      <thead>
-        <tr><th>Feature</th><th>Source of the approach</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>Precise per-diff comments</td><td>alibaba/open-code-review</td></tr>
-        <tr><td>Repo-wide context via a persistent index</td><td>miracodeai/mira</td></tr>
-        <tr><td>Business rules at org level (YAML in git)</td><td>Adapted from Mira <code>custom_rules</code></td></tr>
-        <tr><td>Cross-PR overlap and merge-conflict detection</td><td>miracodeai/mira</td></tr>
-      </tbody>
-    </table>
+    <p><code>shubam-ai-code-reviewer</code> is a self-hosted, Go-native CLI for AI code review. Core capabilities:</p>
+    <ul>
+      <li>Precise per-diff comments anchored to hunk lines.</li>
+      <li>Repo-wide context via a persistent index (SQLite or Postgres).</li>
+      <li>Business rules at org level, authored as YAML in a git repo.</li>
+      <li>Cross-PR overlap and merge-conflict detection.</li>
+    </ul>
 
     <h2>What it is not</h2>
     <p>No dashboard. No webhook server. No learning loop. No vulnerability scanning. No delegation mode. No plugin marketplace. Fixed scope on purpose &mdash; see <a href="/architecture.html#non-goals">Architecture &sect; Non-goals</a>.</p>
@@ -81,10 +76,7 @@ make build
     </ul>
 
     <footer>
-      Built with Apache-2.0 components from
-      <a href="https://github.com/alibaba/open-code-review">alibaba/open-code-review</a> and
-      <a href="https://github.com/miracodeai/mira">miracodeai/mira</a>.
-      &copy; 2026 disseqt. See NOTICE for attribution.
+      &copy; 2026 disseqt. Apache-2.0. See NOTICE for attribution.
     </footer>
   </main>
 </div>

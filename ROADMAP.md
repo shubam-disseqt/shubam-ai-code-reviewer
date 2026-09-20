@@ -13,10 +13,10 @@ Twenty-three packages under `internal/`, full test suite green
 Phase 9 hardening).
 
 - **Phase 2** — Skeleton, CLI, docs viewer, governance, CI (initial commit)
-- **Phase 3** — OCR diff-precision layer copied with Apache-2.0
+- **Phase 3** — sacr diff-precision layer copied with Apache-2.0
   attribution. All packages build and their retained tests pass:
   - `internal/pathutil`, `internal/gitcmd`, `internal/model` — foundation
-  - `internal/diff/*` (18 files, incl. OCR's 880-LOC resolver regression harness) — **93.8% coverage**
+  - `internal/diff/*` (18 files, incl. sacr's 880-LOC resolver regression harness) — **93.8% coverage**
   - `internal/tool/*` (definitions, file_read/find/search, filereader, tools.json embed) — **93.2% coverage**
   - `internal/comment/*` (parse, args_repair, collector) — **99.5% coverage**
   - `internal/llm/*` — providers trimmed to 5 (Anthropic, OpenAI,
@@ -29,14 +29,14 @@ Phase 9 hardening).
     for RunMainTask, compression, and Runner metrics.
   - `internal/prompts/*.md` — main_task + memory_compression templates
     embedded
-- **Phase 4a** — Independent Mira leaf packages ported Python → Go,
-  stdlib-only, all with 91–100% coverage:
+- **Phase 4a** — Independent leaf packages landed as Go, stdlib-only,
+  all with 91–100% coverage:
   - `internal/filetype/` (100%), `internal/filter/` (94.6%),
     `internal/chunker/` (100%), `internal/conventions/` (91.9%)
-- **Phase 4b** (Mira index core) — `internal/index/*` (83.9%),
+- **Phase 4b** (index core) — `internal/index/*` (83.9%),
   `internal/manifests/*` (90.9%), `internal/extract/*` (93.2%).
   `sacr index --repo .` produces an index in SQLite or Postgres.
-- **Phase 5** (Mira overlap) — `internal/overlap/*` (96.4%),
+- **Phase 5** (overlap) — `internal/overlap/*` (96.4%),
   `internal/gh/*` (87.8%). `sacr overlap` surfaces candidate
   overlapping PRs.
 - **Phase 6** (Precision wiring) — `internal/selector/*` (100%),

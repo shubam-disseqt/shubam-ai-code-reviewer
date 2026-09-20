@@ -2,9 +2,7 @@
 
 ## Goals
 
-- Ship and maintain a Go-native CLI that combines the strengths of
-  `alibaba/open-code-review` and `miracodeai/mira` into a single
-  tool suitable for CI-driven pull request review.
+- Ship and maintain a Go-native CLI for CI-driven pull request review.
 - Keep the tool auditable, self-hosted, and free of third-party
   service dependencies beyond the LLM provider the user chooses.
 
@@ -18,8 +16,8 @@ Scope changes go through a design issue with maintainer approval.
 1. Predictable output over clever output.
 2. Deterministic engineering around LLM behavior, not away from it.
 3. Fewer moving parts. Every dependency and every feature earns its keep.
-4. Attribution is not optional. Both upstream projects are Apache-2.0
-   and we honor that visibly.
+4. Third-party attribution is not optional. Any Apache-2.0 or other
+   licensed component we ship gets its NOTICE entry.
 5. Documentation is a first-class artifact. If a feature is not
    documented, it is not shipped.
 
@@ -72,9 +70,9 @@ not count.
 - Security-touching PRs (auth, TLS, path handling, exec) need two
   approvals and a review from the security-listed contact in
   [SECURITY.md](SECURITY.md).
-- Attribution-touching PRs (new lifts from OCR or Mira, or changes to
-  [NOTICE](NOTICE) or [docs/PORTING.md](docs/PORTING.md)) need approval from a
-  maintainer who has read the upstream license.
+- Attribution-touching PRs (changes to [NOTICE](NOTICE) or the license
+  file) need approval from a maintainer who has read the applicable
+  third-party license.
 - No self-merge on non-trivial changes.
 
 ## Releases

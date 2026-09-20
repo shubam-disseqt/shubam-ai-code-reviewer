@@ -27,9 +27,9 @@ type ResolvedEndpoint struct {
 	ExtraBody    map[string]any    // vendor-specific request body fields
 	ExtraHeaders map[string]string // extra HTTP headers for the LLM request
 	// Timeout is the per-request HTTP timeout; 0 means use the client default (5 min).
-	// Only config file (llm/provider sections) and OCR_LLM_TIMEOUT env var can set this.
+	// Only config file (llm/provider sections) and SACR_LLM_TIMEOUT env var can set this.
 	// tryCCEnv and tryShellRC always leave it at 0 since those sources have no timeout
-	// knob; users can still override via OCR_LLM_TIMEOUT.
+	// knob; users can still override via SACR_LLM_TIMEOUT.
 	Timeout    time.Duration
 	RetryCodes []int // additional HTTP status codes that trigger exponential-backoff retry
 
@@ -46,24 +46,24 @@ type ResolvedEndpoint struct {
 	AWSRegion  string
 }
 
-// Environment variable names for OCR-specific configuration.
+// Environment variable names for sacr-specific configuration.
 const (
-	envOCRLLMURL          = "OCR_LLM_URL"
-	envOCRLLMToken        = "OCR_LLM_TOKEN"
-	envOCRLLMModel        = "OCR_LLM_MODEL"
-	envOCRLLMAuthHeader   = "OCR_LLM_AUTH_HEADER"
-	envOCRLLMExtraHeaders = "OCR_LLM_EXTRA_HEADERS"
-	// envOCRLLMProtocol overrides the resolved protocol (anthropic |
+	envsacrLLMURL          = "SACR_LLM_URL"
+	envsacrLLMToken        = "SACR_LLM_TOKEN"
+	envsacrLLMModel        = "SACR_LLM_MODEL"
+	envsacrLLMAuthHeader   = "SACR_LLM_AUTH_HEADER"
+	envsacrLLMExtraHeaders = "SACR_LLM_EXTRA_HEADERS"
+	// envsacrLLMProtocol overrides the resolved protocol (anthropic |
 	// openai | openai-responses). Takes priority
-	// over OCR_USE_ANTHROPIC when set.
-	envOCRLLMProtocol = "OCR_LLM_PROTOCOL"
-	// envOCRLLMTimeout is a global override parsed at the top of
+	// over sacr_USE_ANTHROPIC when set.
+	envsacrLLMProtocol = "SACR_LLM_PROTOCOL"
+	// envsacrLLMTimeout is a global override parsed at the top of
 	// ResolveEndpointWithOptions and applied by finalizeResolvedEndpoint to
-	// whichever strategy resolves, rather than inside tryOCREnv like other
-	// OCR_LLM_* vars. This lets it override timeout for all resolution paths
-	// (OCR env, config file, provider config, Claude Code env, shell RC).
-	envOCRLLMTimeout   = "OCR_LLM_TIMEOUT"
-	envOCRUseAnthropic = "OCR_USE_ANTHROPIC"
+	// whichever strategy resolves, rather than inside trysacrEnv like other
+	// SACR_LLM_* vars. This lets it override timeout for all resolution paths
+	// (sacr env, config file, provider config, Claude Code env, shell RC).
+	envsacrLLMTimeout   = "SACR_LLM_TIMEOUT"
+	envsacrUseAnthropic = "sacr_USE_ANTHROPIC"
 )
 
 // Environment variable names from Claude Code configuration.
@@ -99,8 +99,8 @@ func ResolveEndpointWithOptions(configPath string, opts ResolveOptions) (Resolve
 
 	// The global env overrides are parsed before any strategy runs, even though
 	// they are applied to the endpoint afterwards. Parsing them inside
-	// finalizeResolvedEndpoint would let a typo'd OCR_LLM_TIMEOUT ("30s") or an
-	// unparseable OCR_LLM_EXTRA_HEADERS abort resolution *after* api_key_cmd
+	// finalizeResolvedEndpoint would let a typo'd SACR_LLM_TIMEOUT ("30s") or an
+	// unparseable SACR_LLM_EXTRA_HEADERS abort resolution *after* api_key_cmd
 	// already prompted 1Password/pinentry/Touch ID for a credential that then
 	// gets discarded.
 	env, err := parseEnvOverrides()
@@ -109,9 +109,9 @@ func ResolveEndpointWithOptions(configPath string, opts ResolveOptions) (Resolve
 	}
 
 	if opts.Provider != "" {
-		ep, ok, err := tryOCRConfig(configPath, opts)
+		ep, ok, err := trySacrConfig(configPath, opts)
 		if err != nil {
-			return ResolvedEndpoint{}, fmt.Errorf("resolve OCR config file: %w", err)
+			return ResolvedEndpoint{}, fmt.Errorf("resolve sacr config file: %w", err)
 		}
 		if !ok {
 			// AmbientAuth providers (e.g. Bedrock) have no api_key to
@@ -130,17 +130,17 @@ func ResolveEndpointWithOptions(configPath string, opts ResolveOptions) (Resolve
 			if _, isPreset := LookupProvider(opts.Provider); isPreset {
 				section = "providers"
 			}
-			return ResolvedEndpoint{}, fmt.Errorf("resolve OCR config file: provider %q is not configured in %s section because the config file does not exist", opts.Provider, section)
+			return ResolvedEndpoint{}, fmt.Errorf("resolve sacr config file: provider %q is not configured in %s section because the config file does not exist", opts.Provider, section)
 		}
-		return finalizeResolvedEndpoint("OCR config file", ep, env), nil
+		return finalizeResolvedEndpoint("sacr config file", ep, env), nil
 	}
 
 	strategies := []struct {
 		name string
 		fn   func() (ResolvedEndpoint, bool, error)
 	}{
-		{"OCR config file", func() (ResolvedEndpoint, bool, error) { return tryOCRConfig(configPath, opts) }},
-		{"OCR environment", func() (ResolvedEndpoint, bool, error) { return tryOCREnv(opts.Model) }},
+		{"sacr config file", func() (ResolvedEndpoint, bool, error) { return trySacrConfig(configPath, opts) }},
+		{"sacr environment", func() (ResolvedEndpoint, bool, error) { return trysacrEnv(opts.Model) }},
 		{"provider environment", func() (ResolvedEndpoint, bool, error) { return tryProviderEnv(opts.Model) }},
 		{"Claude Code environment", func() (ResolvedEndpoint, bool, error) { return tryCCEnv(opts.Model) }},
 		{"Shell rc file", func() (ResolvedEndpoint, bool, error) { return tryShellRC(opts.Model) }},
@@ -159,10 +159,10 @@ func ResolveEndpointWithOptions(configPath string, opts ResolveOptions) (Resolve
 		}
 	}
 
-	return ResolvedEndpoint{}, fmt.Errorf("no valid LLM endpoint configured; set one of ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENAI_RESPONSES_API_KEY, DEEPSEEK_API_KEY (Bedrock uses ambient AWS credentials), or configure ~/.opencodereview/config.json")
+	return ResolvedEndpoint{}, fmt.Errorf("no valid LLM endpoint configured; set one of ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENAI_RESPONSES_API_KEY, DEEPSEEK_API_KEY (Bedrock uses ambient AWS credentials), or configure ~/.sacr/config.json")
 }
 
-// envOverrides holds the global OCR_LLM_* overrides that apply to whichever
+// envOverrides holds the global SACR_LLM_* overrides that apply to whichever
 // strategy resolves the endpoint. Parsed once, up front — see the call site in
 // ResolveEndpointWithOptions for why the timing matters.
 type envOverrides struct {
@@ -178,10 +178,10 @@ func parseEnvOverrides() (envOverrides, error) {
 	if err != nil {
 		return envOverrides{}, err
 	}
-	if raw := os.Getenv(envOCRLLMExtraHeaders); raw != "" {
+	if raw := os.Getenv(envsacrLLMExtraHeaders); raw != "" {
 		env.headers, err = ParseExtraHeaders(raw)
 		if err != nil {
-			return envOverrides{}, fmt.Errorf("%s: %w", envOCRLLMExtraHeaders, err)
+			return envOverrides{}, fmt.Errorf("%s: %w", envsacrLLMExtraHeaders, err)
 		}
 	}
 	return env, nil
@@ -209,22 +209,22 @@ func finalizeResolvedEndpoint(source string, ep ResolvedEndpoint, env envOverrid
 	return ep
 }
 
-// parseTimeoutEnv reads and validates the OCR_LLM_TIMEOUT environment variable.
+// parseTimeoutEnv reads and validates the SACR_LLM_TIMEOUT environment variable.
 // Returns the parsed duration and true if set, or 0 and false if unset/empty.
 // Returns an error for invalid values (non-integer, negative, overflow) to give
 // the user clear feedback instead of silently falling back to the default.
 func parseTimeoutEnv() (time.Duration, bool, error) {
-	raw := strings.TrimSpace(os.Getenv(envOCRLLMTimeout))
+	raw := strings.TrimSpace(os.Getenv(envsacrLLMTimeout))
 	if raw == "" {
 		return 0, false, nil
 	}
 	sec, err := strconv.Atoi(raw)
 	if err != nil {
-		return 0, false, fmt.Errorf("OCR_LLM_TIMEOUT must be an integer (seconds): %w", err)
+		return 0, false, fmt.Errorf("SACR_LLM_TIMEOUT must be an integer (seconds): %w", err)
 	}
 	d, err := ValidateTimeoutSec(sec)
 	if err != nil {
-		return 0, false, fmt.Errorf("OCR_LLM_TIMEOUT: %w", err)
+		return 0, false, fmt.Errorf("SACR_LLM_TIMEOUT: %w", err)
 	}
 	return d, true, nil
 }
@@ -260,11 +260,11 @@ func errBedrockNotConfigurable(key string) error {
 		key, ProtocolAnthropicBedrock)
 }
 
-// tryOCREnv reads OCR-specific environment variables.
-func tryOCREnv(modelOverride string) (ResolvedEndpoint, bool, error) {
-	url := os.Getenv(envOCRLLMURL)
-	token := os.Getenv(envOCRLLMToken)
-	model := os.Getenv(envOCRLLMModel)
+// trysacrEnv reads sacr-specific environment variables.
+func trysacrEnv(modelOverride string) (ResolvedEndpoint, bool, error) {
+	url := os.Getenv(envsacrLLMURL)
+	token := os.Getenv(envsacrLLMToken)
+	model := os.Getenv(envsacrLLMModel)
 	if modelOverride != "" {
 		model = modelOverride
 	}
@@ -272,20 +272,20 @@ func tryOCREnv(modelOverride string) (ResolvedEndpoint, bool, error) {
 		return ResolvedEndpoint{}, false, nil
 	}
 
-	// OCR_LLM_PROTOCOL (normalized) wins over OCR_USE_ANTHROPIC when set.
+	// SACR_LLM_PROTOCOL (normalized) wins over sacr_USE_ANTHROPIC when set.
 	protocol := ""
-	if raw := strings.TrimSpace(os.Getenv(envOCRLLMProtocol)); raw != "" {
+	if raw := strings.TrimSpace(os.Getenv(envsacrLLMProtocol)); raw != "" {
 		protocol = NormalizeProtocol(raw)
 		if err := ValidateProtocol(protocol); err != nil {
-			return ResolvedEndpoint{}, false, fmt.Errorf("OCR environment: %w", err)
+			return ResolvedEndpoint{}, false, fmt.Errorf("sacr environment: %w", err)
 		}
 		if protocol == ProtocolAnthropicBedrock {
-			return ResolvedEndpoint{}, false, fmt.Errorf("OCR environment: %w", errBedrockNotConfigurable(envOCRLLMProtocol))
+			return ResolvedEndpoint{}, false, fmt.Errorf("sacr environment: %w", errBedrockNotConfigurable(envsacrLLMProtocol))
 		}
 	}
 	if protocol == "" {
 		useAnthropic := true // default true
-		if v := os.Getenv(envOCRUseAnthropic); v != "" {
+		if v := os.Getenv(envsacrUseAnthropic); v != "" {
 			lower := strings.ToLower(v)
 			useAnthropic = lower == "true" || lower == "1" || lower == "yes"
 		}
@@ -299,16 +299,16 @@ func tryOCREnv(modelOverride string) (ResolvedEndpoint, bool, error) {
 	var authHeader string
 	if protocol == ProtocolAnthropic {
 		var err error
-		authHeader, err = NormalizeAuthHeader(os.Getenv(envOCRLLMAuthHeader))
+		authHeader, err = NormalizeAuthHeader(os.Getenv(envsacrLLMAuthHeader))
 		if err != nil {
-			return ResolvedEndpoint{}, false, fmt.Errorf("OCR environment: %w", err)
+			return ResolvedEndpoint{}, false, fmt.Errorf("sacr environment: %w", err)
 		}
 		if authHeader == "" {
 			authHeader = defaultAuthHeader(protocol)
 		}
 	}
 
-	return ResolvedEndpoint{URL: url, Token: token, Model: model, Protocol: protocol, AuthHeader: authHeader, Source: "OCR environment"}, true, nil
+	return ResolvedEndpoint{URL: url, Token: token, Model: model, Protocol: protocol, AuthHeader: authHeader, Source: "sacr environment"}, true, nil
 }
 
 // llmFileConfig represents the llm section in config.json.
@@ -356,8 +356,8 @@ type configFile struct {
 	Llm             llmFileConfig                  `json:"llm,omitempty"`
 }
 
-// tryOCRConfig reads the OCR config file.
-func tryOCRConfig(path string, opts ResolveOptions) (ResolvedEndpoint, bool, error) {
+// trySacrConfig reads the sacr config file.
+func trySacrConfig(path string, opts ResolveOptions) (ResolvedEndpoint, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -645,10 +645,10 @@ func tryLegacyLlmConfig(cfg configFile, modelOverride string) (ResolvedEndpoint,
 	if raw := strings.TrimSpace(cfg.Llm.Protocol); raw != "" {
 		protocol = NormalizeProtocol(raw)
 		if err := ValidateProtocol(protocol); err != nil {
-			return ResolvedEndpoint{}, false, fmt.Errorf("OCR config file: %w", err)
+			return ResolvedEndpoint{}, false, fmt.Errorf("sacr config file: %w", err)
 		}
 		if protocol == ProtocolAnthropicBedrock {
-			return ResolvedEndpoint{}, false, fmt.Errorf("OCR config file: %w", errBedrockNotConfigurable("llm.protocol"))
+			return ResolvedEndpoint{}, false, fmt.Errorf("sacr config file: %w", errBedrockNotConfigurable("llm.protocol"))
 		}
 	}
 	if protocol == "" {
@@ -668,7 +668,7 @@ func tryLegacyLlmConfig(cfg configFile, modelOverride string) (ResolvedEndpoint,
 		var err error
 		authHeader, err = NormalizeAuthHeader(cfg.Llm.AuthHeader)
 		if err != nil {
-			return ResolvedEndpoint{}, false, fmt.Errorf("OCR config file: %w", err)
+			return ResolvedEndpoint{}, false, fmt.Errorf("sacr config file: %w", err)
 		}
 		if authHeader == "" {
 			authHeader = defaultAuthHeader(protocol)
@@ -677,12 +677,12 @@ func tryLegacyLlmConfig(cfg configFile, modelOverride string) (ResolvedEndpoint,
 
 	timeout, err := ValidateTimeoutSec(cfg.Llm.TimeoutSec)
 	if err != nil {
-		return ResolvedEndpoint{}, false, fmt.Errorf("OCR config file: %w", err)
+		return ResolvedEndpoint{}, false, fmt.Errorf("sacr config file: %w", err)
 	}
 
 	retryCodes, _, err := sanitizeRetryCodes(cfg.Llm.RetryCodes)
 	if err != nil {
-		return ResolvedEndpoint{}, false, fmt.Errorf("OCR config file: %w", err)
+		return ResolvedEndpoint{}, false, fmt.Errorf("sacr config file: %w", err)
 	}
 
 	// Runs last, after every cheap validation above: token is empty here only for
@@ -703,7 +703,7 @@ func tryLegacyLlmConfig(cfg configFile, modelOverride string) (ResolvedEndpoint,
 		Model:        model,
 		Protocol:     protocol,
 		AuthHeader:   authHeader,
-		Source:       "OCR config file",
+		Source:       "sacr config file",
 		ExtraBody:    cfg.Llm.ExtraBody,
 		ExtraHeaders: cfg.Llm.ExtraHeaders,
 		Timeout:      timeout,

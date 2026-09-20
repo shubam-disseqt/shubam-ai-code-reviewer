@@ -3,7 +3,7 @@
 // Portions Copyright 2026 shubam-ai-code-reviewer contributors
 //
 // Adapted from alibaba/open-code-review internal/agent/selection.go
-// under Apache License 2.0. Rewritten to remove dependency on OCR's
+// under Apache License 2.0. Rewritten to remove dependency on sacr's
 // agent-loop scaffolding (Template, PromptTokenLimit, session identity)
 // and to introduce the Decision/Reason surface for pipeline reporting.
 

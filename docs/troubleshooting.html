@@ -153,7 +153,7 @@
     <p><code>total_cost_usd</code> is populated from the provider's usage response when available; if the provider does not surface a price, the field stays at <code>0.00</code> and consumers can multiply <code>prompt_tokens</code> / <code>completion_tokens</code> by their own rate card.</p>
 
     <h2 id="internal-llm-coverage">Test coverage on <code>internal/llm</code> is 40%</h2>
-    <p><strong>Not a bug.</strong> After the OCR provider trim, <code>internal/llm</code> is smaller than the original upstream code but a lot of retained provider glue is only exercised end-to-end &mdash; not by unit tests yet. Coverage rises as Phase 6+ wires the retained providers into the review path. Track progress on the <a href="https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/ROADMAP.md">roadmap</a>.</p>
+    <p><strong>Not a bug.</strong> After the initial provider trim, <code>internal/llm</code> is smaller than the original upstream code but a lot of retained provider glue is only exercised end-to-end &mdash; not by unit tests yet. Coverage rises as Phase 6+ wires the retained providers into the review path. Track progress on the <a href="https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/ROADMAP.md">roadmap</a>.</p>
 
     <h2 id="file-a-bug">How to file a bug</h2>
     <p>For everything except security issues:</p>

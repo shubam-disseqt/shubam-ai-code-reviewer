@@ -49,28 +49,28 @@ func TestValidateTimeoutSec(t *testing.T) {
 
 func TestParseTimeoutEnv(t *testing.T) {
 	t.Run("unset", func(t *testing.T) {
-		t.Setenv(envOCRLLMTimeout, "")
+		t.Setenv(envsacrLLMTimeout, "")
 		d, ok, err := parseTimeoutEnv()
 		if err != nil || ok || d != 0 {
 			t.Errorf("unset: d=%v ok=%v err=%v", d, ok, err)
 		}
 	})
 	t.Run("valid", func(t *testing.T) {
-		t.Setenv(envOCRLLMTimeout, "45")
+		t.Setenv(envsacrLLMTimeout, "45")
 		d, ok, err := parseTimeoutEnv()
 		if err != nil || !ok || d != 45*time.Second {
 			t.Errorf("valid: d=%v ok=%v err=%v", d, ok, err)
 		}
 	})
 	t.Run("non-integer", func(t *testing.T) {
-		t.Setenv(envOCRLLMTimeout, "30s")
+		t.Setenv(envsacrLLMTimeout, "30s")
 		_, _, err := parseTimeoutEnv()
 		if err == nil || !strings.Contains(err.Error(), "must be an integer") {
 			t.Errorf("expected integer parse error, got %v", err)
 		}
 	})
 	t.Run("negative", func(t *testing.T) {
-		t.Setenv(envOCRLLMTimeout, "-5")
+		t.Setenv(envsacrLLMTimeout, "-5")
 		_, _, err := parseTimeoutEnv()
 		if err == nil {
 			t.Error("expected validation error")
@@ -223,17 +223,17 @@ func TestEnsureMessagesSuffix(t *testing.T) {
 	}
 }
 
-func TestTryOCREnv(t *testing.T) {
+func TestTrysacrEnv(t *testing.T) {
 	t.Run("complete anthropic default", func(t *testing.T) {
-		t.Setenv(envOCRLLMURL, "https://example")
-		t.Setenv(envOCRLLMToken, "tok")
-		t.Setenv(envOCRLLMModel, "m")
-		t.Setenv(envOCRLLMProtocol, "")
-		t.Setenv(envOCRUseAnthropic, "")
+		t.Setenv(envsacrLLMURL, "https://example")
+		t.Setenv(envsacrLLMToken, "tok")
+		t.Setenv(envsacrLLMModel, "m")
+		t.Setenv(envsacrLLMProtocol, "")
+		t.Setenv(envsacrUseAnthropic, "")
 
-		ep, ok, err := tryOCREnv("")
+		ep, ok, err := trysacrEnv("")
 		if err != nil || !ok {
-			t.Fatalf("tryOCREnv: ok=%v err=%v", ok, err)
+			t.Fatalf("trysacrEnv: ok=%v err=%v", ok, err)
 		}
 		if ep.Protocol != ProtocolAnthropic {
 			t.Errorf("protocol = %q, want %q", ep.Protocol, ProtocolAnthropic)
@@ -244,15 +244,15 @@ func TestTryOCREnv(t *testing.T) {
 	})
 
 	t.Run("use_anthropic false selects openai", func(t *testing.T) {
-		t.Setenv(envOCRLLMURL, "https://example")
-		t.Setenv(envOCRLLMToken, "tok")
-		t.Setenv(envOCRLLMModel, "m")
-		t.Setenv(envOCRLLMProtocol, "")
-		t.Setenv(envOCRUseAnthropic, "false")
+		t.Setenv(envsacrLLMURL, "https://example")
+		t.Setenv(envsacrLLMToken, "tok")
+		t.Setenv(envsacrLLMModel, "m")
+		t.Setenv(envsacrLLMProtocol, "")
+		t.Setenv(envsacrUseAnthropic, "false")
 
-		ep, ok, err := tryOCREnv("")
+		ep, ok, err := trysacrEnv("")
 		if err != nil || !ok {
-			t.Fatalf("tryOCREnv: %v", err)
+			t.Fatalf("trysacrEnv: %v", err)
 		}
 		if ep.Protocol != ProtocolOpenAIChatCompletions {
 			t.Errorf("protocol = %q, want openai", ep.Protocol)
@@ -260,13 +260,13 @@ func TestTryOCREnv(t *testing.T) {
 	})
 
 	t.Run("protocol wins over use_anthropic", func(t *testing.T) {
-		t.Setenv(envOCRLLMURL, "https://example")
-		t.Setenv(envOCRLLMToken, "tok")
-		t.Setenv(envOCRLLMModel, "m")
-		t.Setenv(envOCRLLMProtocol, "openai-responses")
-		t.Setenv(envOCRUseAnthropic, "true")
+		t.Setenv(envsacrLLMURL, "https://example")
+		t.Setenv(envsacrLLMToken, "tok")
+		t.Setenv(envsacrLLMModel, "m")
+		t.Setenv(envsacrLLMProtocol, "openai-responses")
+		t.Setenv(envsacrUseAnthropic, "true")
 
-		ep, _, err := tryOCREnv("")
+		ep, _, err := trysacrEnv("")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -276,36 +276,36 @@ func TestTryOCREnv(t *testing.T) {
 	})
 
 	t.Run("invalid protocol rejected", func(t *testing.T) {
-		t.Setenv(envOCRLLMURL, "https://example")
-		t.Setenv(envOCRLLMToken, "tok")
-		t.Setenv(envOCRLLMModel, "m")
-		t.Setenv(envOCRLLMProtocol, "no-such-protocol")
+		t.Setenv(envsacrLLMURL, "https://example")
+		t.Setenv(envsacrLLMToken, "tok")
+		t.Setenv(envsacrLLMModel, "m")
+		t.Setenv(envsacrLLMProtocol, "no-such-protocol")
 
-		_, _, err := tryOCREnv("")
+		_, _, err := trysacrEnv("")
 		if err == nil {
 			t.Error("expected error for invalid protocol")
 		}
 	})
 
 	t.Run("bedrock protocol rejected", func(t *testing.T) {
-		t.Setenv(envOCRLLMURL, "https://example")
-		t.Setenv(envOCRLLMToken, "tok")
-		t.Setenv(envOCRLLMModel, "m")
-		t.Setenv(envOCRLLMProtocol, "anthropic-bedrock")
+		t.Setenv(envsacrLLMURL, "https://example")
+		t.Setenv(envsacrLLMToken, "tok")
+		t.Setenv(envsacrLLMModel, "m")
+		t.Setenv(envsacrLLMProtocol, "anthropic-bedrock")
 
-		_, _, err := tryOCREnv("")
+		_, _, err := trysacrEnv("")
 		if err == nil || !strings.Contains(err.Error(), "bedrock") {
 			t.Errorf("expected bedrock-not-configurable error, got %v", err)
 		}
 	})
 
 	t.Run("model override wins", func(t *testing.T) {
-		t.Setenv(envOCRLLMURL, "https://example")
-		t.Setenv(envOCRLLMToken, "tok")
-		t.Setenv(envOCRLLMModel, "orig-model")
-		t.Setenv(envOCRLLMProtocol, "")
+		t.Setenv(envsacrLLMURL, "https://example")
+		t.Setenv(envsacrLLMToken, "tok")
+		t.Setenv(envsacrLLMModel, "orig-model")
+		t.Setenv(envsacrLLMProtocol, "")
 
-		ep, _, err := tryOCREnv("new-model")
+		ep, _, err := trysacrEnv("new-model")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -315,11 +315,11 @@ func TestTryOCREnv(t *testing.T) {
 	})
 
 	t.Run("missing url is a miss", func(t *testing.T) {
-		t.Setenv(envOCRLLMURL, "")
-		t.Setenv(envOCRLLMToken, "tok")
-		t.Setenv(envOCRLLMModel, "m")
+		t.Setenv(envsacrLLMURL, "")
+		t.Setenv(envsacrLLMToken, "tok")
+		t.Setenv(envsacrLLMModel, "m")
 
-		_, ok, err := tryOCREnv("")
+		_, ok, err := trysacrEnv("")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -329,13 +329,13 @@ func TestTryOCREnv(t *testing.T) {
 	})
 
 	t.Run("bad auth header", func(t *testing.T) {
-		t.Setenv(envOCRLLMURL, "https://example")
-		t.Setenv(envOCRLLMToken, "tok")
-		t.Setenv(envOCRLLMModel, "m")
-		t.Setenv(envOCRLLMProtocol, "anthropic")
-		t.Setenv(envOCRLLMAuthHeader, "cookie")
+		t.Setenv(envsacrLLMURL, "https://example")
+		t.Setenv(envsacrLLMToken, "tok")
+		t.Setenv(envsacrLLMModel, "m")
+		t.Setenv(envsacrLLMProtocol, "anthropic")
+		t.Setenv(envsacrLLMAuthHeader, "cookie")
 
-		_, _, err := tryOCREnv("")
+		_, _, err := trysacrEnv("")
 		if err == nil {
 			t.Error("expected error for invalid auth header")
 		}
@@ -358,7 +358,7 @@ func writeConfig(t *testing.T, cfg configFile) string {
 
 func TestTryProviderEnv(t *testing.T) {
 	// Clear every provider EnvVar + SACR_MODEL so a stray CI env doesn't
-	// bleed into subtests. Also clear the CC / OCR vars since
+	// bleed into subtests. Also clear the CC / sacr vars since
 	// ResolveEndpointWithOptions consults them too.
 	clearProviderEnv := func(t *testing.T) {
 		t.Helper()
@@ -428,8 +428,8 @@ func TestTryProviderEnv(t *testing.T) {
 	})
 }
 
-func TestTryOCRConfig_MissingFile(t *testing.T) {
-	_, ok, err := tryOCRConfig(filepath.Join(t.TempDir(), "nonexistent.json"), ResolveOptions{})
+func TestTrysacrConfig_MissingFile(t *testing.T) {
+	_, ok, err := trySacrConfig(filepath.Join(t.TempDir(), "nonexistent.json"), ResolveOptions{})
 	if err != nil {
 		t.Fatalf("missing file should be a miss, not an error: %v", err)
 	}
@@ -438,13 +438,13 @@ func TestTryOCRConfig_MissingFile(t *testing.T) {
 	}
 }
 
-func TestTryOCRConfig_InvalidJSON(t *testing.T) {
+func TestTrysacrConfig_InvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err := tryOCRConfig(path, ResolveOptions{})
+	_, _, err := trySacrConfig(path, ResolveOptions{})
 	if err == nil || !strings.Contains(err.Error(), "parse config") {
 		t.Errorf("expected parse error, got %v", err)
 	}
@@ -459,7 +459,7 @@ func TestTryProviderConfig_PresetAnthropic(t *testing.T) {
 		},
 	}
 	path := writeConfig(t, cfg)
-	ep, ok, err := tryOCRConfig(path, ResolveOptions{})
+	ep, ok, err := trySacrConfig(path, ResolveOptions{})
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
@@ -481,7 +481,7 @@ func TestTryProviderConfig_ModelOverride(t *testing.T) {
 	}
 	path := writeConfig(t, cfg)
 	// Valid override (in the preset's model list).
-	ep, ok, err := tryOCRConfig(path, ResolveOptions{Model: "claude-sonnet-5"})
+	ep, ok, err := trySacrConfig(path, ResolveOptions{Model: "claude-sonnet-5"})
 	if err != nil || !ok {
 		t.Fatalf("valid override: ok=%v err=%v", ok, err)
 	}
@@ -490,7 +490,7 @@ func TestTryProviderConfig_ModelOverride(t *testing.T) {
 	}
 
 	// Invalid override.
-	_, _, err = tryOCRConfig(path, ResolveOptions{Model: "not-a-real-model"})
+	_, _, err = trySacrConfig(path, ResolveOptions{Model: "not-a-real-model"})
 	if err == nil || !strings.Contains(err.Error(), "not available") {
 		t.Errorf("expected not-available error, got %v", err)
 	}
@@ -506,7 +506,7 @@ func TestTryProviderConfig_NoCredential(t *testing.T) {
 	}
 	t.Setenv("ANTHROPIC_API_KEY", "") // suppress env fallback
 	path := writeConfig(t, cfg)
-	_, _, err := tryOCRConfig(path, ResolveOptions{})
+	_, _, err := trySacrConfig(path, ResolveOptions{})
 	if err == nil || !strings.Contains(err.Error(), "no api_key") {
 		t.Errorf("expected no-credential error, got %v", err)
 	}
@@ -522,7 +522,7 @@ func TestTryProviderConfig_EnvVarFallback(t *testing.T) {
 	}
 	t.Setenv("ANTHROPIC_API_KEY", "env-sk-test")
 	path := writeConfig(t, cfg)
-	ep, ok, err := tryOCRConfig(path, ResolveOptions{})
+	ep, ok, err := trySacrConfig(path, ResolveOptions{})
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
@@ -538,7 +538,7 @@ func TestTryProviderConfig_MissingProviderSection(t *testing.T) {
 		// no providers map entry
 	}
 	path := writeConfig(t, cfg)
-	_, _, err := tryOCRConfig(path, ResolveOptions{})
+	_, _, err := trySacrConfig(path, ResolveOptions{})
 	if err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Errorf("expected not-configured error, got %v", err)
 	}
@@ -557,7 +557,7 @@ func TestTryProviderConfig_CustomProvider(t *testing.T) {
 		},
 	}
 	path := writeConfig(t, cfg)
-	ep, ok, err := tryOCRConfig(path, ResolveOptions{})
+	ep, ok, err := trySacrConfig(path, ResolveOptions{})
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
@@ -575,7 +575,7 @@ func TestTryProviderConfig_CustomProviderMissingProtocol(t *testing.T) {
 		},
 	}
 	path := writeConfig(t, cfg)
-	_, _, err := tryOCRConfig(path, ResolveOptions{})
+	_, _, err := trySacrConfig(path, ResolveOptions{})
 	if err == nil || !strings.Contains(err.Error(), "requires a protocol") {
 		t.Errorf("expected protocol-required error, got %v", err)
 	}
@@ -590,7 +590,7 @@ func TestTryProviderConfig_CustomProviderMissingURL(t *testing.T) {
 		},
 	}
 	path := writeConfig(t, cfg)
-	_, _, err := tryOCRConfig(path, ResolveOptions{})
+	_, _, err := trySacrConfig(path, ResolveOptions{})
 	if err == nil || !strings.Contains(err.Error(), "requires a url") {
 		t.Errorf("expected url-required error, got %v", err)
 	}
@@ -605,7 +605,7 @@ func TestTryProviderConfig_BedrockAmbient(t *testing.T) {
 		},
 	}
 	path := writeConfig(t, cfg)
-	ep, ok, err := tryOCRConfig(path, ResolveOptions{})
+	ep, ok, err := trySacrConfig(path, ResolveOptions{})
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
@@ -626,7 +626,7 @@ func TestTryProviderConfig_BadProtocol(t *testing.T) {
 		},
 	}
 	path := writeConfig(t, cfg)
-	_, _, err := tryOCRConfig(path, ResolveOptions{})
+	_, _, err := trySacrConfig(path, ResolveOptions{})
 	if err == nil || !strings.Contains(err.Error(), "unsupported protocol") {
 		t.Errorf("expected unsupported-protocol error, got %v", err)
 	}
@@ -641,7 +641,7 @@ func TestTryProviderConfig_InvalidTimeout(t *testing.T) {
 		},
 	}
 	path := writeConfig(t, cfg)
-	_, _, err := tryOCRConfig(path, ResolveOptions{})
+	_, _, err := trySacrConfig(path, ResolveOptions{})
 	if err == nil {
 		t.Error("expected error for negative timeout")
 	}
@@ -656,7 +656,7 @@ func TestTryProviderConfig_InvalidRetryCode(t *testing.T) {
 		},
 	}
 	path := writeConfig(t, cfg)
-	_, _, err := tryOCRConfig(path, ResolveOptions{})
+	_, _, err := trySacrConfig(path, ResolveOptions{})
 	if err == nil {
 		t.Error("expected error for invalid retry code")
 	}
@@ -671,7 +671,7 @@ func TestTryProviderConfig_MissingModel(t *testing.T) {
 		},
 	}
 	path := writeConfig(t, cfg)
-	_, _, err := tryOCRConfig(path, ResolveOptions{})
+	_, _, err := trySacrConfig(path, ResolveOptions{})
 	if err == nil || !strings.Contains(err.Error(), "no model configured") {
 		t.Errorf("expected missing-model error, got %v", err)
 	}
@@ -686,7 +686,7 @@ func TestTryProviderConfig_EntryModelWins(t *testing.T) {
 		},
 	}
 	path := writeConfig(t, cfg)
-	ep, _, err := tryOCRConfig(path, ResolveOptions{})
+	ep, _, err := trySacrConfig(path, ResolveOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -707,7 +707,7 @@ func TestTryProviderConfig_ProviderOptionResetsModel(t *testing.T) {
 		},
 	}
 	path := writeConfig(t, cfg)
-	ep, ok, err := tryOCRConfig(path, ResolveOptions{Provider: "anthropic"})
+	ep, ok, err := trySacrConfig(path, ResolveOptions{Provider: "anthropic"})
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
@@ -726,7 +726,7 @@ func TestTryLegacyLlmConfig(t *testing.T) {
 			},
 		}
 		path := writeConfig(t, cfg)
-		ep, ok, err := tryOCRConfig(path, ResolveOptions{})
+		ep, ok, err := trySacrConfig(path, ResolveOptions{})
 		if err != nil || !ok {
 			t.Fatalf("ok=%v err=%v", ok, err)
 		}
@@ -746,7 +746,7 @@ func TestTryLegacyLlmConfig(t *testing.T) {
 			},
 		}
 		path := writeConfig(t, cfg)
-		ep, _, err := tryOCRConfig(path, ResolveOptions{})
+		ep, _, err := trySacrConfig(path, ResolveOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -765,7 +765,7 @@ func TestTryLegacyLlmConfig(t *testing.T) {
 			},
 		}
 		path := writeConfig(t, cfg)
-		ep, _, err := tryOCRConfig(path, ResolveOptions{})
+		ep, _, err := trySacrConfig(path, ResolveOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -784,7 +784,7 @@ func TestTryLegacyLlmConfig(t *testing.T) {
 			},
 		}
 		path := writeConfig(t, cfg)
-		_, _, err := tryOCRConfig(path, ResolveOptions{})
+		_, _, err := trySacrConfig(path, ResolveOptions{})
 		if err == nil || !strings.Contains(err.Error(), "bedrock") {
 			t.Errorf("expected bedrock error, got %v", err)
 		}
@@ -800,7 +800,7 @@ func TestTryLegacyLlmConfig(t *testing.T) {
 			},
 		}
 		path := writeConfig(t, cfg)
-		_, _, err := tryOCRConfig(path, ResolveOptions{})
+		_, _, err := trySacrConfig(path, ResolveOptions{})
 		if err == nil {
 			t.Error("expected timeout error")
 		}
@@ -816,7 +816,7 @@ func TestTryLegacyLlmConfig(t *testing.T) {
 			},
 		}
 		path := writeConfig(t, cfg)
-		_, _, err := tryOCRConfig(path, ResolveOptions{})
+		_, _, err := trySacrConfig(path, ResolveOptions{})
 		if err == nil {
 			t.Error("expected retry-codes error")
 		}
@@ -832,7 +832,7 @@ func TestTryLegacyLlmConfig(t *testing.T) {
 			},
 		}
 		path := writeConfig(t, cfg)
-		_, _, err := tryOCRConfig(path, ResolveOptions{})
+		_, _, err := trySacrConfig(path, ResolveOptions{})
 		if err == nil {
 			t.Error("expected auth header error")
 		}
@@ -848,7 +848,7 @@ func TestTryLegacyLlmConfig(t *testing.T) {
 			},
 		}
 		path := writeConfig(t, cfg)
-		_, _, err := tryOCRConfig(path, ResolveOptions{})
+		_, _, err := trySacrConfig(path, ResolveOptions{})
 		if err == nil {
 			t.Error("expected protocol error")
 		}
@@ -863,7 +863,7 @@ func TestTryLegacyLlmConfig(t *testing.T) {
 			},
 		}
 		path := writeConfig(t, cfg)
-		_, ok, err := tryOCRConfig(path, ResolveOptions{})
+		_, ok, err := trySacrConfig(path, ResolveOptions{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -881,7 +881,7 @@ func TestTryLegacyLlmConfig(t *testing.T) {
 			},
 		}
 		path := writeConfig(t, cfg)
-		ep, _, err := tryOCRConfig(path, ResolveOptions{Model: "override"})
+		ep, _, err := trySacrConfig(path, ResolveOptions{Model: "override"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -893,14 +893,14 @@ func TestTryLegacyLlmConfig(t *testing.T) {
 
 func TestResolveEndpoint_NoValidConfig(t *testing.T) {
 	// Clear all env sources, point to nonexistent config file.
-	t.Setenv(envOCRLLMURL, "")
-	t.Setenv(envOCRLLMToken, "")
-	t.Setenv(envOCRLLMModel, "")
+	t.Setenv(envsacrLLMURL, "")
+	t.Setenv(envsacrLLMToken, "")
+	t.Setenv(envsacrLLMModel, "")
 	t.Setenv(envCCBaseURL, "")
 	t.Setenv(envCCToken, "")
 	t.Setenv(envCCModel, "")
-	t.Setenv(envOCRLLMTimeout, "")
-	t.Setenv(envOCRLLMExtraHeaders, "")
+	t.Setenv(envsacrLLMTimeout, "")
+	t.Setenv(envsacrLLMExtraHeaders, "")
 
 	home := t.TempDir()
 	setTestHome(t, home)
@@ -926,8 +926,8 @@ func TestResolveEndpoint_ExplicitCustomProviderMessage(t *testing.T) {
 }
 
 func TestResolveEndpoint_UsesConfig(t *testing.T) {
-	t.Setenv(envOCRLLMTimeout, "")
-	t.Setenv(envOCRLLMExtraHeaders, "")
+	t.Setenv(envsacrLLMTimeout, "")
+	t.Setenv(envsacrLLMExtraHeaders, "")
 	cfg := configFile{
 		Llm: llmFileConfig{
 			URL:       "https://example",
@@ -947,8 +947,8 @@ func TestResolveEndpoint_UsesConfig(t *testing.T) {
 
 func TestResolveEndpoint_EnvOverrides(t *testing.T) {
 	// Set config, then override timeout+headers via env.
-	t.Setenv(envOCRLLMTimeout, "45")
-	t.Setenv(envOCRLLMExtraHeaders, "X-Extra=foo")
+	t.Setenv(envsacrLLMTimeout, "45")
+	t.Setenv(envsacrLLMExtraHeaders, "X-Extra=foo")
 	cfg := configFile{
 		Llm: llmFileConfig{
 			URL:        "https://example",
@@ -977,25 +977,25 @@ func TestResolveEndpoint_EnvOverrides(t *testing.T) {
 }
 
 func TestResolveEndpoint_BadTimeoutEnvFailsFast(t *testing.T) {
-	t.Setenv(envOCRLLMTimeout, "not-a-number")
+	t.Setenv(envsacrLLMTimeout, "not-a-number")
 	_, err := ResolveEndpoint(filepath.Join(t.TempDir(), "any.json"))
-	if err == nil || !strings.Contains(err.Error(), "OCR_LLM_TIMEOUT") {
-		t.Errorf("expected OCR_LLM_TIMEOUT error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "SACR_LLM_TIMEOUT") {
+		t.Errorf("expected SACR_LLM_TIMEOUT error, got %v", err)
 	}
 }
 
 func TestResolveEndpoint_BadHeadersEnv(t *testing.T) {
-	t.Setenv(envOCRLLMTimeout, "")
-	t.Setenv(envOCRLLMExtraHeaders, "Authorization=x")
+	t.Setenv(envsacrLLMTimeout, "")
+	t.Setenv(envsacrLLMExtraHeaders, "Authorization=x")
 	_, err := ResolveEndpoint(filepath.Join(t.TempDir(), "any.json"))
-	if err == nil || !strings.Contains(err.Error(), "OCR_LLM_EXTRA_HEADERS") {
-		t.Errorf("expected OCR_LLM_EXTRA_HEADERS error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "SACR_LLM_EXTRA_HEADERS") {
+		t.Errorf("expected SACR_LLM_EXTRA_HEADERS error, got %v", err)
 	}
 }
 
 func TestResolveEndpointWithModelOverride(t *testing.T) {
-	t.Setenv(envOCRLLMTimeout, "")
-	t.Setenv(envOCRLLMExtraHeaders, "")
+	t.Setenv(envsacrLLMTimeout, "")
+	t.Setenv(envsacrLLMExtraHeaders, "")
 	cfg := configFile{
 		Llm: llmFileConfig{
 			URL:       "https://example",

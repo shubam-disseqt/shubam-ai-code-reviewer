@@ -26,7 +26,7 @@ autonomous AI agents opening PRs directly.
 5. **No AI attribution trailers.** No `Co-Authored-By: Claude ...`,
    no `Assisted-by:`. Attribution goes in the PR body or design doc
    when material, not in commit metadata. This mirrors the upstream
-   OCR project's rule.
+   sacr project's rule.
 
 6. **Keep commit messages short.** Details go in the PR body, not in
    collapsed commit footers.
@@ -40,8 +40,7 @@ autonomous AI agents opening PRs directly.
 - Every AI-generated PR must pass `make check` locally before
   submission. CI will run it again — that is not a substitute for a
   local pass.
-- If the AI's output touches attribution, licensing, or the porting
-  map in [docs/PORTING.md](docs/PORTING.md), flag it explicitly in the PR body.
+- If the AI's output touches attribution or licensing
 - The project uses `sacr review` on itself when v1 ships. Until
   then, AI-generated PRs receive extra scrutiny by convention.
 
@@ -61,6 +60,6 @@ Direct-PR agents (Devin, sweep.dev, similar) must:
 ## When these rules would block you
 
 If you are not willing or able to meet the rules above, please close
-the issue or pull request. The upstream OCR project's rule — "If you
+the issue or pull request. The rule — "If you
 are unwilling to do all of the above, please close the issue or PR" —
 applies here too.

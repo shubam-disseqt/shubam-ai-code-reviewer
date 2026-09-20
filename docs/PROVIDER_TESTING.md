@@ -165,7 +165,7 @@ into the URL path, and deriving the host from the resolved region. See
   actually has.
 - **`SACR_PROVIDER=bedrock` alone is NOT enough.** The resolver's
   explicit-provider path (`ResolveEndpointWithOptions`) delegates to
-  `tryOCRConfig`, which requires `~/.opencodereview/config.json` to exist
+  `trySacrConfig`, which requires `~/.sacr/config.json` to exist
   and to define a `bedrock` entry (preset or custom). `tryProviderEnv`
   skips Bedrock because its `EnvVar` is empty — there is no API key. See
   the "Config file" step below.
@@ -222,7 +222,7 @@ not an allowlist.
 
 **Config file** (required — see audit note above)
 
-Create `~/.opencodereview/config.json`:
+Create `~/.sacr/config.json`:
 
 ```json
 {
@@ -249,7 +249,7 @@ Expected rows:
 
 ```
 bedrock                  ok     region=us-east-1, auth=profile (AWS_PROFILE=your-profile)
-llm provider             ok     us.anthropic.claude-sonnet-4-6 (OCR config file)
+llm provider             ok     us.anthropic.claude-sonnet-4-6 (sacr config file)
 ```
 
 The `bedrock` check inspects `awsconfig.LoadDefaultConfig` output only —
