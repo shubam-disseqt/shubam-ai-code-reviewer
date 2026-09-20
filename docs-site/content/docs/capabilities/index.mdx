@@ -35,6 +35,8 @@ See [Review rules](/docs/capabilities/review-rules).
 
 General code review discipline: bugs, correctness, testing gaps, complexity. Runs on every file the earlier tiers didn't already fully cover, and reads the scanner findings for that file as "known issues" so it doesn't duplicate them.
 
+Every review call is preceded by a codebase-context assembly step. When `SACR_DB_URL` is set, the reviewer pulls per-file summaries, symbol maps, and conventions from a persistent SQLite/Postgres index built by `sacr index` (indexed mode). When it isn't, the tool loop reconstructs the same shape on-demand via `file_read`, `file_find`, and `code_search` (JIT mode). See [Index and context](/docs/architecture/index-and-context).
+
 Provider-agnostic — see [Providers](/docs/reference/providers).
 
 ## Output surfaces
@@ -59,5 +61,6 @@ The [Sonnet 4.6 benchmark](/docs/capabilities/benchmark) is a plan-only design d
   <Card title="Review rules" href="/docs/capabilities/review-rules" />
   <Card title="Overlap detection" href="/docs/capabilities/overlap" />
   <Card title="SARIF output" href="/docs/capabilities/sarif" />
+  <Card title="Index and context" href="/docs/architecture/index-and-context" />
   <Card title="Benchmark plan" href="/docs/capabilities/benchmark" />
 </Cards>

@@ -18,8 +18,7 @@ its error with a `stage:` prefix so a failure names the phase. The dashed
 edges are best-effort — a failure logs a warning and returns an empty
 result; the run continues.
 
-```mermaid
-flowchart TD
+<Mermaid chart={`flowchart TD
     P0["0 · scoring +<br/>policy load"]
     P1["1 · resolve diff"]
     P15["1.5 · early return<br/>if docs-only"]
@@ -54,8 +53,7 @@ flowchart TD
     P33 -.-> P13
     P12 -.-> P13
     P125 -.-> P13
-    P126 -.-> P13
-```
+    P126 -.-> P13`} />
 
 **Fatal stages** (abort with wrapped error): diff, scoring, session, LLM,
 prompts, tools, emit.
