@@ -61,17 +61,63 @@ ones carry, new bugs surface. No stale spam.
 
 ## What it does
 
-Every `sacr review` produces the same set of artefacts — no configuration
-required:
+Every `sacr review` produces the same set of artefacts — no configuration required.
 
-1. **Inline PR comments** on the exact lines with real bugs, batched via a single review call to avoid GitHub secondary rate limits
-2. **A managed PR description** with the walkthrough, findings table, and risk assessment, updated in-place via hidden markers
-3. **A reviewer-effort score (0–10)** with a full audit table where every row sums to the shown value — no vibes
-4. **A package-imports Mermaid diagram** parsed by `go/parser` (Go) and regex (TypeScript, Python). Every edge is a literal import line
-5. **Cross-PR overlap warnings** when your diff collides with another open PR (merge-conflict risk + owner-of-record probe)
-6. **Committable suggestion blocks** for extract-helper, guard-clause, and error-wrap opportunities — reviewers click **Commit suggestion** to apply
-7. **SARIF 2.1.0 output** for GitHub Code Scanning (gitleaks, semgrep, govulncheck findings appear in the Security tab)
-8. **Structured labels** (`pr_type`, `domains`, `risk_tag`, `ownership_hints`) with stale-cleanup on re-run
+### Inline PR comments on the exact lines
+
+Every finding lands as a targeted inline comment on the vulnerable line. All findings for a run are batched into a single `POST /pulls/{n}/reviews` call so a 40-file PR doesn't trip GitHub's secondary rate limits. LLM line numbers are snapped to the actual diff by a deterministic post-processor — a model that emits `line: 47` for code that lives at line 45 gets pulled back into the diff hunk so the anchor lands where a reviewer looks. Fingerprint markers (`<!-- sacr:fp:HEX -->`) let reruns purge stale comments cleanly; no duplicate audit trail.
+
+### Separate PR-level review summary
+
+At the end of every run, sacr posts a PR-level comment authored by `github-actions[bot]` containing the change walkthrough, findings table, effort score, package map, and risk assessment. The comment is idempotent via a `<!-- sacr:fp:summary -->` fingerprint — the next run lists issue comments, deletes any previous marker-tagged post, and creates a fresh one. The human-authored PR body is never edited.
+
+### Reviewer-effort score (0–10)
+
+A weighted sum over four signals: LOC changed, files touched, cyclomatic-complexity delta, and cross-package boundary crossings. Every score ships with a full audit table where each row shows the raw metric, the weight applied, and the contribution to the final number. Every row sums to the shown value — no fudge factor.
+
+### Package-imports Mermaid diagram
+
+Parses every changed source file with `go/parser` (Go), tree-sitter (TypeScript, JavaScript), or a language-specific regex (Python, Ruby) and emits a Mermaid diagram of the import edges between packages touched by the diff. Every edge in the rendered diagram corresponds to a literal import statement — no inferred coupling, no LLM-generated edges. Reviewers can trace ownership by reading the imports.
+
+### Cross-PR overlap detection
+
+When a PR opens, sacr fetches the list of other open PRs, computes a Jaccard similarity on `(title tokens ∪ changed files ∪ changed symbols)` against each candidate, keeps only pairs above a threshold, then asks the LLM for a per-pair verdict on merge-conflict risk and owner-of-record. The deterministic prefilter keeps token cost bounded even on repos with hundreds of open PRs.
+
+### Committable suggestion blocks
+
+A subset of findings — extract-helper, guard-clause conversion, error-wrap improvements, missing docs on exported symbols — land as GitHub's native suggestion blocks. The `existing_code` is copied verbatim from the diff and the `suggestion_code` is a syntactically valid replacement; reviewers click **Commit suggestion** to apply the fix directly on the branch. Sacr only emits a suggestion when the replacement is deterministic and safe; ambiguous cases stay as regular comments.
+
+### SARIF 2.1.0 for GitHub Code Scanning
+
+Deterministic-scanner findings (gitleaks credentials, semgrep patterns, govulncheck CVEs) are also written as a SARIF 2.1.0 document. GitHub Code Scanning ingests it and surfaces the findings in the Security tab with alert-state tracking across pushes — a resolved finding stays resolved, a reintroduced one reopens automatically. Enable with `SACR_UPLOAD_SARIF=1` in the workflow.
+
+### Deterministic scanners as tier 0
+
+`gitleaks`, `semgrep`, and `govulncheck` run as pure Go subprocess wrappers before any LLM call. Zero token cost, near-perfect precision on the categories they cover. Their findings feed the LLM's context as "known issues" so the LLM never duplicates them, and pass through to the SARIF and `github` outputs unchanged. `govulncheck` findings are filtered by call-graph reachability so unreachable CVEs don't page you.
+
+### Two-tier LLM routing
+
+Sacr splits LLM work into a **main tier** (per-file review, ~90% of token cost) and a **cheap tier** (walkthrough summariser + PR labeler, ~10% of cost). The main tier defaults to a strong model (Sonnet-class or `gpt-4o-mini`); the cheap tier can be `Haiku`, `DeepSeek`, or `Gemini Flash`. Pairing saves ~30–40% on total review cost with no measurable recall loss.
+
+### Fingerprint-based carryover across runs
+
+Every finding is hashed on `(path, category, fixed_severity, sanitized_body)`. On rerun, sacr diffs the new finding set against the previous run's fingerprints and marks each as `new`, `carried`, or `resolved`. Resolved findings disappear from the PR cleanly; unfixed ones stay put without triggering re-notification. No stale spam even after 30 pushes.
+
+### Persistent index with JIT fallback
+
+`sacr index` builds a per-repo SQLite (or your own Postgres) store containing per-file summaries, symbol maps, import graphs, and manifests. At review time, `reviewctx` reads the index for indexed mode (fast, cross-file). When no index is available, the same context shape is reconstructed on-demand via `file_read`, `file_find`, and `code_search` tool calls (JIT mode — fewer moving parts, higher token cost). Both modes emit the same prompt so the LLM path cannot tell them apart.
+
+### Org-level review rules
+
+Team review policy lives in a YAML file in a git repo (`SACR_ORG_RULES_REPO`). Rules are scope-filtered by file path, tagged with severity + category, and injected into the reviewer prompt as constraints. Human-authored, human-reviewed via PR; the reviewer treats them as advisory guidance and every rule application still routes through the same scoring engine.
+
+### Session log for audit and resume
+
+Every review appends a JSONL log to `~/.sacr/sessions/<uuid>.jsonl`: `session_start`, one record per LLM request + response, one per tool call, one per finding produced, then `session_end`. The log is both the audit trail (what did the model see, what did it emit) and the resume input — a crashed run picks up from the last checkpoint without reissuing successful LLM calls.
+
+### Structured labels
+
+Every review computes and applies four label families: `pr_type` (`feat` / `fix` / `refactor` / `docs` / `test` / `chore` / `perf` / `ci`), `domains` (extracted from touched paths and symbol names), `risk_tag` (`risk/low` … `risk/critical`, derived from scoring + scanner findings), and `ownership_hints` (from CODEOWNERS or best-effort git blame). Exclusive families (`pr_type`, `risk_tag`) are cleaned up on rerun so stale labels don't accumulate.
 
 ---
 
@@ -158,8 +204,53 @@ The LLM sees each file's diff and a small set of read/search tools; it emits
 `code_comment` or `task_done`. That's it — no agent chains, no reasoning
 loops, no LangGraph.
 
-Full 13-stage pipeline + package map:
-[architecture docs](https://shubam-disseqt.github.io/shubam-ai-code-reviewer/docs/architecture/pipeline).
+### 13-stage review pipeline
+
+Every `runReview()` call executes these stages in order. Each stage wraps its error with a `stage:` prefix so a failure names the phase. Dashed edges are best-effort — a failure on those logs a warning, returns an empty result, and the run continues.
+
+```mermaid
+flowchart TD
+    P0["0 · scoring +<br/>policy load"]
+    P1["1 · resolve diff"]
+    P15["1.5 · early return<br/>if docs-only"]
+    P2["2 · selector<br/>drop binary/large"]
+    P25["2.5 · early return<br/>if all filtered"]
+    P3["3 · index store<br/>SQLite optional"]
+    P32{{"3.2 · scanners<br/>gitleaks · semgrep · govulncheck"}}
+    P33{{"3.3 · cheap-tier<br/>summariser + labeler"}}
+    P4["4 · org rules"]
+    P5["5 · repo context<br/>indexed OR JIT"]
+    P6["6 · session start"]
+    P7["7 · LLM tier resolve"]
+    P8["8 · prompts + tools"]
+    P9["9 · tool registry"]
+    P10["10 · main LLM loop<br/>per file"]
+    P11["11 · post-process<br/>score · dedup · filter"]
+    P115["11.5 · carryover<br/>new / carried / resolved"]
+    P12{{"12 · overlap detect"}}
+    P125{{"12.5 · effort 0–10"}}
+    P126{{"12.6 · depgraph render"}}
+    P13["13 · emit<br/>stdout · json · github · sarif"]
+
+    P0 --> P1 --> P15 --> P2 --> P25 --> P3
+    P3 -.-> P32
+    P3 -.-> P33
+    P3 --> P4 --> P5 --> P6 --> P7 --> P8 --> P9 --> P10 --> P11 --> P115
+    P115 -.-> P12
+    P115 -.-> P125
+    P115 -.-> P126
+    P115 --> P13
+    P32 -.-> P13
+    P33 -.-> P13
+    P12 -.-> P13
+    P125 -.-> P13
+    P126 -.-> P13
+```
+
+**Fatal stages** (abort with wrapped error): diff, scoring, session, LLM, prompts, tools, emit.
+**Fault-tolerant stages** (log warning, continue with empty result): scanners, cheap-tier agents, index, overlap, effort, depgraph.
+
+Full package map + trust-boundary breakdown: [architecture docs](https://shubam-disseqt.github.io/shubam-ai-code-reviewer/docs/architecture/pipeline).
 
 ---
 
