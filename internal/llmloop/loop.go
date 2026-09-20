@@ -570,7 +570,8 @@ func (r *Runner) executeToolCall(ctx context.Context, taskKey string, call llm.T
 			}
 		}
 
-		resolveAndCollect := func(_ context.Context) {
+		resolveAndCollect := func(rctx context.Context) {
+			sysPrompt, userTmpl := r.deps.Template.ReLocationPrompts()
 			for i := range comments {
 				cm := &comments[i]
 				var d *model.Diff
@@ -578,17 +579,30 @@ func (r *Runner) executeToolCall(ctx context.Context, taskKey string, call llm.T
 					d = r.deps.DiffLookup(cm.Path)
 				}
 				// Resolution order: the comment's own file, then a cross-file
-				// search. The cross-file search runs even when d is nil, since
-				// a comment filed against a path this run holds no diff for is
-				// exactly the case that search can still place.
-				// ponytail: dropped the LLM re-location step, upgrade path is
-				// to port internal/diff.ReLocateComment + prompts.ReLocationTask.
-				located := d != nil && diff.ResolveComment(cm, d)
-				if !located && r.deps.AllDiffs != nil {
+				// search, then an LLM re-write of ExistingCode. The cross-file
+				// search runs even when d is nil, since a comment filed against
+				// a path this run holds no diff for is exactly the case that
+				// search can still place.
+				if d != nil && diff.ResolveComment(cm, d) {
+					r.deps.CommentCollector.Add(*cm)
+					continue
+				}
+				if r.deps.AllDiffs != nil {
 					from := cm.Path
 					if to, ok := diff.RelocateAcrossFiles(cm, r.deps.AllDiffs()); ok {
 						r.RecordWarning("comment_refiled", to, fmt.Sprintf(
 							"comment filed against %s describes code in %s; re-filed", from, to))
+						r.deps.CommentCollector.Add(*cm)
+						continue
+					}
+				}
+				// Both deterministic paths failed. Ask the LLM to rewrite
+				// ExistingCode from the diff, then retry ResolveComment.
+				if d != nil && r.deps.LLMClient != nil && userTmpl != "" {
+					msgs := diff.BuildReLocationMessages(cm, d, sysPrompt, userTmpl)
+					if ok, _ := diff.ReLocateComment(rctx, cm, d, r.deps.LLMClient, msgs, r.deps.Model, r.deps.Template.CompletionTokenLimit()); ok {
+						r.RecordWarning("comment_relocated_by_llm", cm.Path,
+							"LLM re-generated existing_code snippet to snap the comment onto the diff")
 					}
 				}
 				r.deps.CommentCollector.Add(*cm)

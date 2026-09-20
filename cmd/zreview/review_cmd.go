@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shubam-disseqt/z-code-reviewer/internal/comment"
+	"github.com/shubam-disseqt/z-code-reviewer/internal/conventions"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/depgraph"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/diff"
 	"github.com/shubam-disseqt/z-code-reviewer/internal/effort"
@@ -216,6 +217,21 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 		rulesBlock = ""
 	}
 
+	// 4.5) repository conventions (AGENTS.md / CONTRIBUTING.md / CLAUDE.md /
+	// .cursor/rules/*.md). Loaded at review time from disk — no index
+	// persistence needed since this is a per-review, local-repo read.
+	// Prepended to rulesBlock so both land in the same {{system_rule}} slot.
+	if conv, cerr := conventions.Load(opts.Repo); cerr != nil {
+		logutil.WithStage(logger, "conventions").Warn("continuing without conventions", "err", cerr.Error())
+	} else if conv != "" {
+		block := "## Repository Conventions\n\n" + conv
+		if rulesBlock != "" {
+			rulesBlock = block + "\n\n" + rulesBlock
+		} else {
+			rulesBlock = block
+		}
+	}
+
 	// 5) context
 	reviewCtx, err := buildContext(ctx, opts.Repo, kept, store)
 	if err != nil {
@@ -252,6 +268,10 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	if err != nil {
 		return fmt.Errorf("prompts: %w", err)
 	}
+	reLocation, err := buildReLocationTemplate()
+	if err != nil {
+		return fmt.Errorf("prompts: %w", err)
+	}
 
 	// 9) llmloop deps + runner
 	registry, diffLookup, err := buildToolRegistry(opts.Repo, kept, opts)
@@ -272,6 +292,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 			MaxTokens:             defaultMaxTokens,
 			MaxToolRequestTimes:   100,
 			MemoryCompressionTask: compression,
+			ReLocationTask:        reLocation,
 		},
 		Tools:            registry,
 		MainToolDefs:     toolDefs,

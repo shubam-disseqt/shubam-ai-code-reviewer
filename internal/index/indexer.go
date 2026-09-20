@@ -107,7 +107,27 @@ func (i *Indexer) IndexRepo(ctx context.Context, repoRoot string) (int, error) {
 		}
 	}
 
-	return i.indexPaths(ctx, absRoot, indexable)
+	indexed, err := i.indexPaths(ctx, absRoot, indexable)
+	if err != nil {
+		return indexed, err
+	}
+
+	// Manifest pass — pure parsers, no LLM. Failures are logged, not fatal:
+	// a broken package.json shouldn't nuke a completed file-summarize run.
+	if err := IndexManifests(ctx, i.store, absRoot, tree, i.logger); err != nil {
+		i.logger.Warn("index: manifest pass", "err", err)
+	}
+
+	// Directory summarization — batched LLM call. Skipped when no file was
+	// (re)persisted this run, so a no-change re-index issues zero LLM calls
+	// (matches the content-hash guard's contract).
+	if i.client != nil && indexed > 0 {
+		if err := SummarizeDirectories(ctx, i.store, i.client, i.opts.Model, i.opts.ModelMaxOutputTokens, i.logger); err != nil {
+			i.logger.Warn("index: dir summarization pass", "err", err)
+		}
+	}
+
+	return indexed, nil
 }
 
 // IndexDiff re-summarizes exactly the changed paths. Deleted paths are the

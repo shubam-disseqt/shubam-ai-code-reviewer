@@ -170,3 +170,22 @@ func buildCompressionTemplate() (llmloop.LlmConversation, error) {
 		},
 	}, nil
 }
+
+// buildReLocationTemplate loads the LLM re-locate conversation template used
+// by llmloop when a comment's ExistingCode fails deterministic positioning.
+func buildReLocationTemplate() (llmloop.LlmConversation, error) {
+	sys, err := loadPrompt("re_location_task_system.md")
+	if err != nil {
+		return llmloop.LlmConversation{}, err
+	}
+	user, err := loadPrompt("re_location_task_user.md")
+	if err != nil {
+		return llmloop.LlmConversation{}, err
+	}
+	return llmloop.LlmConversation{
+		Messages: []llmloop.ChatMessage{
+			{Role: "system", Content: sys},
+			{Role: "user", Content: user},
+		},
+	}, nil
+}

@@ -27,6 +27,25 @@ type Template struct {
 	// MemoryCompressionTask is the conversation template used when the loop
 	// triggers memory compression. An empty Messages list disables compression.
 	MemoryCompressionTask LlmConversation
+	// ReLocationTask is the conversation template used when a comment's
+	// ExistingCode fails deterministic positioning. An empty Messages list
+	// disables the LLM re-locate fallback.
+	ReLocationTask LlmConversation
+}
+
+// ReLocationPrompts flattens ReLocationTask.Messages into the system+user
+// pair BuildReLocationMessages consumes. Roles other than "system"/"user"
+// are ignored; empty when either message is absent.
+func (t Template) ReLocationPrompts() (system, user string) {
+	for _, m := range t.ReLocationTask.Messages {
+		switch m.Role {
+		case "system":
+			system = m.Content
+		case "user":
+			user = m.Content
+		}
+	}
+	return
 }
 
 // LlmConversation is a rendered chat conversation, one ChatMessage per role.
