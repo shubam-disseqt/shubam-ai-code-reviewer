@@ -13,29 +13,22 @@ on:
         description: "Gate threshold on aggregate hard recall (0.0-1.0)"
         required: false
         default: "0.8"
-      model:
-        description: "SACR_MODEL override (e.g. gpt-4o-mini, claude-sonnet-4-6)"
-        required: false
-        default: "gpt-4o-mini"
 
 permissions:
   contents: read
 
 concurrency:
-  # One matrix run at a time so cases don't race for the LLM rate limit.
+  # One matrix run at a time — LLM rate limit + persistent PRs mean we
+  # can't parallelize cases without contention.
   group: e2e-matrix
   cancel-in-progress: false
 
 env:
-  # Matrix repo layout — one branch per case at `pr-N-branch`, plus
-  # `rollup-mega`. .matrix/expected.json at the repo root of each branch
-  # is the ground truth.
   MATRIX_REPO: shubam-disseqt/zreview-e2e-matrix
-  # First 5 cases only for the launch cut. Expand once real numbers land.
-  # Cases must have `.matrix/expected.json` on their branch.
-  # Every case listed here MUST have .matrix/expected.json committed on
-  # its branch. pr-2/4/6/7/8/9 exist on the matrix repo but don't yet
-  # have expected.json — add and enable in follow-ups.
+  # Persistent PRs on the matrix repo, one per case archetype. Each PR's
+  # head branch has .matrix/expected.json committed as ground truth.
+  # PR numbers are looked up at runtime via `gh pr list --head <branch>`
+  # so this list only needs the branch names.
   CASES: '["pr-1-branch","pr-3-branch","pr-5-branch","pr-10-branch"]'
 
 jobs:
@@ -44,13 +37,11 @@ jobs:
     outputs:
       cases: ${{ steps.set.outputs.cases }}
       min_recall: ${{ steps.set.outputs.min_recall }}
-      model: ${{ steps.set.outputs.model }}
     steps:
       - id: set
         run: |
           echo "cases=$CASES" >> "$GITHUB_OUTPUT"
           echo "min_recall=${{ inputs.min_recall || '0.8' }}" >> "$GITHUB_OUTPUT"
-          echo "model=${{ inputs.model || 'gpt-4o-mini' }}" >> "$GITHUB_OUTPUT"
 
   run:
     needs: plan
@@ -64,59 +55,115 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: product
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: product/go.mod
-      - name: Build sacr + assert
+
+      - name: Build assert
         working-directory: product
+        run: go build -o "$RUNNER_TEMP/assert" ./scripts/e2e/assert
+
+      - name: Resolve PR number for case
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.E2E_MATRIX_TOKEN }}
         run: |
-          go build -o "$RUNNER_TEMP/sacr" ./cmd/sacr
-          go build -o "$RUNNER_TEMP/assert" ./scripts/e2e/assert
-      - name: Checkout matrix case
+          num=$(gh pr list \
+            --repo "$MATRIX_REPO" \
+            --head "${{ matrix.case }}" \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+          if [ -z "$num" ] || [ "$num" = "null" ]; then
+            echo "::error::no open PR on $MATRIX_REPO with head ${{ matrix.case }}"
+            exit 1
+          fi
+          echo "num=$num" >> "$GITHUB_OUTPUT"
+          echo "matrix case ${{ matrix.case }} → PR #$num"
+
+      - name: Trigger sacr-review workflow on matrix repo
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ secrets.E2E_MATRIX_TOKEN }}
+        run: |
+          # Record time so we can find the run we just dispatched.
+          dispatched_at=$(date -u -d '30 seconds ago' +%FT%TZ)
+          gh workflow run sacr-review.yml \
+            --repo "$MATRIX_REPO" \
+            --ref "${{ matrix.case }}" \
+            --field pr=${{ steps.pr.outputs.num }}
+          echo "dispatched=$dispatched_at" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for matrix workflow to complete
+        id: wait
+        env:
+          GH_TOKEN: ${{ secrets.E2E_MATRIX_TOKEN }}
+        run: |
+          set -e
+          # Poll every 20s up to 15 min for a run started after dispatch.
+          for _ in $(seq 1 45); do
+            run_id=$(gh run list \
+              --repo "$MATRIX_REPO" \
+              --workflow sacr-review.yml \
+              --branch "${{ matrix.case }}" \
+              --limit 5 \
+              --created ">=${{ steps.dispatch.outputs.dispatched }}" \
+              --json databaseId,status \
+              --jq '.[0] | select(.databaseId != null) | "\(.databaseId) \(.status)"')
+            if [ -n "$run_id" ]; then
+              id=$(echo "$run_id" | awk '{print $1}')
+              status=$(echo "$run_id" | awk '{print $2}')
+              echo "run=$id status=$status"
+              if [ "$status" = "completed" ]; then
+                echo "run_id=$id" >> "$GITHUB_OUTPUT"
+                break
+              fi
+            fi
+            sleep 20
+          done
+          if [ -z "${run_id:-}" ] || [ "${status:-}" != "completed" ]; then
+            echo "::error::matrix workflow did not complete within 15 min"
+            exit 1
+          fi
+
+      - name: Download result artifact
+        env:
+          GH_TOKEN: ${{ secrets.E2E_MATRIX_TOKEN }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/artifact"
+          gh run download "${{ steps.wait.outputs.run_id }}" \
+            --repo "$MATRIX_REPO" \
+            --name "sacr-review-pr-${{ steps.pr.outputs.num }}" \
+            --dir "$RUNNER_TEMP/artifact"
+          ls -la "$RUNNER_TEMP/artifact"
+
+      - name: Checkout matrix branch (for expected.json)
         uses: actions/checkout@v4
         with:
           repository: ${{ env.MATRIX_REPO }}
           ref: ${{ matrix.case }}
           token: ${{ secrets.E2E_MATRIX_TOKEN }}
           path: matrix
-          fetch-depth: 2
-      - name: Sanity — expected.json present
-        working-directory: matrix
-        run: |
-          if [ ! -f .matrix/expected.json ]; then
-            echo "::error::matrix branch ${{ matrix.case }} has no .matrix/expected.json"
-            exit 1
-          fi
-          jq empty .matrix/expected.json
-      - name: Review case with sacr
-        working-directory: matrix
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          SACR_MODEL: ${{ needs.plan.outputs.model }}
-        run: |
-          "$RUNNER_TEMP/sacr" review \
-            --commit HEAD \
-            --format json \
-            --min-severity LOW \
-            --output "$RUNNER_TEMP/actual.json" \
-            --repo .
-      - name: Assert against expected.json
+          fetch-depth: 1
+
+      - name: Assert
         working-directory: matrix
         run: |
           "$RUNNER_TEMP/assert" \
             -expected .matrix/expected.json \
-            -actual "$RUNNER_TEMP/actual.json" \
+            -actual "$RUNNER_TEMP/artifact/result.json" \
             -case "${{ matrix.case }}" \
             -json > "$RUNNER_TEMP/result.json" || true
           cat "$RUNNER_TEMP/result.json"
+
       - name: Upload per-case artifact
         uses: actions/upload-artifact@v4
         with:
           name: e2e-case-${{ matrix.case }}
           path: |
-            ${{ runner.temp }}/actual.json
+            ${{ runner.temp }}/artifact/result.json
             ${{ runner.temp }}/result.json
           if-no-files-found: warn
           retention-days: 30
@@ -128,26 +175,38 @@ jobs:
     steps:
       - name: Checkout product repo
         uses: actions/checkout@v4
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
       - name: Build aggregate
         run: go build -o "$RUNNER_TEMP/aggregate" ./scripts/e2e/aggregate
+
       - name: Download all case artifacts
         uses: actions/download-artifact@v4
         with:
           path: results
           pattern: e2e-case-*
+
       - name: Aggregate
         id: agg
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
-          RESULT_FILES=(results/**/result.json)
+          # Each case dir carries $RUNNER_TEMP/result.json (assert output). The
+          # matrix workflow's own JSON is under $RUNNER_TEMP/artifact/result.json,
+          # but that's the raw sacr output — we only feed the assert output
+          # to aggregate.
+          RESULT_FILES=()
+          for d in results/e2e-case-*/; do
+            if [ -f "${d}result.json" ]; then
+              RESULT_FILES+=("${d}result.json")
+            fi
+          done
           if [ "${#RESULT_FILES[@]}" -eq 0 ]; then
             echo "::warning::no per-case results downloaded"
-            RESULT_FILES=()
           fi
           "$RUNNER_TEMP/aggregate" \
             -min-recall "${{ needs.plan.outputs.min_recall }}" \
@@ -158,10 +217,9 @@ jobs:
           cat "$RUNNER_TEMP/summary.json"
           echo "===== REPORT ====="
           cat "$RUNNER_TEMP/report.md"
-          # Publish to the job step summary so it's visible on the Actions run page.
           cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
-          # Preserve the exit code for the gate step.
           echo "exit=${AGG_EXIT:-0}" >> "$GITHUB_OUTPUT"
+
       - name: Upload aggregated report
         uses: actions/upload-artifact@v4
         with:
@@ -170,6 +228,7 @@ jobs:
             ${{ runner.temp }}/summary.json
             ${{ runner.temp }}/report.md
           retention-days: 90
+
       - name: Gate
         run: |
           if [ "${{ steps.agg.outputs.exit }}" != "0" ]; then
