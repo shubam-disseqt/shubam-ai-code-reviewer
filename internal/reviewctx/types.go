@@ -19,7 +19,7 @@
 package reviewctx
 
 import (
-	"github.com/shubam-disseqt/z-code-reviewer/internal/index"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/index"
 )
 
 // Defaults match Mira's constants in jit_context.py + context.py.

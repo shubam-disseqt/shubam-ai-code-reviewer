@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Portions Copyright 2026 disseqt
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors
 // Copyright 2026 alibaba/open-code-review Contributors
 //
 // Adapted from alibaba/open-code-review internal/tool/code_comment_test.go
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 func TestParseComments(t *testing.T) {

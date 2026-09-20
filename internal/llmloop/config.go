@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Portions Copyright 2026 disseqt
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors
 // Original abstraction distilled from alibaba/open-code-review internal/config/template.
 //
 // The upstream config/template package parses a YAML file into a much richer

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/gitcmd"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gitcmd"
 )
 
 // TestFileFind_NonGitDirectoryFallback verifies file_find works in a plain

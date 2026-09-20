@@ -1,0 +1,63 @@
+{
+  "session_id": "00060bcd-8d01-49e7-bd58-ee1c2c860b9d",
+  "comments": [],
+  "summary": {
+    "walkthrough": "This pull request introduces several improvements and bug fixes to the zreview tool, including deduplication of comments, filtering of scanner findings, and updates to the DeepSeek provider configuration.",
+    "change_groups": [
+      {
+        "title": "Deduplicate comments by location",
+        "files": [
+          "cmd/zreview/emit.go",
+          "cmd/zreview/emit_test.go"
+        ],
+        "summary": "A new function `dedupeCommentsByLocation` is added to remove duplicate comments that occur at the same location in the code. This ensures that only the first comment is kept, while duplicates are removed. The corresponding test `TestDedupeCommentsByLocation` verifies this behavior."
+      },
+      {
+        "title": "Filter scanner findings to relevant paths",
+        "files": [
+          "cmd/zreview/scanners.go",
+          "cmd/zreview/scanners_test.go"
+        ],
+        "summary": "The `filterScannerFindingsToPaths` function is introduced to filter scanner findings to only include those relevant to the changed paths in a pull request. This prevents irrelevant findings from being reported, such as those in test data or vendor directories. Tests are added to ensure this filtering works correctly."
+      },
+      {
+        "title": "Update DeepSeek provider configuration",
+        "files": [
+          "internal/llm/providers.go",
+          "internal/llm/providers_test.go",
+          "internal/llm/tiers_test.go"
+        ],
+        "summary": "The DeepSeek provider configuration is updated to reflect the current catalog, prioritizing the 'deepseek-chat' model as the default. Tests are updated to reflect these changes, ensuring that the correct models are used and prioritized."
+      },
+      {
+        "title": "Support ambient authentication for providers",
+        "files": [
+          "internal/llm/resolver.go"
+        ],
+        "summary": "Support for ambient authentication is added for providers like Bedrock, which use AWS SigV4 credentials. The `resolveAmbientPreset` function is introduced to handle these cases, allowing the SDK to resolve credentials from the environment without requiring an API key."
+      },
+      {
+        "title": "Increase precision of cost metric",
+        "files": [
+          "cmd/zreview/metrics.go"
+        ],
+        "summary": "The precision of the cost metric in the metrics output is increased from two to four decimal places, providing more detailed cost information."
+      }
+    ],
+    "testing_notes": "To test these changes, run the zreview tool on a repository with known duplicate comments and scanner findings. Verify that duplicates are removed and only relevant scanner findings are reported. Additionally, check that the DeepSeek provider uses the correct default model and that ambient authentication works as expected.",
+    "risk": "low: The changes are primarily improvements and bug fixes with corresponding tests, minimizing the risk of introducing new issues."
+  },
+  "labels": {
+    "pr_type": "feat",
+    "domains": [
+      "comments",
+      "scanners",
+      "llm"
+    ],
+    "risk_tag": "risk/medium",
+    "ownership_hints": [
+      "backend",
+      "test"
+    ]
+  }
+}

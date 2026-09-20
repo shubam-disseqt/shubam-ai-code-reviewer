@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Portions Copyright 2026 disseqt
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors
 // Adapted from alibaba/open-code-review internal/llmloop/compression.go
 
 package llmloop
@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
 )
 
 // Compression thresholds, as fractions of MaxTokens.
@@ -327,7 +327,7 @@ func (r *Runner) triggerAsyncCompression(ctx context.Context, st *compressionSta
 			// pendingJob under the lock, so cancelled jobs fail the ownership
 			// check above and die silently). Abandon the job rather than
 			// applying a truncated/unmodified snapshot over live messages.
-			fmt.Fprintf(os.Stderr, "[zreview] Memory compression failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[sacr] Memory compression failed: %v\n", err)
 			st.pendingJob = nil
 			close(job.done)
 			return

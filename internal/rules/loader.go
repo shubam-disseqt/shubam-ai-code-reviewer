@@ -16,16 +16,16 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/gitcmd"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gitcmd"
 )
 
-// defaultBranch is used when neither the spec nor ZREVIEW_ORG_RULES_REF
+// defaultBranch is used when neither the spec nor SACR_ORG_RULES_REF
 // override the ref.
 const defaultBranch = "main"
 
 // refEnvVar is the environment variable that overrides the ref used when
 // cloning / pulling the rules repo.
-const refEnvVar = "ZREVIEW_ORG_RULES_REF"
+const refEnvVar = "SACR_ORG_RULES_REF"
 
 // Loader clones or pulls an org-rules-repo into a cache directory and reads
 // its YAML rule files.
@@ -98,7 +98,7 @@ func (l *Loader) LoadFromDir(_ context.Context, dir string) ([]Rule, error) {
 //   - "owner/repo" or "owner/repo@ref" — shallow-cloned via git into
 //     <cacheDir>/<owner>-<repo>. Subsequent calls fetch and reset.
 //
-// When spec omits a ref, the value of $ZREVIEW_ORG_RULES_REF is used, or
+// When spec omits a ref, the value of $SACR_ORG_RULES_REF is used, or
 // "main" if that is unset.
 func (l *Loader) LoadFromRepo(ctx context.Context, spec string) ([]Rule, error) {
 	if spec == "" {
@@ -136,7 +136,7 @@ func (l *Loader) LoadFromRepo(ctx context.Context, spec string) ([]Rule, error) 
 }
 
 // repoURLBuilder maps (owner, repo) to a clone URL. Overridable in tests.
-// ponytail: package-level var so tests can swap in a local bare repo; upgrade to
+// note: package-level var so tests can swap in a local bare repo; upgrade to
 // interface/DI if we ever grow a second git host or need per-Loader override.
 var repoURLBuilder = func(owner, repo string) string {
 	return fmt.Sprintf("https://github.com/%s/%s.git", owner, repo)

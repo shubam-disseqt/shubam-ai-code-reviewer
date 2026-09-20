@@ -1,16 +1,16 @@
 {
-  "name": "zreview",
+  "name": "sacr",
   "version": "0.2.0",
   "description": "Deterministic, LLM-free code review CLI",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/shubam-disseqt/z-code-reviewer",
+  "homepage": "https://github.com/shubam-disseqt/shubam-ai-code-reviewer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shubam-disseqt/z-code-reviewer.git",
+    "url": "git+https://github.com/shubam-disseqt/shubam-ai-code-reviewer.git",
     "directory": "packaging/npm"
   },
   "bugs": {
-    "url": "https://github.com/shubam-disseqt/z-code-reviewer/issues"
+    "url": "https://github.com/shubam-disseqt/shubam-ai-code-reviewer/issues"
   },
   "keywords": [
     "code-review",
@@ -20,7 +20,7 @@
     "sarif"
   ],
   "bin": {
-    "zreview": "./bin/zreview.js"
+    "sacr": "./bin/sacr.js"
   },
   "scripts": {
     "postinstall": "node install.js"

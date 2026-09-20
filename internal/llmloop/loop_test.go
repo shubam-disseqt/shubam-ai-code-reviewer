@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/comment"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/tool"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/comment"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/tool"
 )
 
 // --- Fakes ---

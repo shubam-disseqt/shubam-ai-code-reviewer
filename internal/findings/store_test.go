@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 func TestLoadMissingFileReturnsEmpty(t *testing.T) {
@@ -95,12 +95,12 @@ func TestLoadInvalidJSONErrors(t *testing.T) {
 }
 
 func TestDefaultDirRespectsEnv(t *testing.T) {
-	t.Setenv("ZREVIEW_FINDINGS_DIR", "/tmp/zreview-findings-test-xyz")
+	t.Setenv("SACR_FINDINGS_DIR", "/tmp/sacr-findings-test-xyz")
 	got, err := DefaultDir()
 	if err != nil {
 		t.Fatalf("DefaultDir: %v", err)
 	}
-	if got != "/tmp/zreview-findings-test-xyz" {
+	if got != "/tmp/sacr-findings-test-xyz" {
 		t.Errorf("env override ignored: %q", got)
 	}
 }
@@ -134,7 +134,7 @@ func TestSaveCreatesDirIfMissing(t *testing.T) {
 }
 
 func TestDefaultDirFallsBackToHome(t *testing.T) {
-	t.Setenv("ZREVIEW_FINDINGS_DIR", "")
+	t.Setenv("SACR_FINDINGS_DIR", "")
 	got, err := DefaultDir()
 	if err != nil {
 		t.Fatalf("DefaultDir: %v", err)

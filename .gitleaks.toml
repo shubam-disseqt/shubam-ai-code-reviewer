@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 disseqt
 #
-# gitleaks configuration for z-code-reviewer.
+# gitleaks configuration for shubam-ai-code-reviewer.
 # We extend the default ruleset and add narrow allowlists for known
 # false positives in test fixtures. Do NOT broaden the allowlist to
 # cover real source files without a security review.
 
-title = "z-code-reviewer gitleaks config"
+title = "shubam-ai-code-reviewer gitleaks config"
 
 [extend]
 useDefault = true

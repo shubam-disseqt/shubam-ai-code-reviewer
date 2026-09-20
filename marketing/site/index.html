@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>zreview — Code review that ships with your PRs</title>
+<title>sacr — Code review that ships with your PRs</title>
 <meta name="description" content="One binary. Real bugs, not noise. Every claim in the PR body is auditable." />
 <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <meta name="theme-color" content="#f6f2ea" />
@@ -385,13 +385,13 @@
 
 <header class="site" id="site-header">
   <div class="wrap">
-    <a class="brand" href="/" aria-label="zreview home">
+    <a class="brand" href="/" aria-label="sacr home">
       <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="oklch(22% 0.02 260)"/><path d="M9 10h14l-11 12h11" fill="none" stroke="oklch(88% 0.16 95)" stroke-width="2.6" stroke-linecap="square"/></svg>
-      zreview
+      sacr
     </a>
     <nav class="top" aria-label="Primary">
       <a href="#docs">Docs</a>
-      <a href="https://github.com/disseqt/zreview">GitHub</a>
+      <a href="https://github.com/disseqt/sacr">GitHub</a>
       <a href="#install">Install</a>
     </nav>
     <a class="btn accent" href="#install">Get started →</a>
@@ -414,15 +414,15 @@
     <div class="cta-row">
       <span class="cmd" role="group" aria-label="Install command">
         <span class="sigil">$</span>
-        <span>brew install disseqt/tap/zreview</span>
-        <button type="button" onclick="navigator.clipboard&amp;&amp;navigator.clipboard.writeText('brew install disseqt/tap/zreview');this.textContent='COPIED';setTimeout(()=>this.textContent='COPY',1400)">COPY</button>
+        <span>brew install disseqt/tap/sacr</span>
+        <button type="button" onclick="navigator.clipboard&amp;&amp;navigator.clipboard.writeText('brew install disseqt/tap/sacr');this.textContent='COPIED';setTimeout(()=>this.textContent='COPY',1400)">COPY</button>
       </span>
-      <a class="btn ghost" href="https://github.com/disseqt/zreview">View on GitHub</a>
+      <a class="btn ghost" href="https://github.com/disseqt/sacr">View on GitHub</a>
     </div>
 
-    <div class="terminal" role="img" aria-label="zreview running against a pull request">
-      <div class="bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>zreview · demo</div>
-<pre><span class="type-line l1"><span class="prompt">$</span> zreview review <span class="flag">--pr</span> <span class="val">42</span> <span class="flag">--format</span> <span class="val">github</span> <span class="flag">--budget</span> <span class="val">0.02</span></span>
+    <div class="terminal" role="img" aria-label="sacr running against a pull request">
+      <div class="bar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>sacr · demo</div>
+<pre><span class="type-line l1"><span class="prompt">$</span> sacr review <span class="flag">--pr</span> <span class="val">42</span> <span class="flag">--format</span> <span class="val">github</span> <span class="flag">--budget</span> <span class="val">0.02</span></span>
 <span class="out l2"><span class="dim">→</span> loading diff (14 files, +312 -87)</span>
 <span class="out l3"><span class="dim">→</span> scanners: race · nil-deref · sql-injection · unbounded-io <span class="ok">OK</span></span>
 <span class="out l4"><span class="dim">→</span> fingerprint hits: <span class="warn">3</span> · dedup: <span class="ok">2 collapsed</span></span>
@@ -441,7 +441,7 @@
         <span class="kicker">What it does</span>
         <h2 id="what-h" class="section-h">A reviewer, not a chatbot with grep.</h2>
       </div>
-      <p class="lead" style="max-width:32ch;margin:0;">Most of zreview is deterministic Go. The LLM is a thin loop on top — and only pays when it earns its keep.</p>
+      <p class="lead" style="max-width:32ch;margin:0;">Most of sacr is deterministic Go. The LLM is a thin loop on top — and only pays when it earns its keep.</p>
     </div>
     <div class="cards">
       <article class="card">
@@ -521,7 +521,7 @@
         <div class="pr">
           <div class="head">
             <span class="avatar" aria-hidden="true"></span>
-            <span class="who">zreview[bot]</span>
+            <span class="who">sacr[bot]</span>
             <span class="meta">commented on <code>internal/store/user.go</code> · line 82</span>
           </div>
           <div class="body">
@@ -544,7 +544,7 @@
         <div class="overlap">
           <div class="row"><div><div class="path">handlers/checkout.go:118</div><div class="who">Copilot · 12m ago</div></div><span class="badge">unique</span></div>
           <div class="row dupe"><div><div class="path">handlers/checkout.go:204</div><div class="who">@marta · 4m ago</div></div><span class="badge">collapsed</span></div>
-          <div class="row"><div><div class="path">store/order.go:47</div><div class="who">zreview</div></div><span class="badge">unique</span></div>
+          <div class="row"><div><div class="path">store/order.go:47</div><div class="who">sacr</div></div><span class="badge">unique</span></div>
           <div class="row dupe"><div><div class="path">store/order.go:88</div><div class="who">Copilot · 12m ago</div></div><span class="badge">collapsed</span></div>
         </div>
       </article>
@@ -560,7 +560,7 @@
         <span class="kicker">Providers</span>
         <h2 id="providers-h" class="section-h">Bring your own model.</h2>
       </div>
-      <p class="lead" style="max-width:34ch;margin:0;">One `--provider` flag. Same output. Your bill, your keys — zreview never proxies.</p>
+      <p class="lead" style="max-width:34ch;margin:0;">One `--provider` flag. Same output. Your bill, your keys — sacr never proxies.</p>
     </div>
     <div class="providers">
       <span class="chip anthropic"><i aria-hidden="true"></i>Anthropic</span>
@@ -585,16 +585,16 @@
     <div class="quickstart">
       <div class="bar"><span>terminal</span><span>bash</span></div>
 <pre><span class="c"># 1. install</span>
-<span class="k">brew</span> install disseqt/tap/zreview
+<span class="k">brew</span> install disseqt/tap/sacr
 
 <span class="c"># 2. auth (one of)</span>
 <span class="k">export</span> OPENAI_API_KEY=<span class="a">"sk-…"</span>
 
 <span class="c"># 3. review a PR — bugs + suggestions posted inline</span>
-zreview review <span class="f">--pr</span> 42 <span class="f">--format</span> github <span class="f">--budget</span> 0.02
+sacr review <span class="f">--pr</span> 42 <span class="f">--format</span> github <span class="f">--budget</span> 0.02
 
 <span class="c"># 4. or run in CI (drop this into .github/workflows)</span>
-<span class="k">uses</span>: disseqt/zreview@v1</pre>
+<span class="k">uses</span>: disseqt/sacr@v1</pre>
     </div>
   </div>
 </section>
@@ -612,12 +612,12 @@ zreview review <span class="f">--pr</span> 42 <span class="f">--format</span> gi
 
 <footer class="site">
   <div class="wrap">
-    <span class="colophon">zreview · v1.0 · Apache-2.0</span>
+    <span class="colophon">sacr · v1.0 · Apache-2.0</span>
     <nav aria-label="Footer">
       <a href="LICENSE">License</a>
       <a href="CONTRIBUTING.md">Contributing</a>
       <a href="ROADMAP.md">Roadmap</a>
-      <a href="https://github.com/disseqt/zreview">GitHub</a>
+      <a href="https://github.com/disseqt/sacr">GitHub</a>
     </nav>
   </div>
 </footer>

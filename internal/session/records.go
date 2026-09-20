@@ -6,7 +6,7 @@ package session
 import (
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
 )
 
 // Record type discriminators — the "type" field of every JSONL line.

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Build multi-arch container images for zreview and push to GHCR.
+# Build multi-arch container images for sacr and push to GHCR.
 name: docker
 
 on:
@@ -39,7 +39,7 @@ jobs:
             V="manual-$(git rev-parse --short HEAD)"
           fi
           echo "version=${V}" >> "$GITHUB_OUTPUT"
-          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/zreview" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/sacr" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -65,7 +65,7 @@ jobs:
           provenance: true
           sbom: true
           build-args: |
-            ZREVIEW_VERSION=${{ steps.ver.outputs.version }}
+            SACR_VERSION=${{ steps.ver.outputs.version }}
           tags: |
             ${{ steps.ver.outputs.image }}:${{ steps.ver.outputs.version }}
             ${{ steps.ver.outputs.image }}:latest

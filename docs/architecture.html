@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>Architecture &mdash; z-code-reviewer</title>
+  <title>Architecture &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -43,13 +43,13 @@
     </div>
 
     <h2 id="one-paragraph">1. What we build, in one paragraph</h2>
-    <p><code>zreview</code> is a Go CLI. It takes a git diff (or a range, or a commit), optionally consults a <strong>persistent code index</strong> for repo-wide context, optionally consults an <strong>org-level rules repo</strong> for team-specific review policy, calls an LLM through a <strong>thin agent loop</strong> with a small set of tools (file read, code search, file find, comment), snaps LLM-produced comments to real diff lines via a deterministic post-processor, and optionally scans other open PRs for overlap or merge-conflict risk. The output is a stream of comments &mdash; printed to stdout, emitted as JSON, or posted to a PR via a <code>--format github</code> writer.</p>
+    <p><code>sacr</code> is a Go CLI. It takes a git diff (or a range, or a commit), optionally consults a <strong>persistent code index</strong> for repo-wide context, optionally consults an <strong>org-level rules repo</strong> for team-specific review policy, calls an LLM through a <strong>thin agent loop</strong> with a small set of tools (file read, code search, file find, comment), snaps LLM-produced comments to real diff lines via a deterministic post-processor, and optionally scans other open PRs for overlap or merge-conflict risk. The output is a stream of comments &mdash; printed to stdout, emitted as JSON, or posted to a PR via a <code>--format github</code> writer.</p>
     <p>There is no long-running server, no dashboard, no webhook receiver, and no persistent review history. The index and the rules are the only things that live longer than a single invocation.</p>
 
     <h2 id="pipeline">2. Pipeline</h2>
 
     <div class="diagram">
-      <svg viewBox="0 0 980 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="z-code-reviewer pipeline diagram">
+      <svg viewBox="0 0 980 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="shubam-ai-code-reviewer pipeline diagram">
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="#7dd3fc" />
@@ -176,7 +176,7 @@
     </div>
 
     <h2 id="det-vs-llm">3. Deterministic vs LLM</h2>
-    <p><code>zreview</code> is not a pure agent. It is a rigid Go pipeline with an LLM loop wedged in the middle. Determinism sits on both ends because that is where the model's failure modes live.</p>
+    <p><code>sacr</code> is not a pure agent. It is a rigid Go pipeline with an LLM loop wedged in the middle. Determinism sits on both ends because that is where the model's failure modes live.</p>
 
     <table>
       <thead><tr><th>Step</th><th>Owner</th><th>Why</th></tr></thead>
@@ -194,14 +194,14 @@
     </table>
 
     <h2 id="trust">4. Trust boundaries</h2>
-    <p>The threat surface is intentionally small. This is a per-invocation CLI &mdash; no persistent process, no webhook endpoint, no bound port except when the user explicitly runs <code>zreview docs</code>.</p>
+    <p>The threat surface is intentionally small. This is a per-invocation CLI &mdash; no persistent process, no webhook endpoint, no bound port except when the user explicitly runs <code>sacr docs</code>.</p>
 
     <div class="diagram">
       <pre style="margin:0"><code>&#x250c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
 &#x2502;  User machine or CI runner (Trusted Zone)                       &#x2502;
 &#x2502;                                                                 &#x2502;
 &#x2502;   &#x250c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;    &#x250c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;    &#x250c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;   &#x2502;
-&#x2502;   &#x2502; Git repo &#x2502;&#x2500;&#x2500;&#x2500;&#x25b6;&#x2502;  zreview CLI &#x2502;&#x2500;&#x2500;&#x2500;&#x25b6;&#x2502; Local output       &#x2502;   &#x2502;
+&#x2502;   &#x2502; Git repo &#x2502;&#x2500;&#x2500;&#x2500;&#x25b6;&#x2502;  sacr CLI &#x2502;&#x2500;&#x2500;&#x2500;&#x25b6;&#x2502; Local output       &#x2502;   &#x2502;
 &#x2502;   &#x2502; (diffs)  &#x2502;    &#x2502;  (core)      &#x2502;    &#x2502;  stdout / json /   &#x2502;   &#x2502;
 &#x2502;   &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;    &#x2514;&#x252c;&#x2500;&#x2500;&#x2500;&#x2500;&#x252c;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;    &#x2502;  session .jsonl    &#x2502;   &#x2502;
 &#x2502;                       &#x2502;         &#x2502;         &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;   &#x2502;

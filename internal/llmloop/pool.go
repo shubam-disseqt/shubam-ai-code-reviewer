@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Portions Copyright 2026 disseqt
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors
 // Adapted from alibaba/open-code-review internal/llmloop/pool.go
 
 // Package llmloop carries the per-subtask MAIN_TASK tool-use loop shared by
@@ -19,7 +19,7 @@ import (
 	"runtime/debug"
 	"sync"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // AgentWarning describes a non-fatal warning recorded during one subtask's
@@ -100,13 +100,13 @@ func (p *CommentWorkerPool) submit(f func() ([]model.LlmComment, error), kwg *sy
 		// the semaphore is still released via the defer above.
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Fprintf(os.Stderr, "[zreview] CommentWorkerPool panic: %v\n%s\n", r, debug.Stack())
+				fmt.Fprintf(os.Stderr, "[sacr] CommentWorkerPool panic: %v\n%s\n", r, debug.Stack())
 			}
 		}()
 
 		comments, err := f()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[zreview] CommentWorkerPool error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[sacr] CommentWorkerPool error: %v\n", err)
 		}
 		p.resultsMu.Lock()
 		p.results = append(p.results, comments...)

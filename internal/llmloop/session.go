@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Portions Copyright 2026 disseqt
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors
 // Original abstraction distilled from alibaba/open-code-review internal/session.
 //
 // This file introduces a minimal Session interface used only by llmloop, so the
@@ -12,7 +12,7 @@ package llmloop
 import (
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
 )
 
 // TaskType names the kind of subtask a record belongs to. The string form is

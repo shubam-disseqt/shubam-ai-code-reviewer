@@ -1,4 +1,4 @@
-# Contributing to z-code-reviewer
+# Contributing to shubam-ai-code-reviewer
 
 Thanks for wanting to contribute. Please read this file, [AGENTS.md](AGENTS.md),
 and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before opening a PR.
@@ -22,18 +22,18 @@ Requirements:
 - Node 20+ (for the docs site under `docs/`, only when authoring)
 
 ```sh
-git clone https://github.com/shubam-disseqt/z-code-reviewer.git
-cd z-code-reviewer
+git clone https://github.com/shubam-disseqt/shubam-ai-code-reviewer.git
+cd shubam-ai-code-reviewer
 make build
-./bin/zreview version
-./bin/zreview docs
+./bin/sacr version
+./bin/sacr docs
 ```
 
 ## Common commands
 
 | Command | What it does |
 |---|---|
-| `make build` | Build `bin/zreview` for the host platform |
+| `make build` | Build `bin/sacr` for the host platform |
 | `make test` | Run all Go unit tests |
 | `make coverage` | Run tests with coverage; enforces 80% floor |
 | `make lint` | `gofmt` + `go vet` + `staticcheck` |
@@ -96,7 +96,7 @@ Anything touching:
 - The scope of the tool
 - The list of upstream sources
 - The threat model
-- Public flag surface (`zreview <cmd> --...`)
+- Public flag surface (`sacr <cmd> --...`)
 
 goes through a design issue before code. Small refactors and bug fixes
 do not.

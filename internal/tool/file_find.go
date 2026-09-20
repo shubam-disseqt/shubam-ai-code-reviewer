@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/diff"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/diff"
 )
 
 const (

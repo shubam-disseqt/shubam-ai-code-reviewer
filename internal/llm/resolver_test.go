@@ -357,7 +357,7 @@ func writeConfig(t *testing.T, cfg configFile) string {
 }
 
 func TestTryProviderEnv(t *testing.T) {
-	// Clear every provider EnvVar + ZREVIEW_MODEL so a stray CI env doesn't
+	// Clear every provider EnvVar + SACR_MODEL so a stray CI env doesn't
 	// bleed into subtests. Also clear the CC / OCR vars since
 	// ResolveEndpointWithOptions consults them too.
 	clearProviderEnv := func(t *testing.T) {
@@ -367,7 +367,7 @@ func TestTryProviderEnv(t *testing.T) {
 				t.Setenv(p.EnvVar, "")
 			}
 		}
-		t.Setenv("ZREVIEW_MODEL", "")
+		t.Setenv("SACR_MODEL", "")
 	}
 
 	t.Run("ANTHROPIC_API_KEY alone picks the anthropic preset", func(t *testing.T) {
@@ -403,10 +403,10 @@ func TestTryProviderEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("modelOverride wins over ZREVIEW_MODEL", func(t *testing.T) {
+	t.Run("modelOverride wins over SACR_MODEL", func(t *testing.T) {
 		clearProviderEnv(t)
 		t.Setenv("ANTHROPIC_API_KEY", "sk-ant")
-		t.Setenv("ZREVIEW_MODEL", "from-env")
+		t.Setenv("SACR_MODEL", "from-env")
 		ep, _, err := tryProviderEnv("from-override")
 		if err != nil {
 			t.Fatal(err)

@@ -12,18 +12,18 @@ import (
 )
 
 // DefaultDir returns the on-disk root for the per-PR JSON files. The env var
-// mirrors ZREVIEW_SESSION_DIR (same convention warmer.go uses) so tests and
+// mirrors SACR_SESSION_DIR (same convention warmer.go uses) so tests and
 // self-hosted CI can redirect it. Callers that already have a dir should
 // pass it directly to Load / Save.
 func DefaultDir() (string, error) {
-	if d := os.Getenv("ZREVIEW_FINDINGS_DIR"); d != "" {
+	if d := os.Getenv("SACR_FINDINGS_DIR"); d != "" {
 		return d, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve findings dir: %w", err)
 	}
-	return filepath.Join(home, ".zreview", "findings"), nil
+	return filepath.Join(home, ".sacr", "findings"), nil
 }
 
 // filePath returns the canonical JSON file for a (owner, repo, pr) tuple.

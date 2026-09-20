@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>Providers &mdash; z-code-reviewer</title>
+  <title>Providers &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -36,10 +36,10 @@
 
   <main>
     <h1>Providers</h1>
-    <p class="lede">Five built-in LLM providers. One credential env var per provider, one model name, one <code>ZREVIEW_PROVIDER</code> override. No provider adapters to install.</p>
+    <p class="lede">Five built-in LLM providers. One credential env var per provider, one model name, one <code>SACR_PROVIDER</code> override. No provider adapters to install.</p>
 
     <div class="note">
-      <strong>Pick one.</strong> Set the API key env var for the provider you want to use. <code>zreview</code> resolves the endpoint automatically. Override with <code>ZREVIEW_PROVIDER</code> and <code>ZREVIEW_MODEL</code> if you have more than one key configured.
+      <strong>Pick one.</strong> Set the API key env var for the provider you want to use. <code>sacr</code> resolves the endpoint automatically. Override with <code>SACR_PROVIDER</code> and <code>SACR_MODEL</code> if you have more than one key configured.
     </div>
 
     <h2 id="registry">The five presets</h2>
@@ -82,7 +82,7 @@
     </table>
 
     <h2 id="models">Suggested model IDs</h2>
-    <p>The exact list of models each provider ships changes over time. These are the shapes <code>zreview</code> is tested against &mdash; anything the provider will route is fair game.</p>
+    <p>The exact list of models each provider ships changes over time. These are the shapes <code>sacr</code> is tested against &mdash; anything the provider will route is fair game.</p>
 
     <h3><code>anthropic</code></h3>
     <ul>
@@ -115,68 +115,68 @@
     </ul>
 
     <h2 id="resolution">How endpoint resolution works</h2>
-    <p><code>zreview</code> resolves the endpoint from, in order:</p>
+    <p><code>sacr</code> resolves the endpoint from, in order:</p>
     <ol>
-      <li><code>ZREVIEW_PROVIDER</code> + <code>ZREVIEW_MODEL</code> if set.</li>
+      <li><code>SACR_PROVIDER</code> + <code>SACR_MODEL</code> if set.</li>
       <li><code>~/.opencodereview/config.json</code> if present (inherited from the upstream OCR project).</li>
       <li>The first provider whose API key env var is set. Anthropic wins on ties.</li>
     </ol>
-    <p>Bedrock is treated specially: it has no api_key, so its readiness comes from the AWS credential chain. If <code>AWS_REGION</code> and any AWS credential source are present, Bedrock will resolve without an explicit <code>ZREVIEW_PROVIDER=bedrock</code>.</p>
+    <p>Bedrock is treated specially: it has no api_key, so its readiness comes from the AWS credential chain. If <code>AWS_REGION</code> and any AWS credential source are present, Bedrock will resolve without an explicit <code>SACR_PROVIDER=bedrock</code>.</p>
 
     <h2 id="cost">Cost notes</h2>
     <p>Two cost knobs matter:</p>
     <ul>
       <li><strong>Review model</strong> &mdash; drives the main task loop. This is where most of the token spend lives. Opus-class models produce more precise comments; Sonnet-class is usually enough for standard PRs.</li>
-      <li><strong>Index model</strong> &mdash; embedding + per-file summaries. Called once per file at index time, then reused across every subsequent review. Point <code>ZREVIEW_INDEX_MODEL</code> at a cheap model here.</li>
+      <li><strong>Index model</strong> &mdash; embedding + per-file summaries. Called once per file at index time, then reused across every subsequent review. Point <code>SACR_INDEX_MODEL</code> at a cheap model here.</li>
     </ul>
     <p>The selector prefilter drops noisy diffs before any LLM call &mdash; formatting-only changes and generated files never hit the model. See <a href="/architecture.html#det-vs-llm">Architecture &sect; Deterministic vs LLM</a>.</p>
 
     <h2 id="tiers">Two-tier model routing</h2>
-    <p><code>zreview</code> resolves two LLM clients per run &mdash; a <strong>main</strong> tier that drives the reviewer agent loop and a <strong>cheap</strong> tier reserved for structured summary and labeling calls (Phase 15). By default both tiers point at the same client, so nothing changes until you opt in.</p>
+    <p><code>sacr</code> resolves two LLM clients per run &mdash; a <strong>main</strong> tier that drives the reviewer agent loop and a <strong>cheap</strong> tier reserved for structured summary and labeling calls (Phase 15). By default both tiers point at the same client, so nothing changes until you opt in.</p>
     <table>
       <thead>
         <tr><th>Env var</th><th>What it does</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>ZREVIEW_CHEAP_MODEL</code></td><td>Cheap model name. Alone, reuses the main client &mdash; same endpoint, different model on the wire.</td></tr>
-        <tr><td><code>ZREVIEW_CHEAP_PROVIDER</code></td><td>Cheap provider preset. Only takes effect when <code>ZREVIEW_CHEAP_MODEL</code> is also set; resolves an independent client against a second provider.</td></tr>
+        <tr><td><code>SACR_CHEAP_MODEL</code></td><td>Cheap model name. Alone, reuses the main client &mdash; same endpoint, different model on the wire.</td></tr>
+        <tr><td><code>SACR_CHEAP_PROVIDER</code></td><td>Cheap provider preset. Only takes effect when <code>SACR_CHEAP_MODEL</code> is also set; resolves an independent client against a second provider.</td></tr>
       </tbody>
     </table>
     <p>Fallback: if either variable is unset, cheap silently reuses the main client. There is no such thing as a "half-configured" cheap tier that breaks the reviewer.</p>
     <pre><code># Same key, cheaper model on the reviewer's own provider
 export ANTHROPIC_API_KEY=sk-ant-...
-export ZREVIEW_CHEAP_MODEL=claude-haiku-5
+export SACR_CHEAP_MODEL=claude-haiku-5
 
 # Independent cheap provider
 export ANTHROPIC_API_KEY=sk-ant-...
 export DEEPSEEK_API_KEY=...
-export ZREVIEW_CHEAP_PROVIDER=deepseek
-export ZREVIEW_CHEAP_MODEL=deepseek-flash</code></pre>
+export SACR_CHEAP_PROVIDER=deepseek
+export SACR_CHEAP_MODEL=deepseek-flash</code></pre>
     <p>Measured target: 30&ndash;40% cost cut once summary and labeling ride the cheap tier (Phase 15).</p>
 
     <h2 id="switching">Switching providers</h2>
     <pre><code># Anthropic direct
 export ANTHROPIC_API_KEY=sk-ant-...
-zreview review --from origin/main --to HEAD
+sacr review --from origin/main --to HEAD
 
 # Same key set, but force Bedrock
-export ZREVIEW_PROVIDER=bedrock
-export ZREVIEW_MODEL=us.anthropic.claude-sonnet-5
+export SACR_PROVIDER=bedrock
+export SACR_MODEL=us.anthropic.claude-sonnet-5
 export AWS_REGION=us-east-1
-zreview review --from origin/main --to HEAD
+sacr review --from origin/main --to HEAD
 
 # DeepSeek for cost-sensitive runs
 export DEEPSEEK_API_KEY=...
-export ZREVIEW_PROVIDER=deepseek
-export ZREVIEW_MODEL=deepseek-v4-flash
-zreview review --from origin/main --to HEAD</code></pre>
+export SACR_PROVIDER=deepseek
+export SACR_MODEL=deepseek-v4-flash
+sacr review --from origin/main --to HEAD</code></pre>
 
     <h2 id="troubleshooting">Common issues</h2>
     <p>See <a href="/troubleshooting.html">Troubleshooting</a> for the full list. Provider-specific hits:</p>
     <ul>
       <li><strong>Anthropic 401.</strong> The API key was rotated. Regenerate under console.anthropic.com and re-export.</li>
       <li><strong>Bedrock <code>AccessDeniedException</code>.</strong> The model is available in the region but the account doesn't have it enabled. Grant access in the Bedrock console; propagation can take a few minutes.</li>
-      <li><strong>OpenAI 429.</strong> Rate limit on the org key. <code>zreview</code> retries with backoff; if it still fails, drop concurrency or move to a higher tier.</li>
+      <li><strong>OpenAI 429.</strong> Rate limit on the org key. <code>sacr</code> retries with backoff; if it still fails, drop concurrency or move to a higher tier.</li>
       <li><strong>DeepSeek timeouts.</strong> Their endpoint occasionally rate-limits by IP. The retry loop handles transient 5xx; a persistent hang is worth reporting.</li>
     </ul>
 

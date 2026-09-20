@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simplification Lens — sacr architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161a22;
+    --panel-2: #1c2130;
+    --ink: #e7ecf3;
+    --ink-dim: #9aa4b2;
+    --rule: #2a2f3a;
+    --accent: #f59e0b;
+    --accent-2: #22d3ee;
+    --new: #ffe4b5;
+    --new-stroke: #d97706;
+    --gate: #dbeafe;
+    --gate-stroke: #0369a1;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); }
+  body {
+    padding: 48px 56px 96px;
+    max-width: 1240px;
+    margin: 0 auto;
+    line-height: 1.55;
+  }
+  header {
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 40px;
+  }
+  header .kicker {
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+  h1 { font-size: 40px; margin: 0 0 8px; letter-spacing: -0.02em; }
+  h2 { font-size: 22px; margin: 56px 0 20px; letter-spacing: -0.01em; color: var(--ink); }
+  h3 { font-size: 15px; margin: 24px 0 8px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.12em; }
+  p { color: var(--ink); }
+  p.lede { color: var(--ink-dim); max-width: 760px; font-size: 17px; }
+  code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; color: var(--ink); font-size: 0.95em; }
+  a { color: var(--accent-2); }
+  section.panel {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin: 24px 0 32px;
+  }
+  .mermaid {
+    background: var(--panel-2);
+    border-radius: 8px;
+    padding: 24px;
+    overflow-x: auto;
+  }
+  .legend {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    font-size: 14px;
+    color: var(--ink-dim);
+  }
+  .swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  .swatch.new { background: var(--new); border: 2px solid var(--new-stroke); }
+  .swatch.gate { background: var(--gate); border: 2px solid var(--gate-stroke); }
+  .swatch.reused { background: #14532d; border: 2px solid #16a34a; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 8px;
+    font-size: 14.5px;
+  }
+  th, td {
+    border-bottom: 1px solid var(--rule);
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { color: var(--ink-dim); font-weight: 600; letter-spacing: 0.02em; }
+  ul.checks { list-style: none; padding: 0; margin: 12px 0; }
+  ul.checks li { padding: 4px 0 4px 26px; position: relative; }
+  ul.checks li::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+    font-weight: bold;
+  }
+  footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink-dim);
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">sacr feature design</div>
+  <h1>Simplification lens — architecture</h1>
+  <p class="lede">
+    A second review lens that hunts code to <em>delete or inline</em> — the opposite polarity of
+    the existing Suggestion Mode. Delivered as one prompt file, one config bool, and one
+    conditional string append. No schema, no tool, no scoring, no emit path change.
+  </p>
+</header>
+
+<section class="panel">
+  <h2 style="margin-top: 0;">1. End-to-end pipeline — where the simplification lens plugs in</h2>
+  <div class="mermaid">
+flowchart TD
+    subgraph Load["Startup"]
+        A1["sacr review<br/><i>cmd/sacr/review_cmd.go</i>"]
+        A2[".sacr/config.yaml"]
+        A3["zconfig.Load()<br/><i>internal/zconfig/zconfig.go</i>"]
+        A2 --> A3
+        A1 --> A3
+    end
+
+    subgraph Prompt["System-prompt assembly (per PR)"]
+        direction TB
+        B0["Config gate:<br/>zcfg.Simplification.Enabled?"]
+        B1["Load main_task_system.md<br/><i>internal/prompts/</i>"]
+        B2["Load simplification_lens.md<br/><b>NEW — internal/prompts/</b>"]
+        B3["reviewctx block"]
+        B4["Known Issues block<br/>(scanner findings)"]
+        B5["Compose systemContent"]
+        B1 --> B5
+        B0 -- "true" --> B2 --> B5
+        B0 -- "false" --> B5
+        B3 --> B5
+        B4 --> B5
+    end
+
+    subgraph Loop["LLM review loop (unchanged)"]
+        C1["llmloop.Runner<br/><i>internal/llmloop/loop.go</i>"]
+        C2["code_comment tool<br/><i>internal/tool/tools.json</i>"]
+        C3["ParseComments<br/><i>internal/comment/parse.go</i>"]
+        C1 --> C2 --> C3
+    end
+
+    subgraph Emit["Emission (unchanged)"]
+        D1["filterResolved + filterByScore"]
+        D2["formatGithubBody<br/><i>cmd/sacr/emit.go:507</i>"]
+        D3{"low + maintainability?"}
+        D4["Prepend [nit] + [maintainability]"]
+        D5["GitHub inline PR comment"]
+        D1 --> D2 --> D3
+        D3 -- "yes" --> D4 --> D5
+        D3 -- "no"  --> D5
+    end
+
+    A3 --> B0
+    B5 --> C1
+    C3 --> D1
+
+    classDef new fill:#ffe4b5,stroke:#d97706,stroke-width:2px,color:#000
+    classDef gate fill:#dbeafe,stroke:#0369a1,stroke-width:2px,color:#000
+    class B2 new
+    class B0 gate
+  </div>
+  <div class="legend">
+    <span><span class="swatch new"></span>New file / behavior</span>
+    <span><span class="swatch gate"></span>New decision point</span>
+    <span>Everything else: reused verbatim, no code change</span>
+  </div>
+</section>
+
+<section class="panel">
+  <h2 style="margin-top: 0;">2. Per-file review — what the LLM sees, where a finding is born</h2>
+  <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant CMD as review_cmd.go
+    participant CFG as zconfig
+    participant PR as prompts pkg
+    participant SYS as System prompt (assembled)
+    participant LLM as LLM (llmloop.Runner)
+    participant TOOL as code_comment tool
+    participant COL as CommentCollector
+    participant EMIT as emit.go
+    participant GH as GitHub PR
+
+    CMD->>CFG: Load(repo)
+    CFG-->>CMD: Config{Simplification.Enabled=true}
+    CMD->>PR: loadPrompt("main_task_system.md")
+    PR-->>CMD: base system prompt
+    alt Simplification enabled
+        CMD->>PR: loadPrompt("simplification_lens.md")
+        PR-->>CMD: lens block
+        CMD->>SYS: base + "\n\n" + lens + reviewctx + known_issues
+    else Simplification disabled
+        CMD->>SYS: base + reviewctx + known_issues
+    end
+
+    Note over SYS: One system message,<br/>optionally longer by ~50 lines
+    CMD->>LLM: RunMainTask(system, user, diff, tools)
+
+    loop Per file in review_files
+        LLM->>LLM: Read diff, scan for bugs<br/>AND suggestion-mode candidates<br/>AND simplification candidates
+        LLM->>TOOL: code_comment(comments=[...])
+        Note right of TOOL: Simplification finding shape:<br/>severity=low<br/>category=maintainability<br/>content="[simplify] ..."<br/>existing_code=verbatim<br/>suggestion_code=inlined/deleted
+    end
+    LLM->>COL: emit LlmComment structs
+    COL-->>CMD: []LlmComment
+    CMD->>EMIT: filterResolved -> filterByScore
+    EMIT->>EMIT: formatGithubBody (auto-prefix [nit] for low+maintainability)
+    EMIT->>GH: POST /pulls/{n}/reviews
+    Note over GH: PR comment renders as<br/>[nit] [low / maintainability]<br/>[simplify] "Inline this - one caller"
+  </div>
+</section>
+
+<section class="panel">
+  <h2 style="margin-top: 0;">3. Delta view — new vs reused</h2>
+  <div class="mermaid">
+flowchart LR
+    subgraph New["🟠 New (added by this feature)"]
+        N1["simplification_lens.md<br/>~50 lines"]
+        N2["SimplificationConfig{Enabled bool}<br/>~8 lines"]
+        N3["Conditional lens append<br/>~5 lines in review_cmd.go"]
+        N4["1 test in prompts_test.go"]
+    end
+
+    subgraph Reused["🟢 Reused (zero code change)"]
+        R1["code_comment tool schema"]
+        R2["ParseComments + validCategories"]
+        R3["Suggestion caps (5/file, 20/PR)"]
+        R4["filterByScore severity gate"]
+        R5["formatGithubBody + [nit] prefix"]
+        R6["Exit-code gating"]
+        R7["Scoring / effort / fingerprint / carryover"]
+    end
+
+    subgraph Marker["📛 Distinguisher"]
+        M1["content starts with '[simplify]'"]
+        M2["No schema change — plain text tag<br/>survives repair + carryover<br/>filterable via grep"]
+    end
+
+    N1 -.produces.-> M1
+    M1 -.rendered by.-> R5
+
+    classDef new fill:#ffe4b5,stroke:#d97706,stroke-width:2px,color:#000
+    classDef reused fill:#14532d,stroke:#16a34a,stroke-width:1.5px,color:#f0fdf4
+    classDef marker fill:#1e293b,stroke:#64748b,stroke-width:1.5px,color:#e2e8f0
+    class N1,N2,N3,N4 new
+    class R1,R2,R3,R4,R5,R6,R7 reused
+    class M1,M2 marker
+  </div>
+</section>
+
+<section class="panel">
+  <h2 style="margin-top: 0;">4. File-by-file blast radius</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 44%;">File</th>
+        <th style="width: 14%;">Action</th>
+        <th>Why</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>internal/prompts/simplification_lens.md</code></td>
+        <td>CREATE</td>
+        <td>The lens instructions — separate file so togglable without conditional string surgery in the base prompt.</td>
+      </tr>
+      <tr>
+        <td><code>internal/zconfig/zconfig.go</code></td>
+        <td>UPDATE</td>
+        <td>Add <code>SimplificationConfig{Enabled bool}</code>; mirror <code>SuggestionsConfig</code> at line 28-31.</td>
+      </tr>
+      <tr>
+        <td><code>internal/zconfig/zconfig_test.go</code></td>
+        <td>UPDATE</td>
+        <td>Default-off assertion + YAML round-trip.</td>
+      </tr>
+      <tr>
+        <td><code>cmd/sacr/prompts.go</code></td>
+        <td>UPDATE</td>
+        <td>Add <code>loadSimplificationLens(enabled)</code>; empty string when disabled.</td>
+      </tr>
+      <tr>
+        <td><code>cmd/sacr/review_cmd.go</code></td>
+        <td>UPDATE</td>
+        <td>After base system prompt loads, concatenate lens (guided by <code>zcfg.Simplification.Enabled</code>) — same pattern used for <code>reviewctx</code> and <code>knownIssues</code>.</td>
+      </tr>
+      <tr>
+        <td><code>cmd/sacr/prompts_test.go</code></td>
+        <td>UPDATE</td>
+        <td>Assert lens block present when enabled, absent when disabled.</td>
+      </tr>
+      <tr>
+        <td><code>docs/configuration.html</code></td>
+        <td>UPDATE</td>
+        <td>Document <code>simplification.enabled</code> flag.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2 style="margin-top: 0;">5. Why this shape (design rationale)</h2>
+  <ul class="checks">
+    <li>One config bool, one conditional string append. Pipeline already composes system content from N optional blocks (<code>reviewctx</code>, <code>known_issues</code>). The simplification lens is block N+1. No new abstraction.</li>
+    <li>No new category. Reusing <code>maintainability</code> + a text tag means the finding rides every existing rail — scoring, filter, emit, GitHub rendering, fingerprint, carryover, effort table — for free.</li>
+    <li>No new tool. <code>code_comment</code> already carries <code>existing_code</code> + <code>suggestion_code</code>, which is exactly what a "delete this / inline to X" finding needs.</li>
+    <li>Failure modes are already handled. Bad JSON → <code>comment_args_repair</code>. Bad line → <code>ResolveComment</code> → <code>RelocateAcrossFiles</code> → <code>ReLocateComment</code>. Low-confidence noise → <code>--min-severity=medium</code>.</li>
+  </ul>
+</section>
+
+<section class="panel">
+  <h2 style="margin-top: 0;">6. Risks (from the plan §8)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 40%;">Risk</th>
+        <th style="width: 14%;">Likelihood</th>
+        <th>Mitigation</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>False-positive suggestions (interface with a hidden second impl)</td>
+        <td>Medium</td>
+        <td>Prompt says "if unsure, do NOT emit — deletion is destructive." Default-off adds a second safety valve.</td>
+      </tr>
+      <tr>
+        <td>Contradiction with Suggestion Mode ("extract" vs "inline" on same block)</td>
+        <td>Medium</td>
+        <td>Explicit prompt rule: the simplification lens wins on the same anchor. Example pair in the prompt.</td>
+      </tr>
+      <tr>
+        <td>Cap contention with Suggestion Mode on shared 5/file budget</td>
+        <td>Low</td>
+        <td>Prompt orders lenses by priority (simplification first). If field data disagrees, add per-lens cap later.</td>
+      </tr>
+      <tr>
+        <td>Nit-storm on refactor PRs</td>
+        <td>Low-Medium</td>
+        <td>5/file, 20/PR caps hold. Low-severity + non-blocking exit code → no CI breakage.</td>
+      </tr>
+      <tr>
+        <td>Reviewers dismiss simplification findings as opinion</td>
+        <td>Medium</td>
+        <td>Every finding cites concrete replacement (stdlib call, inlined body, deleted flag name) — same rule as Suggestion Mode.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  <span>Status: WAITING FOR CONFIRMATION on the plan</span>
+  <span>sacr/main · a91345f</span>
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#1c2130',
+      primaryColor: '#1e293b',
+      primaryTextColor: '#e7ecf3',
+      primaryBorderColor: '#475569',
+      lineColor: '#64748b',
+      tertiaryColor: '#0f1115',
+      clusterBkg: '#0f172a',
+      clusterBorder: '#334155',
+      edgeLabelBackground: '#0f1115'
+    },
+    flowchart: { curve: 'basis', padding: 20 },
+    sequence: { actorMargin: 60, boxMargin: 12, boxTextMargin: 8, noteMargin: 12 }
+  });
+</script>
+</body>
+</html>

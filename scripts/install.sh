@@ -3,28 +3,28 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 disseqt
 
-# Install the zreview (z-code-reviewer) CLI from GitHub releases.
-#   curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/install.sh | sh
+# Install the sacr (shubam-ai-code-reviewer) CLI from GitHub releases.
+#   curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/shubam-ai-code-reviewer/main/install.sh | sh
 # Prefer to inspect first:
-#   curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/install.sh -o install.sh
+#   curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/shubam-ai-code-reviewer/main/install.sh -o install.sh
 #   less install.sh && sh install.sh
-# Env: ZREVIEW_INSTALL_DIR (default /usr/local/bin), ZREVIEW_VERSION (default latest),
-# ZREVIEW_GITHUB_MIRROR (default unset; download the binary through a mirror domain).
+# Env: SACR_INSTALL_DIR (default /usr/local/bin), SACR_VERSION (default latest),
+# SACR_GITHUB_MIRROR (default unset; download the binary through a mirror domain).
 set -eu
 
 main() {
-  REPO="shubam-disseqt/z-code-reviewer"
-  BIN="zreview"
-  ASSET_PREFIX="zreview"
-  INSTALL_DIR="${ZREVIEW_INSTALL_DIR:-/usr/local/bin}"
-  VERSION="${ZREVIEW_VERSION:-}"
+  REPO="shubam-disseqt/shubam-ai-code-reviewer"
+  BIN="sacr"
+  ASSET_PREFIX="sacr"
+  INSTALL_DIR="${SACR_INSTALL_DIR:-/usr/local/bin}"
+  VERSION="${SACR_VERSION:-}"
 
   command -v curl >/dev/null 2>&1 || err "curl is required"
 
   os="$(uname -s | tr '[:upper:]' '[:lower:]')"
   case "$os" in
     darwin|linux) ;;
-    *) err "unsupported OS: $os (on Windows use: irm https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/install.ps1 | iex)" ;;
+    *) err "unsupported OS: $os (on Windows use: irm https://raw.githubusercontent.com/shubam-disseqt/shubam-ai-code-reviewer/main/install.ps1 | iex)" ;;
   esac
 
   arch="$(uname -m)"
@@ -43,11 +43,11 @@ main() {
   fi
 
   asset="${ASSET_PREFIX}-${os}-${arch}"
-  prefix="$(printf '%s' "${ZREVIEW_GITHUB_MIRROR:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  prefix="$(printf '%s' "${SACR_GITHUB_MIRROR:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
   prefix="${prefix#https://}"
   prefix="${prefix#http://}"
   prefix="${prefix%/}"
-  case "$prefix" in *[[:space:]]*) err "ZREVIEW_GITHUB_MIRROR contains spaces: '$prefix'" ;; esac
+  case "$prefix" in *[[:space:]]*) err "SACR_GITHUB_MIRROR contains spaces: '$prefix'" ;; esac
   if [ -n "$prefix" ]; then
     printf 'warning: downloading from unofficial GitHub mirror "%s" (checksum integrity is not guaranteed)\n' "$prefix" >&2
     base="https://${prefix}/github.com/$REPO/releases/download/$VERSION"
@@ -87,7 +87,7 @@ install_binary() {
     sudo mkdir -p "$dir"
     sudo install -m 0755 "$src" "$dir/$bin"
   else
-    err "$dir is not writable and sudo is unavailable; set ZREVIEW_INSTALL_DIR to a writable path"
+    err "$dir is not writable and sudo is unavailable; set SACR_INSTALL_DIR to a writable path"
   fi
 }
 

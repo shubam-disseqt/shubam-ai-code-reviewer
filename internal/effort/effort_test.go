@@ -264,7 +264,7 @@ func TestLoadPolicy_EnvOverride(t *testing.T) {
 	if err := writeFile(p, "base: 9.0\nfiles_changed:\n  points_per_file: 0\n  cap: 0\n"); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("ZREVIEW_EFFORT_POLICY", p)
+	t.Setenv("SACR_EFFORT_POLICY", p)
 	pol, err := LoadPolicy(t.TempDir())
 	if err != nil {
 		t.Fatalf("LoadPolicy: %v", err)

@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 disseqt
 //
-// VS Code extension skeleton for zreview. Shells out to the CLI, parses
+// VS Code extension skeleton for sacr. Shells out to the CLI, parses
 // `--format json`, and renders findings in the Problems panel.
 
 import { spawn } from "child_process";
 import * as path from "path";
 import * as vscode from "vscode";
 
-// Shape of one comment in `zreview review --format json`. Mirrors
-// emittedComment in cmd/zreview/emit.go (LlmComment fields flattened).
-interface ZreviewComment {
+// Shape of one comment in `sacr review --format json`. Mirrors
+// emittedComment in cmd/sacr/emit.go (LlmComment fields flattened).
+interface SacrComment {
   path: string;
   content: string;
   start_line: number;
@@ -20,28 +20,28 @@ interface ZreviewComment {
   source?: string;
 }
 
-interface ZreviewResult {
+interface SacrResult {
   session_id?: string;
-  comments?: ZreviewComment[];
+  comments?: SacrComment[];
 }
 
 let diagnostics: vscode.DiagnosticCollection;
 
 export function activate(context: vscode.ExtensionContext): void {
-  diagnostics = vscode.languages.createDiagnosticCollection("zreview");
+  diagnostics = vscode.languages.createDiagnosticCollection("sacr");
   context.subscriptions.push(
     diagnostics,
-    vscode.commands.registerCommand("zreview.reviewCurrentDiff", () =>
+    vscode.commands.registerCommand("sacr.reviewCurrentDiff", () =>
       runReview(["review", "--from", "HEAD~1", "--to", "HEAD", "--format", "json"], "Reviewing HEAD~1..HEAD"),
     ),
-    vscode.commands.registerCommand("zreview.reviewFile", () => {
+    vscode.commands.registerCommand("sacr.reviewFile", () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
-        vscode.window.showWarningMessage("zreview: open a file first.");
+        vscode.window.showWarningMessage("sacr: open a file first.");
         return;
       }
       // No dedicated --file flag yet; review uncommitted changes and let
-      // the Problems panel filter by file. ponytail: swap for --file once
+      // the Problems panel filter by file. note: swap for --file once
       // the CLI grows a single-file mode.
       return runReview(["review", "--format", "json"], `Reviewing ${path.basename(editor.document.fileName)}`);
     }),
@@ -53,11 +53,11 @@ export function deactivate(): void {
 }
 
 async function runReview(args: string[], title: string): Promise<void> {
-  const cfg = vscode.workspace.getConfiguration("zreview");
-  const bin = cfg.get<string>("binaryPath", "zreview");
+  const cfg = vscode.workspace.getConfiguration("sacr");
+  const bin = cfg.get<string>("binaryPath", "sacr");
   const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!cwd) {
-    vscode.window.showErrorMessage("zreview: open a workspace folder first.");
+    vscode.window.showErrorMessage("sacr: open a workspace folder first.");
     return;
   }
 
@@ -66,19 +66,19 @@ async function runReview(args: string[], title: string): Promise<void> {
     async () => {
       try {
         const stdout = await execCapture(bin, args, cwd);
-        const parsed: ZreviewResult = JSON.parse(stdout);
+        const parsed: SacrResult = JSON.parse(stdout);
         renderFindings(parsed.comments ?? [], cwd);
         const n = parsed.comments?.length ?? 0;
-        vscode.window.showInformationMessage(`zreview: ${n} finding${n === 1 ? "" : "s"}.`);
+        vscode.window.showInformationMessage(`sacr: ${n} finding${n === 1 ? "" : "s"}.`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        vscode.window.showErrorMessage(`zreview failed: ${msg}`);
+        vscode.window.showErrorMessage(`sacr failed: ${msg}`);
       }
     },
   );
 }
 
-function renderFindings(comments: ZreviewComment[], cwd: string): void {
+function renderFindings(comments: SacrComment[], cwd: string): void {
   diagnostics.clear();
   const grouped = new Map<string, vscode.Diagnostic[]>();
   for (const c of comments) {
@@ -86,7 +86,7 @@ function renderFindings(comments: ZreviewComment[], cwd: string): void {
     const endLine = Math.max(startLine, (c.end_line || c.start_line || 1) - 1);
     const range = new vscode.Range(startLine, 0, endLine, Number.MAX_SAFE_INTEGER);
     const diag = new vscode.Diagnostic(range, c.content, severityFor(c.severity));
-    diag.source = c.source ? `zreview:${c.source}` : "zreview";
+    diag.source = c.source ? `sacr:${c.source}` : "sacr";
     if (c.category) {
       diag.code = c.category;
     }

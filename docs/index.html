@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>z-code-reviewer &mdash; docs</title>
+  <title>shubam-ai-code-reviewer &mdash; docs</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/" class="active">Overview</a></li>
@@ -35,15 +35,15 @@
   </nav>
 
   <main>
-    <h1>z-code-reviewer</h1>
+    <h1>shubam-ai-code-reviewer</h1>
     <p class="lede">AI-powered pull request review as a single Go CLI. Precise per-diff comments, repo-wide context, org-level rules, and cross-PR overlap.</p>
 
     <div class="note">
-      <strong>Phase 2 skeleton.</strong> These docs are shipped with the binary. Only <code>zreview version</code> and <code>zreview docs</code> are wired end-to-end today. Review, indexing, rules, and overlap features are being built. See <a href="/architecture.html">Architecture</a> for the target design and the <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/ROADMAP.md">roadmap</a> for phase status.
+      <strong>Phase 2 skeleton.</strong> These docs are shipped with the binary. Only <code>sacr version</code> and <code>sacr docs</code> are wired end-to-end today. Review, indexing, rules, and overlap features are being built. See <a href="/architecture.html">Architecture</a> for the target design and the <a href="https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/ROADMAP.md">roadmap</a> for phase status.
     </div>
 
     <h2>What it is</h2>
-    <p><code>z-code-reviewer</code> is a self-hosted, Go-native CLI that combines the best of two Apache-2.0 open source projects into one tool:</p>
+    <p><code>shubam-ai-code-reviewer</code> is a self-hosted, Go-native CLI that combines the best of two Apache-2.0 open source projects into one tool:</p>
     <table>
       <thead>
         <tr><th>Feature</th><th>Source of the approach</th></tr>
@@ -62,8 +62,8 @@
     <h2>Try it now</h2>
     <pre><code># from a clone
 make build
-./bin/zreview version
-./bin/zreview docs
+./bin/sacr version
+./bin/sacr docs
 </code></pre>
 
     <h2>Where to go from here</h2>
@@ -73,7 +73,7 @@ make build
       <li><a href="/installation.html">Installation</a> &mdash; distribution channels and build-from-source.</li>
       <li><a href="/configuration.html">Configuration</a> &mdash; env vars, config file, precedence.</li>
       <li><a href="/providers.html">Providers</a> &mdash; the five supported LLM providers and their model IDs.</li>
-      <li><a href="/index-and-context.html">Index and context</a> &mdash; how <code>zreview index</code> works and why it matters.</li>
+      <li><a href="/index-and-context.html">Index and context</a> &mdash; how <code>sacr index</code> works and why it matters.</li>
       <li><a href="/review-rules.html">Review rules</a> &mdash; author org-level policy in YAML.</li>
       <li><a href="/overlap.html">Overlap</a> &mdash; detect other open PRs that collide with the one under review.</li>
       <li><a href="/github-action.html">GitHub Action</a> &mdash; drop-in workflow for pull-request review.</li>

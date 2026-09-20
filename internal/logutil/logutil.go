@@ -2,7 +2,7 @@
 // Copyright 2026 disseqt
 
 // Package logutil is a thin wrapper around log/slog. It hands the CLI two
-// output shapes: a legacy "[zreview] <stage>: ..." text form for humans and
+// output shapes: a legacy "[sacr] <stage>: ..." text form for humans and
 // existing grep-based tooling, and a JSON-per-line form for CI/observability.
 //
 // The wrapper stays intentionally small — one custom Handler for the legacy
@@ -29,8 +29,8 @@ const (
 
 // Env vars read by FromEnv. Documented in docs/troubleshooting.html.
 const (
-	EnvFormat = "ZREVIEW_LOG_FORMAT"
-	EnvLevel  = "ZREVIEW_LOG_LEVEL"
+	EnvFormat = "SACR_LOG_FORMAT"
+	EnvLevel  = "SACR_LOG_LEVEL"
 )
 
 // stageKey is the attribute name every record gets. Kept as a constant so
@@ -53,8 +53,8 @@ func New(w io.Writer, format string, level slog.Level) *slog.Logger {
 	}
 }
 
-// FromEnv builds a logger using ZREVIEW_LOG_FORMAT (text|json, default text)
-// and ZREVIEW_LOG_LEVEL (DEBUG|INFO|WARN|ERROR, default INFO). Invalid values
+// FromEnv builds a logger using SACR_LOG_FORMAT (text|json, default text)
+// and SACR_LOG_LEVEL (DEBUG|INFO|WARN|ERROR, default INFO). Invalid values
 // silently fall back to the defaults — logging must never crash the review.
 func FromEnv(w io.Writer) *slog.Logger {
 	format := strings.ToLower(strings.TrimSpace(os.Getenv(EnvFormat)))
@@ -89,7 +89,7 @@ func parseLevel(raw string) slog.Level {
 	}
 }
 
-// legacyTextHandler emits records in the historical "[zreview] <stage>:
+// legacyTextHandler emits records in the historical "[sacr] <stage>:
 // <msg> key=val key=val" shape so existing grep tooling and docs keep
 // working. It's a stripped slog.Handler — no groups, no ReplaceAttr, no
 // timestamp (the CLI's audience is per-run logs, not a log aggregator).
@@ -132,7 +132,7 @@ func (h *legacyTextHandler) Handle(_ context.Context, r slog.Record) error {
 	// Level prefix: only surface non-INFO levels so INFO lines stay clean.
 	// WARN/ERROR gain a "WARN " / "ERROR " prefix; DEBUG becomes "DEBUG ".
 	var b strings.Builder
-	b.WriteString("[zreview] ")
+	b.WriteString("[sacr] ")
 	if r.Level != slog.LevelInfo {
 		b.WriteString(strings.ToUpper(r.Level.String()))
 		b.WriteByte(' ')

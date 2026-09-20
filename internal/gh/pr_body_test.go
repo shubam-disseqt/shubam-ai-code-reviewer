@@ -150,7 +150,7 @@ func TestUploadSARIF_EncodesGzipBase64(t *testing.T) {
 	if id != "abc123" {
 		t.Errorf("id = %q, want abc123", id)
 	}
-	if payload.CommitSHA != "deadbeef" || payload.Ref != "refs/heads/main" || payload.ToolName != "zreview" {
+	if payload.CommitSHA != "deadbeef" || payload.Ref != "refs/heads/main" || payload.ToolName != "sacr" {
 		t.Errorf("payload = %+v", payload)
 	}
 	// Round-trip decode: base64 → gzip → original bytes.

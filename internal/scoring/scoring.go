@@ -6,7 +6,7 @@ package scoring
 import (
 	"strings"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // scannerConfidenceBump is added to the policy's confidence_floor when the

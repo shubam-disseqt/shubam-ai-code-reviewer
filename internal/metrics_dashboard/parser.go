@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 disseqt
 
-// Package metrics_dashboard reads zreview session JSONL logs and renders
+// Package metrics_dashboard reads sacr session JSONL logs and renders
 // an offline HTML dashboard summarising cost, findings, and duration trends.
 package metrics_dashboard
 
@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-// RunMetrics mirrors cmd/zreview.Metrics plus a session timestamp for plotting.
+// RunMetrics mirrors cmd/sacr.Metrics plus a session timestamp for plotting.
 type RunMetrics struct {
 	SessionID        string    `json:"session_id"`
 	Timestamp        time.Time `json:"timestamp"`
@@ -57,14 +57,14 @@ func ParseDir(dir string) ([]RunMetrics, error) {
 }
 
 var (
-	metricsLineRE = regexp.MustCompile(`\[zreview\] metrics: (.+)$`)
+	metricsLineRE = regexp.MustCompile(`\[sacr\] metrics: (.+)$`)
 	stageMetrics  = []byte(`"stage":"metrics"`)
 	typeStart     = []byte(`"type":"session_start"`)
 	typeEnd       = []byte(`"type":"session_end"`)
 )
 
 // parseFile folds all data from one session log into a RunMetrics. Priority:
-// slog JSON stage=metrics > text "[zreview] metrics:" > session_end fallback.
+// slog JSON stage=metrics > text "[sacr] metrics:" > session_end fallback.
 // Timestamp: session_start > slog time > file mtime.
 func parseFile(path string) (RunMetrics, bool) {
 	f, err := os.Open(path) //nolint:gosec // path derived from ReadDir of a user flag

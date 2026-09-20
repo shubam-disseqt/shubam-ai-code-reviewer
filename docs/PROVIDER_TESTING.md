@@ -1,6 +1,6 @@
 # Provider Testing
 
-Manual test protocols for each LLM provider zreview supports. Nobody has
+Manual test protocols for each LLM provider sacr supports. Nobody has
 actually run every provider against a real account yet; these protocols let
 someone with credentials smoke-test in ~15 minutes.
 
@@ -31,9 +31,9 @@ host and letting the OpenAI Go SDK append `/chat/completions`.
   `deepseek-flash`. These are aspirational / branding-forward names and do
   **not** match DeepSeek's public catalog as of writing, which exposes
   `deepseek-chat` and `deepseek-reasoner`. **Bug risk (LOW-MEDIUM)**: an
-  operator running `zreview` with no `ZREVIEW_MODEL` will hit
+  operator running `sacr` with no `SACR_MODEL` will hit
   `deepseek-v4-pro` (first entry), and DeepSeek will 400 with
-  `model_not_found`. Workaround: always set `ZREVIEW_MODEL=deepseek-chat`
+  `model_not_found`. Workaround: always set `SACR_MODEL=deepseek-chat`
   until the registry is refreshed. Fix path: update `Models` slice in
   `providers.go` to match the live catalog. See "Common errors" below.
 - **Token counting**: no DeepSeek-specific tokenizer. `CountTokensForModel`
@@ -49,7 +49,7 @@ host and letting the OpenAI Go SDK append `/chat/completions`.
   16384. DeepSeek's max output is 8192 (chat) / 32768 (reasoner); the clamp
   is safe for chat, mildly conservative for reasoner.
 - **Cheap tier**: `internal/llm/tiers.go` accepts `deepseek` as a valid
-  `ZREVIEW_CHEAP_PROVIDER`. Independent tier resolution works — see
+  `SACR_CHEAP_PROVIDER`. Independent tier resolution works — see
   `tiers_test.go` `TestResolveTiers_IndependentCheap`.
 
 ### 15-minute manual test protocol
@@ -58,7 +58,7 @@ host and letting the OpenAI Go SDK append `/chat/completions`.
 
 - DeepSeek account with a top-up balance (free credit works for smoke).
 - API key from https://platform.deepseek.com/api_keys — starts with `sk-`.
-- `zreview` binary built (`make build` at the repo root).
+- `sacr` binary built (`make build` at the repo root).
 - A trivial git repo with at least one commit to review, e.g. `/tmp/simple-go-repo`.
 
 **Env setup — main tier**
@@ -66,9 +66,9 @@ host and letting the OpenAI Go SDK append `/chat/completions`.
 ```bash
 export DEEPSEEK_API_KEY=sk-...
 # The registry names are wrong (see audit above). Force a live model:
-export ZREVIEW_MODEL=deepseek-chat
+export SACR_MODEL=deepseek-chat
 # Optional; provider auto-selects when unset because DEEPSEEK_API_KEY is set:
-export ZREVIEW_PROVIDER=deepseek
+export SACR_PROVIDER=deepseek
 ```
 
 **Env setup — cheap tier only** (recommended: DeepSeek is the cheapest
@@ -77,14 +77,14 @@ option for the summarizer / labeler; keep Claude/GPT for the reviewer)
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...          # main tier stays Claude
 export DEEPSEEK_API_KEY=sk-...
-export ZREVIEW_CHEAP_PROVIDER=deepseek
-export ZREVIEW_CHEAP_MODEL=deepseek-chat
+export SACR_CHEAP_PROVIDER=deepseek
+export SACR_CHEAP_MODEL=deepseek-chat
 ```
 
 **Doctor check** (no API cost)
 
 ```bash
-zreview doctor
+sacr doctor
 ```
 
 Expected: a row `deepseek key    ok    key present (base URL https://api.deepseek.com)`.
@@ -96,7 +96,7 @@ DeepSeek API — no surprise billing.
 
 ```bash
 cd /tmp/simple-go-repo
-zreview review --repo . --commit HEAD --format stdout
+sacr review --repo . --commit HEAD --format stdout
 ```
 
 Expected: a normal review report; no `model_not_found` or `401`.
@@ -113,7 +113,7 @@ another order of magnitude lower.
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `401 Unauthorized` | bad key, revoked key, or key from a different DeepSeek project | rotate at https://platform.deepseek.com/api_keys |
-| `400 model_not_found` on `deepseek-v4-pro` / `deepseek-v4-flash` | registry defaults do not match live catalog | set `ZREVIEW_MODEL=deepseek-chat` explicitly |
+| `400 model_not_found` on `deepseek-v4-pro` / `deepseek-v4-flash` | registry defaults do not match live catalog | set `SACR_MODEL=deepseek-chat` explicitly |
 | `429 Too Many Requests` | DeepSeek's per-account concurrency cap | retry with backoff; SDK retries 5 times automatically |
 | `context_length_exceeded` | 64k context ceiling on `deepseek-chat` | raise `--min-severity` or narrow `--paths` to shrink review scope |
 | Empty response body / `stream ended before choice finished` | rare gateway hiccup | rerun; the client retries `io.ErrUnexpectedEOF` once |
@@ -122,7 +122,7 @@ another order of magnitude lower.
 
 - Refresh `internal/llm/providers.go` `Models` for DeepSeek to reflect the
   live catalog (`deepseek-chat`, `deepseek-reasoner`). Until then, callers
-  must always set `ZREVIEW_MODEL`.
+  must always set `SACR_MODEL`.
 - If token accounting for Chinese-heavy reviews starts to matter, wire a
   DeepSeek tokenizer or bias the `cl100k_base` estimate.
 
@@ -163,7 +163,7 @@ into the URL path, and deriving the host from the resolved region. See
   Bedrock will route to is accepted. Run
   `aws bedrock list-inference-profiles --region <r>` to see what an account
   actually has.
-- **`ZREVIEW_PROVIDER=bedrock` alone is NOT enough.** The resolver's
+- **`SACR_PROVIDER=bedrock` alone is NOT enough.** The resolver's
   explicit-provider path (`ResolveEndpointWithOptions`) delegates to
   `tryOCRConfig`, which requires `~/.opencodereview/config.json` to exist
   and to define a `bedrock` entry (preset or custom). `tryProviderEnv`
@@ -204,7 +204,7 @@ into the URL path, and deriving the host from the resolved region. See
   ```
 - `~/.aws/config` with a profile, or `AWS_ACCESS_KEY_ID`+`AWS_SECRET_ACCESS_KEY`
   exported, or an active SSO session (`aws sso login --profile ...`).
-- `zreview` binary built (`make build`).
+- `sacr` binary built (`make build`).
 - A trivial git repo for the smoke review, e.g. `/tmp/simple-go-repo`.
 
 **Env setup**
@@ -212,11 +212,11 @@ into the URL path, and deriving the host from the resolved region. See
 ```bash
 export AWS_REGION=us-east-1
 export AWS_PROFILE=your-profile
-export ZREVIEW_PROVIDER=bedrock
-export ZREVIEW_MODEL=us.anthropic.claude-sonnet-4-6
+export SACR_PROVIDER=bedrock
+export SACR_MODEL=us.anthropic.claude-sonnet-4-6
 ```
 
-`ZREVIEW_MODEL` can be any model ID / inference-profile ID / application
+`SACR_MODEL` can be any model ID / inference-profile ID / application
 inference-profile ARN Bedrock will route to. The registry list is a hint,
 not an allowlist.
 
@@ -242,7 +242,7 @@ also live under the `bedrock` entry.
 **Doctor check first** (no API cost, no Retrieve, no SSO prompt)
 
 ```bash
-zreview doctor
+sacr doctor
 ```
 
 Expected rows:
@@ -260,7 +260,7 @@ the profile also has no region, it fails with a suggestion to export one.
 
 ```bash
 cd /tmp/simple-go-repo
-zreview review --repo . --commit HEAD --format stdout
+sacr review --repo . --commit HEAD --format stdout
 ```
 
 Expected: a review report; `--format stdout` shows findings + a token/cost
@@ -283,14 +283,14 @@ is typically <5k input + <2k output, so **under \$0.05** per run.
 | `Invalid API Key format` | `AWS_BEARER_TOKEN_BEDROCK` is set to a bad token, or SSO OIDC token leaked (should not happen — the code clears it) | unset `AWS_BEARER_TOKEN_BEDROCK` to fall back to SigV4 |
 | `ExpiredToken` / `SSOProviderInvalidToken` | SSO session expired | `aws sso login --profile <p>` |
 | `ThrottlingException` | Bedrock per-account concurrency / TPM limit | SDK auto-retries 5x with backoff; lower `--concurrency` if persistent |
-| `no AWS region resolved` (from zreview, not AWS) | neither `AWS_REGION` nor profile-region is set | `export AWS_REGION=us-east-1` |
+| `no AWS region resolved` (from sacr, not AWS) | neither `AWS_REGION` nor profile-region is set | `export AWS_REGION=us-east-1` |
 
 ### Follow-ups
 
 - Explicit `ThrottlingException` case in `explainError` would give a
   clearer "lower your concurrency" hint than the passthrough currently
   does; low priority since retries already absorb the transient case.
-- The config-file requirement for `ZREVIEW_PROVIDER=bedrock` is surprising
+- The config-file requirement for `SACR_PROVIDER=bedrock` is surprising
   — every other provider works from env vars alone. A short-circuit in
   `tryProviderEnv` for Bedrock (build a synthetic entry when
   `AWS_REGION`+`AWS_PROFILE` are set) would remove the extra file.

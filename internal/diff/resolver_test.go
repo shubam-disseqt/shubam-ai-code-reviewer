@@ -6,7 +6,7 @@ package diff
 import (
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 const testDiff = `diff --git a/pkg/example/handler.go b/pkg/example/handler.go

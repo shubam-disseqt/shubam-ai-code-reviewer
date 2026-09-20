@@ -6,13 +6,13 @@
 // bucketed Severity, a confidence in [0,1], and an impact in [0,1].
 //
 // The policy is table-driven from an embedded YAML default, overridable
-// via ZREVIEW_SCORING_POLICY or a repo-local .zreview/scoring.yaml.
+// via SACR_SCORING_POLICY or a repo-local .sacr/scoring.yaml.
 // There is no reflection loop — CR-bench (NUS, 2026) measured that
 // reflexion hurts review usefulness. See ARCHITECTURE §4.
 package scoring
 
 import (
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // Severity is the bucketed severity produced by the scoring engine.

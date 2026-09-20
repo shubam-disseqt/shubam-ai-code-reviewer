@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gh"
 )
 
 func TestBuildOverlapPrompt_Shape(t *testing.T) {

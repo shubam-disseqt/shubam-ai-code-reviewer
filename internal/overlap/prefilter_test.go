@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gh"
 )
 
 func TestJaccard(t *testing.T) {

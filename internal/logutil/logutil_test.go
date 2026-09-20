@@ -18,9 +18,9 @@ func TestNewDefaultsToLegacyTextOnUnknownFormat(t *testing.T) {
 		wantPrefix  string
 		wantJSONish bool
 	}{
-		{name: "text explicit", format: FormatText, wantPrefix: "[zreview] "},
-		{name: "empty defaults to text", format: "", wantPrefix: "[zreview] "},
-		{name: "unknown falls back to text", format: "yaml", wantPrefix: "[zreview] "},
+		{name: "text explicit", format: FormatText, wantPrefix: "[sacr] "},
+		{name: "empty defaults to text", format: "", wantPrefix: "[sacr] "},
+		{name: "unknown falls back to text", format: "yaml", wantPrefix: "[sacr] "},
 		{name: "json switches formatter", format: FormatJSON, wantJSONish: true},
 	}
 	for _, tt := range tests {
@@ -133,9 +133,9 @@ func TestLegacyTextLevelPrefix(t *testing.T) {
 		emit     func(l *slog.Logger)
 		contains string
 	}{
-		{"info has no level prefix", func(l *slog.Logger) { l.Info("m", "stage", "s") }, "[zreview] s: m"},
-		{"warn shows level", func(l *slog.Logger) { l.Warn("m", "stage", "s") }, "[zreview] WARN s: m"},
-		{"error shows level", func(l *slog.Logger) { l.Error("m", "stage", "s") }, "[zreview] ERROR s: m"},
+		{"info has no level prefix", func(l *slog.Logger) { l.Info("m", "stage", "s") }, "[sacr] s: m"},
+		{"warn shows level", func(l *slog.Logger) { l.Warn("m", "stage", "s") }, "[sacr] WARN s: m"},
+		{"error shows level", func(l *slog.Logger) { l.Error("m", "stage", "s") }, "[sacr] ERROR s: m"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

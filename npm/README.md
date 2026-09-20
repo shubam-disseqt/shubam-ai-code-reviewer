@@ -1,4 +1,4 @@
-# npm packaging for zreview
+# npm packaging for sacr
 
 This directory is the source of the npm distribution. It is not
 consumed by Go and does not participate in `make check`.
@@ -7,19 +7,19 @@ consumed by Go and does not participate in `make check`.
 
 ```
 npm/
-├── zreview/                 # meta package users install; only bin/zreview.js ships
+├── sacr/                 # meta package users install; only bin/sacr.js ships
 │   ├── package.json         # declares optionalDependencies on every platform stub
-│   ├── bin/zreview.js       # Node launcher — resolves + execs the platform binary
+│   ├── bin/sacr.js       # Node launcher — resolves + execs the platform binary
 │   └── README.md
-├── zreview-linux-x64/       # one leaf per (os, cpu) pair
+├── sacr-linux-x64/       # one leaf per (os, cpu) pair
 │   ├── package.json         # os + cpu constraints; only this platform's npm install pulls it
 │   ├── bin/                 # binary is populated at release time (see release.yml)
 │   └── README.md
-├── zreview-linux-arm64/
-├── zreview-darwin-x64/
-├── zreview-darwin-arm64/
-├── zreview-win32-x64/
-└── zreview-win32-arm64/
+├── sacr-linux-arm64/
+├── sacr-darwin-x64/
+├── sacr-darwin-arm64/
+├── sacr-win32-x64/
+└── sacr-win32-arm64/
 ```
 
 The `bin/` directories in the leaf packages are intentionally empty in
@@ -29,8 +29,8 @@ tree stays clean between releases.
 
 ## How the launcher works
 
-`bin/zreview.js` in the meta package uses `require.resolve` to find
-the correct `zreview-<platform>-<arch>` sub-package installed as an
+`bin/sacr.js` in the meta package uses `require.resolve` to find
+the correct `sacr-<platform>-<arch>` sub-package installed as an
 optional dependency, then execs its binary via `spawnSync` with
 `stdio: 'inherit'`. Exit codes and signals propagate to the parent.
 
@@ -53,8 +53,8 @@ on npm.
 the GitHub Release is created:
 
 1. Download matrix artifacts into `dist/`
-2. Copy each `zreview-<os>-<arch>[.exe]` into
-   `npm/zreview-<npm-platform>-<npm-cpu>/bin/`
+2. Copy each `sacr-<os>-<arch>[.exe]` into
+   `npm/sacr-<npm-platform>-<npm-cpu>/bin/`
 3. `npm version <tag> --no-git-tag-version --allow-same-version`
    inside each sub-package and the meta package
 4. `npm publish --provenance --access public` in dependency order:
@@ -70,9 +70,9 @@ workflow handles this translation:
 
 | Go GOOS/GOARCH | npm os/cpu | npm package |
 |---|---|---|
-| linux/amd64 | linux/x64 | zreview-linux-x64 |
-| linux/arm64 | linux/arm64 | zreview-linux-arm64 |
-| darwin/amd64 | darwin/x64 | zreview-darwin-x64 |
-| darwin/arm64 | darwin/arm64 | zreview-darwin-arm64 |
-| windows/amd64 | win32/x64 | zreview-win32-x64 |
-| windows/arm64 | win32/arm64 | zreview-win32-arm64 |
+| linux/amd64 | linux/x64 | sacr-linux-x64 |
+| linux/arm64 | linux/arm64 | sacr-linux-arm64 |
+| darwin/amd64 | darwin/x64 | sacr-darwin-x64 |
+| darwin/arm64 | darwin/arm64 | sacr-darwin-arm64 |
+| windows/amd64 | win32/x64 | sacr-win32-x64 |
+| windows/arm64 | win32/arm64 | sacr-win32-arm64 |

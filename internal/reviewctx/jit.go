@@ -11,7 +11,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/filetype"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/filetype"
 )
 
 // BuildJIT is the index-less path. For each changed file with source

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 alibaba/open-code-review Contributors
-// Portions Copyright 2026 disseqt
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors
 //
 // Adapted from alibaba/open-code-review internal/agent/selection.go
 // under Apache License 2.0.
@@ -8,8 +8,8 @@
 package selector
 
 import (
-	"github.com/shubam-disseqt/z-code-reviewer/internal/filetype"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/filetype"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // effectivePath is the path we filter against. For a deletion (NewPath is

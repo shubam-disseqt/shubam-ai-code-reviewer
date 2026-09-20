@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gh"
 )
 
 // jaccard is word-level Jaccard similarity, lowercased, split on whitespace.

@@ -1,6 +1,6 @@
 # Rules for AI-assisted contributions
 
-This file governs contributions to `z-code-reviewer` made with the help
+This file governs contributions to `shubam-ai-code-reviewer` made with the help
 of AI coding assistants. It applies to humans using AI, and equally to
 autonomous AI agents opening PRs directly.
 
@@ -42,7 +42,7 @@ autonomous AI agents opening PRs directly.
   local pass.
 - If the AI's output touches attribution, licensing, or the porting
   map in [docs/PORTING.md](docs/PORTING.md), flag it explicitly in the PR body.
-- The project uses `zreview review` on itself when v1 ships. Until
+- The project uses `sacr review` on itself when v1 ships. Until
   then, AI-generated PRs receive extra scrutiny by convention.
 
 ## Rules for autonomous AI agents opening PRs

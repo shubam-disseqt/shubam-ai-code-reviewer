@@ -1,6 +1,6 @@
-# Running zreview on Windows
+# Running sacr on Windows
 
-zreview is developed primarily on Linux and macOS. Windows support is
+sacr is developed primarily on Linux and macOS. Windows support is
 best-effort: `ci-windows.yml` runs build + race tests on `windows-latest`,
 currently as an informational (non-blocking) job while we triage the first
 wave of platform-specific failures.
@@ -22,7 +22,7 @@ native-Windows case.
 - Go, matching the version pinned in `go.mod` (currently 1.26.x). Get it
   from https://go.dev/dl/ or `winget install GoLang.Go`.
 - Git for Windows. `winget install Git.Git`.
-- A C toolchain is **not** required — zreview uses `modernc.org/sqlite`
+- A C toolchain is **not** required — sacr uses `modernc.org/sqlite`
   (pure Go), so `CGO_ENABLED=0` builds fine.
 
 ## Line endings
@@ -50,7 +50,7 @@ git reset --hard
 
 ## Path separators
 
-Anywhere zreview stores or compares paths internally, it uses
+Anywhere sacr stores or compares paths internally, it uses
 `filepath.Join` and `filepath.Rel`, which do the right thing on both
 platforms. When paths cross a serialization boundary — session log JSON,
 SQLite index rows, SARIF output — they are normalized to forward slashes
@@ -65,7 +65,7 @@ Places to watch when editing code:
 - `internal/gitcmd/` — spawns `git`; path arguments must be OS-native.
 - `internal/session/` — writes newline-delimited JSON; the newline is `\n`
   regardless of platform, and paths inside the JSON are forward-slash.
-- `cmd/zreview/review_cmd.go` — `--repo` accepts either separator; it's
+- `cmd/sacr/review_cmd.go` — `--repo` accepts either separator; it's
   canonicalized via `pathutil.CanonicalPath`.
 
 Avoid string-joining paths by hand. `"a" + "/" + "b"` will bite you on
@@ -80,16 +80,16 @@ NTFS is case-insensitive by default but case-preserving. Two gotchas:
    ends, and only with `strings.EqualFold` if you know both came from the
    filesystem.
 2. Git on Windows will happily let you commit `Foo.go` and `foo.go` as
-   two entries. zreview's file walkers see one; the index may see the
+   two entries. sacr's file walkers see one; the index may see the
    other. If you produce or consume file lists, run them through
    `filepath.Clean` and stick to the case Git returns.
 
 ## External tools
 
-zreview shells out to `git`, and optionally `semgrep`, `gitleaks`, and
+sacr shells out to `git`, and optionally `semgrep`, `gitleaks`, and
 `govulncheck`. On Windows these must be on `%PATH%`. If your project uses
 a repo-local `.venv` or `node_modules/.bin` for scanners, add it to PATH
-in the same shell before invoking `zreview`.
+in the same shell before invoking `sacr`.
 
 `internal/llm/keycmd_windows.go` already handles the API-key subprocess
 via `cmd.exe /c`; `keycmd_unix.go` uses `sh -c`. If you add another

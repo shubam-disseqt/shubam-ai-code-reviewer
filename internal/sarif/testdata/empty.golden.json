@@ -5,9 +5,9 @@
     {
       "tool": {
         "driver": {
-          "name": "zreview",
+          "name": "sacr",
           "version": "v0.2.0",
-          "informationUri": "https://github.com/shubam-disseqt/z-code-reviewer",
+          "informationUri": "https://github.com/shubam-disseqt/shubam-ai-code-reviewer",
           "rules": []
         }
       },

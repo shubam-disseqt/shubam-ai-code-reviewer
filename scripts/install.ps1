@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 disseqt
 
-# Install the zreview (z-code-reviewer) CLI from GitHub releases on Windows.
-#   irm https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/install.ps1 | iex
+# Install the sacr (shubam-ai-code-reviewer) CLI from GitHub releases on Windows.
+#   irm https://raw.githubusercontent.com/shubam-disseqt/shubam-ai-code-reviewer/main/install.ps1 | iex
 # Prefer to inspect first:
-#   irm https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/install.ps1 -OutFile install.ps1
+#   irm https://raw.githubusercontent.com/shubam-disseqt/shubam-ai-code-reviewer/main/install.ps1 -OutFile install.ps1
 #   notepad install.ps1   # review, then: .\install.ps1
-# Env: ZREVIEW_INSTALL_DIR (default $env:LOCALAPPDATA\Programs\zreview), ZREVIEW_VERSION (default latest),
-# ZREVIEW_GITHUB_MIRROR (default unset; download the binary through a mirror domain).
+# Env: SACR_INSTALL_DIR (default $env:LOCALAPPDATA\Programs\sacr), SACR_VERSION (default latest),
+# SACR_GITHUB_MIRROR (default unset; download the binary through a mirror domain).
 # Requires PowerShell 5.1+ or PowerShell 7+.
 
 $ErrorActionPreference = 'Stop'
@@ -17,7 +17,7 @@ function Err([string]$Message) {
     exit 1
 }
 
-function Get-ZreviewArch {
+function Get-SacrArch {
     $arch = $env:PROCESSOR_ARCHITECTURE
     if ([string]::IsNullOrEmpty($arch)) {
         Err 'unable to detect architecture (PROCESSOR_ARCHITECTURE is empty); please set it manually'
@@ -29,8 +29,8 @@ function Get-ZreviewArch {
     }
 }
 
-function Resolve-ZreviewVersion([string]$Repo) {
-    $version = $env:ZREVIEW_VERSION
+function Resolve-SacrVersion([string]$Repo) {
+    $version = $env:SACR_VERSION
     if (-not [string]::IsNullOrWhiteSpace($version)) {
         return $version.Trim()
     }
@@ -56,13 +56,13 @@ function Get-ChecksumFromFile([string]$ChecksumFile, [string]$AssetName) {
     return $null
 }
 
-function Install-ZreviewBinary([string]$Source, [string]$InstallDir, [string]$BinName) {
+function Install-SacrBinary([string]$Source, [string]$InstallDir, [string]$BinName) {
     try {
         New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
         $dest = Join-Path $InstallDir $BinName
         Copy-Item -LiteralPath $Source -Destination $dest -Force
     } catch {
-        Err "$InstallDir is not writable; set ZREVIEW_INSTALL_DIR to a writable path"
+        Err "$InstallDir is not writable; set SACR_INSTALL_DIR to a writable path"
     }
 }
 
@@ -93,27 +93,27 @@ try {
     # Ignore if the runtime already negotiates modern TLS.
 }
 
-$Repo = 'shubam-disseqt/z-code-reviewer'
-$Bin = 'zreview.exe'
-$AssetPrefix = 'zreview'
-$DefaultInstallDir = Join-Path $env:LOCALAPPDATA 'Programs\zreview'
-$InstallDir = if (-not [string]::IsNullOrWhiteSpace($env:ZREVIEW_INSTALL_DIR)) {
-    $env:ZREVIEW_INSTALL_DIR.Trim()
+$Repo = 'shubam-disseqt/shubam-ai-code-reviewer'
+$Bin = 'sacr.exe'
+$AssetPrefix = 'sacr'
+$DefaultInstallDir = Join-Path $env:LOCALAPPDATA 'Programs\sacr'
+$InstallDir = if (-not [string]::IsNullOrWhiteSpace($env:SACR_INSTALL_DIR)) {
+    $env:SACR_INSTALL_DIR.Trim()
 } else {
     $DefaultInstallDir
 }
 
-$arch = Get-ZreviewArch
+$arch = Get-SacrArch
 $os = 'windows'
-$Version = Resolve-ZreviewVersion $Repo
+$Version = Resolve-SacrVersion $Repo
 $asset = "$AssetPrefix-$os-$arch.exe"
-$Mirror = if (-not [string]::IsNullOrWhiteSpace($env:ZREVIEW_GITHUB_MIRROR)) {
-    $env:ZREVIEW_GITHUB_MIRROR.Trim() -replace '^https?://' -replace '/$'
+$Mirror = if (-not [string]::IsNullOrWhiteSpace($env:SACR_GITHUB_MIRROR)) {
+    $env:SACR_GITHUB_MIRROR.Trim() -replace '^https?://' -replace '/$'
 } else {
     $null
 }
 if ($Mirror -and $Mirror -match '\s') {
-    Err "ZREVIEW_GITHUB_MIRROR contains spaces: '$Mirror'"
+    Err "SACR_GITHUB_MIRROR contains spaces: '$Mirror'"
 }
 if ($Mirror) {
     [Console]::Error.WriteLine("warning: downloading from unofficial GitHub mirror `"$Mirror`" (checksum integrity is not guaranteed)")
@@ -122,7 +122,7 @@ if ($Mirror) {
     $base = "https://github.com/$Repo/releases/download/$Version"
 }
 
-$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("zreview-install-" + [guid]::NewGuid().ToString('N'))
+$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("sacr-install-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
 try {
@@ -151,7 +151,7 @@ try {
         Err "checksum mismatch for $asset (got $got, want $want)"
     }
 
-    Install-ZreviewBinary $assetPath $InstallDir $Bin
+    Install-SacrBinary $assetPath $InstallDir $Bin
 
     Write-Host "installed $Bin $Version -> $InstallDir\$Bin"
     Show-PostInstallPathNotice $Bin $InstallDir

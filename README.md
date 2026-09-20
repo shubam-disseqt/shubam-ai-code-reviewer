@@ -1,17 +1,17 @@
 <div align="center">
 
-# zreview
+# sacr
 
 **AI code review that ships with your PRs.**
 Deterministic engineering wrapped around a thin agent loop. One binary. Real bugs, not noise.
 
-[![CI](https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/ci.yml/badge.svg)](https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/ci.yml)
-[![govulncheck](https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/shubam-disseqt/z-code-reviewer/actions/workflows/govulncheck.yml)
+[![CI](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/actions/workflows/ci.yml/badge.svg)](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/actions/workflows/ci.yml)
+[![govulncheck](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/actions/workflows/govulncheck.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=flat-square)](LICENSE)
 [![Go 1.26+](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&style=flat-square)](go.mod)
 [![SLSA](https://img.shields.io/badge/SLSA-build--provenance-D4AF37?style=flat-square)](https://slsa.dev)
 
-[Quick start](#quick-start) · [Architecture](#architecture) · [Docs](https://shubam-disseqt.github.io/z-code-reviewer/) · [Roadmap](ROADMAP.md)
+[Quick start](#quick-start) · [Architecture](#architecture) · [Docs](https://shubam-disseqt.github.io/shubam-ai-code-reviewer/) · [Roadmap](ROADMAP.md)
 
 </div>
 
@@ -36,27 +36,27 @@ Deterministic engineering wrapped around a thin agent loop. One binary. Real bug
 
 ```bash
 # 1. Install
-brew install shubam-disseqt/tap/zreview      # or: npm i -g zreview
+brew install shubam-disseqt/tap/sacr      # or: npm i -g sacr
 
 # 2. Configure the LLM
 export OPENAI_API_KEY=sk-...
-export ZREVIEW_MODEL=gpt-4o-mini             # or claude-sonnet-4-6
+export SACR_MODEL=gpt-4o-mini             # or claude-sonnet-4-6
 
 # 3. Review a diff
-zreview review                               # workspace diff (uncommitted)
-zreview review --from main --to feature/x    # branch range
-zreview review --commit abc123               # single commit
+sacr review                               # workspace diff (uncommitted)
+sacr review --from main --to feature/x    # branch range
+sacr review --commit abc123               # single commit
 
 # 4. Post to a GitHub PR
 export GITHUB_TOKEN=ghp_...
 export GITHUB_REPOSITORY=owner/repo
-zreview review --pr 42 --format github
+sacr review --pr 42 --format github
 ```
 
 ### GitHub Actions
 
 ```yaml
-- uses: shubam-disseqt/z-code-reviewer@v1
+- uses: shubam-disseqt/shubam-ai-code-reviewer@v1
   with:
     pr-number: ${{ github.event.pull_request.number }}
     api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -69,7 +69,7 @@ Three lines. Every PR gets an inline review with effort score, findings, and a p
 
 ## What it does
 
-Every `zreview review` produces:
+Every `sacr review` produces:
 
 1. **Inline PR comments** on the exact lines with real bugs, tagged by severity + category
 2. **A managed PR description block** with the walkthrough, findings table, and risk assessment
@@ -90,7 +90,7 @@ Push a fix commit — the resolved findings drop, unfixed ones carry, new bugs s
 flowchart LR
   subgraph Input
     A1[git diff]
-    A2[.zreview/*<br/>policy config]
+    A2[.sacr/*<br/>policy config]
     A3[env: keys models rules DB]
   end
 
@@ -199,7 +199,7 @@ flowchart TD
 
 ## Compared to alternatives
 
-|  | zreview | CodeRabbit | Greptile | Ellipsis |
+|  | sacr | CodeRabbit | Greptile | Ellipsis |
 |---|---|---|---|---|
 | Deployment model | Single binary | SaaS | SaaS | SaaS |
 | Cost per PR | ~$0.006 | $8-15 (unlimited) | $12/user/mo | $20/user/mo |
@@ -211,7 +211,7 @@ flowchart TD
 | Choice of LLM provider | 4 providers | Vendor-locked | Vendor-locked | Vendor-locked |
 | Custom scoring policy | YAML | No | No | No |
 
-zreview trades polish (no web dashboard, no chat interface) for **control** (bring your own model, own the data, verify every claim).
+sacr trades polish (no web dashboard, no chat interface) for **control** (bring your own model, own the data, verify every claim).
 
 ---
 
@@ -232,7 +232,7 @@ Every review produces a **0-10 reviewer-effort score** with a full audit table s
 | Findings            | 1 CRIT / 5 HIGH           | +4.00 (cap)  |
 ```
 
-Deterministic — same diff + same policy → same score. Override the policy via `.zreview/effort.yaml`.
+Deterministic — same diff + same policy → same score. Override the policy via `.sacr/effort.yaml`.
 
 | Score | Label | Dot |
 |---|---|---|
@@ -261,7 +261,7 @@ return process(user)
 
 **Categories:** extract helper · guard-clause conversion · error wrapping · idiomatic Go · naming · missing tests · missing docs.
 
-Caps: 5 per file, 20 per PR. Toggle via `.zreview/config.yaml`:
+Caps: 5 per file, 20 per PR. Toggle via `.sacr/config.yaml`:
 
 ```yaml
 suggestions:
@@ -283,7 +283,7 @@ flowchart LR
 ```
 
 ### Overlap detection
-When multiple open PRs touch the same files, zreview surfaces the collision:
+When multiple open PRs touch the same files, sacr surfaces the collision:
 
 ```
 > Potential overlap with other open PRs:
@@ -291,7 +291,7 @@ When multiple open PRs touch the same files, zreview surfaces the collision:
 > - #3 (merge-conflict risk) — Both PRs modify auth middleware
 ```
 
-Contributes up to `+1.5` to the effort score. Disable with `ZREVIEW_OVERLAP_ENABLED=0`.
+Contributes up to `+1.5` to the effort score. Disable with `SACR_OVERLAP_ENABLED=0`.
 
 ### Deterministic scanners
 Best-effort integration with three tools:
@@ -302,25 +302,25 @@ Best-effort integration with three tools:
 | **semgrep** | Pattern-based bugs & security | SARIF (bundled rules for JS / Python / Ruby) |
 | **govulncheck** | Known CVEs in Go dependencies | SARIF |
 
-Missing binaries are logged and skipped — never fatal. Bundled semgrep rules ship for JavaScript, Python, and Ruby (36 curated rules). Override with `ZREVIEW_SEMGREP_CONFIG=<path>` or disable with `ZREVIEW_DISABLE_SEMGREP_PRESETS=1`.
+Missing binaries are logged and skipped — never fatal. Bundled semgrep rules ship for JavaScript, Python, and Ruby (36 curated rules). Override with `SACR_SEMGREP_CONFIG=<path>` or disable with `SACR_DISABLE_SEMGREP_PRESETS=1`.
 
 ### Incremental re-review
-Every finding has a content-hash **fingerprint** stored in `~/.zreview/findings/`. On the next run:
+Every finding has a content-hash **fingerprint** stored in `~/.sacr/findings/`. On the next run:
 
 - **Resolved** — finding was in the previous run, not in this one → cleaned up
 - **Carried** — finding survives both runs → not re-posted, just tracked
 - **New** — finding introduced by the fix commit
 
-Stale zreview-authored comments are identified via a hidden `<!-- zreview:fp:HEX -->` marker in the comment body and deleted before the fresh batch posts. No duplicate spam across pushes.
+Stale sacr-authored comments are identified via a hidden `<!-- sacr:fp:HEX -->` marker in the comment body and deleted before the fresh batch posts. No duplicate spam across pushes.
 
 ### Model tiering
 
 | Tier | Purpose | Cost profile |
 |---|---|---|
-| **Main** (`ZREVIEW_MODEL`) | Main task loop + memory compression | Sonnet-class |
-| **Cheap** (`ZREVIEW_CHEAP_MODEL`) | Summarizer + labeler (parallel) | Haiku / Flash / DeepSeek |
+| **Main** (`SACR_MODEL`) | Main task loop + memory compression | Sonnet-class |
+| **Cheap** (`SACR_CHEAP_MODEL`) | Summarizer + labeler (parallel) | Haiku / Flash / DeepSeek |
 
-Main tier has session-key affinity for prompt-cache reuse. Setting only `ZREVIEW_CHEAP_MODEL` re-uses the main client but overrides the model per call.
+Main tier has session-key affinity for prompt-cache reuse. Setting only `SACR_CHEAP_MODEL` re-uses the main client but overrides the model per call.
 
 ---
 
@@ -328,15 +328,15 @@ Main tier has session-key affinity for prompt-cache reuse. Setting only `ZREVIEW
 
 | Command | Purpose |
 |---|---|
-| `zreview review` | Run the full review pipeline |
-| `zreview index` | Build/refresh SQLite code index |
-| `zreview overlap` | Detect cross-PR collisions |
-| `zreview metrics` | HTML dashboard of past runs (cost, findings, duration) |
-| `zreview rules list` | List loaded org rules |
-| `zreview rules sync` | Force-refresh org rules |
-| `zreview doctor` | Pre-flight environment check (Bedrock, DeepSeek, git, scanners) |
-| `zreview docs` | Serve embedded offline docs on loopback |
-| `zreview version` | Print version / commit / build info |
+| `sacr review` | Run the full review pipeline |
+| `sacr index` | Build/refresh SQLite code index |
+| `sacr overlap` | Detect cross-PR collisions |
+| `sacr metrics` | HTML dashboard of past runs (cost, findings, duration) |
+| `sacr rules list` | List loaded org rules |
+| `sacr rules sync` | Force-refresh org rules |
+| `sacr doctor` | Pre-flight environment check (Bedrock, DeepSeek, git, scanners) |
+| `sacr docs` | Serve embedded offline docs on loopback |
+| `sacr version` | Print version / commit / build info |
 
 **Exit codes:** `0` clean · `1` general error · `3` one or more CRITICAL findings
 
@@ -358,24 +358,24 @@ export DEEPSEEK_API_KEY=sk-...
 export AWS_REGION=us-east-1                    # + AWS_PROFILE for Bedrock
 
 # Model routing
-export ZREVIEW_PROVIDER=openai                 # anthropic | openai | bedrock | deepseek
-export ZREVIEW_MODEL=gpt-4o-mini
-export ZREVIEW_CHEAP_MODEL=deepseek-chat       # optional, saves ~30-40%
+export SACR_PROVIDER=openai                    # anthropic | openai | bedrock | deepseek
+export SACR_MODEL=gpt-4o-mini
+export SACR_CHEAP_MODEL=deepseek-chat          # optional, saves ~30-40%
 
 # GitHub integration
 export GITHUB_TOKEN=ghp_...
 export GITHUB_REPOSITORY=owner/repo
 
 # Storage
-export ZREVIEW_DB_URL=sqlite:///~/.zreview/index.db   # optional index cache
+export SACR_DB_URL=sqlite:///~/.sacr/index.db   # optional index cache
 
 # Feature gates
-export ZREVIEW_UPLOAD_SARIF=1                  # publish scanner findings to Code Scanning
-export ZREVIEW_OVERLAP_ENABLED=0               # disable cross-PR probe
-export ZREVIEW_LOG_FORMAT=json                 # structured logs
+export SACR_UPLOAD_SARIF=1                     # publish scanner findings to Code Scanning
+export SACR_OVERLAP_ENABLED=0                  # disable cross-PR probe
+export SACR_LOG_FORMAT=json                    # structured logs
 ```
 
-**3. Repo-local YAML** under `<repo>/.zreview/`:
+**3. Repo-local YAML** under `<repo>/.sacr/`:
 
 | File | Purpose |
 |---|---|
@@ -396,9 +396,9 @@ Full env-var list: [`docs/configuration.html`](docs/configuration.html)
 | `stdout` | Local diagnosis | Terminal (ANSI-colored) |
 | `json` | CI / dashboards | File or stdout |
 | `github` | PR review | Inline comments + description block + labels |
-| `sarif` | GitHub Code Scanning | File; upload via `ZREVIEW_UPLOAD_SARIF=1` |
+| `sarif` | GitHub Code Scanning | File; upload via `SACR_UPLOAD_SARIF=1` |
 
-The `github` format posts inline comments batched via `POST /pulls/{n}/reviews` (avoids per-comment secondary rate limits), identifies stale zreview comments by fingerprint marker and deletes them before posting the fresh set, and updates the PR description in-place using `<!-- ZREVIEW:BEGIN -->` / `<!-- ZREVIEW:END -->` markers.
+The `github` format posts inline comments batched via `POST /pulls/{n}/reviews` (avoids per-comment secondary rate limits), identifies stale sacr comments by fingerprint marker and deletes them before posting the fresh set, and updates the PR description in-place using `<!-- SACR:BEGIN -->` / `<!-- SACR:END -->` markers.
 
 ---
 
@@ -490,18 +490,18 @@ Manual provider-testing protocols: [`docs/PROVIDER_TESTING.md`](docs/PROVIDER_TE
 
 ```bash
 # Clone
-git clone git@github.com:shubam-disseqt/z-code-reviewer.git
-cd z-code-reviewer
+git clone git@github.com:shubam-disseqt/shubam-ai-code-reviewer.git
+cd shubam-ai-code-reviewer
 
 # Build
-go build ./cmd/zreview
+go build ./cmd/sacr
 
 # Test — 34 packages, all covered
 go test ./...
 go test -race ./...
 
 # Dogfood
-./zreview review --from main --to HEAD
+./sacr review --from main --to HEAD
 ```
 
 **Contributing:** read [`AGENTS.md`](AGENTS.md) for rules on AI-assisted PRs.
@@ -509,7 +509,7 @@ go test -race ./...
 **Project layout:**
 
 ```
-cmd/zreview/           CLI entry + pipeline glue
+cmd/sacr/              CLI entry + pipeline glue
 internal/              34 focused packages
 docs/                  Offline HTML docs (embedded)
   PORTING.md           Per-file attribution to upstream projects
@@ -534,6 +534,6 @@ AGENTS.md              Rules for AI-assisted contributions
 
 <div align="center">
 
-**Apache-2.0** · [Documentation](https://shubam-disseqt.github.io/z-code-reviewer/) · [Issues](https://github.com/shubam-disseqt/z-code-reviewer/issues) · [Discussions](https://github.com/shubam-disseqt/z-code-reviewer/discussions)
+**Apache-2.0** · [Documentation](https://shubam-disseqt.github.io/shubam-ai-code-reviewer/) · [Issues](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/issues) · [Discussions](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/discussions)
 
 </div>

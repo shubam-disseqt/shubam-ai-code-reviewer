@@ -35,25 +35,25 @@ Phase 9 hardening).
     `internal/chunker/` (100%), `internal/conventions/` (91.9%)
 - **Phase 4b** (Mira index core) — `internal/index/*` (83.9%),
   `internal/manifests/*` (90.9%), `internal/extract/*` (93.2%).
-  `zreview index --repo .` produces an index in SQLite or Postgres.
+  `sacr index --repo .` produces an index in SQLite or Postgres.
 - **Phase 5** (Mira overlap) — `internal/overlap/*` (96.4%),
-  `internal/gh/*` (87.8%). `zreview overlap` surfaces candidate
+  `internal/gh/*` (87.8%). `sacr overlap` surfaces candidate
   overlapping PRs.
 - **Phase 6** (Precision wiring) — `internal/selector/*` (100%),
   `internal/reviewctx/*` (89.4%). Line-snap + dedup wired end-to-end.
 - **Phase 7** (Org rules) — `internal/rules/*` (93.7%). YAML rules
   pulled at review time, scoped by glob, injected into the prompt.
-- **Phase 8** (Review engine wire-up) — `cmd/zreview/review_cmd.go`
+- **Phase 8** (Review engine wire-up) — `cmd/sacr/review_cmd.go`
   orchestrates the full pipeline; `internal/session/*` (91.8%) writes
   the JSONL append log; `--format stdout | json | github` supported;
   GitHub PR comment poster via `internal/gh`.
 - **Phase 9 (partial)** — matrix release with SHA-256 sums and SLSA
   build-provenance attestation, `scripts/install.sh` / `scripts/install.ps1`,
-  `action.yml`, Dockerfile, and `zreview doctor` are in place.
+  `action.yml`, Dockerfile, and `sacr doctor` are in place.
 
 ## Phase 9 — Production hardening (remaining)
 
-- [x] npm publishing via platform-stub packages + `bin/zreview.js` launcher
+- [x] npm publishing via platform-stub packages + `bin/sacr.js` launcher
   (see `npm/` and the `npm-publish` job in `.github/workflows/release.yml`)
 - [x] `govulncheck` in CI (`.github/workflows/govulncheck.yml`, plus a
   local `make vuln` target)
@@ -70,7 +70,7 @@ Phase 9 hardening).
   CSS so the same files can be embedded via `//go:embed` with no
   build step — one source of truth for the offline viewer and the
   online copy.
-- **Done** — `zreview docs` serves the built site from `embed.FS`
+- **Done** — `sacr docs` serves the built site from `embed.FS`
   (loopback-only, strict CSP, host allowlist).
 - **Done** — GitHub Pages deploy for the online copy — see
   `.github/workflows/pages.yml`. Triggers on push to `main` when
@@ -94,16 +94,16 @@ kick off.
 
 Two-tier LLM client resolution: `Main` (Sonnet-class, reviewer) and
 `Cheap` (Haiku / Flash / DeepSeek — summary, labeling). Env vars
-`ZREVIEW_CHEAP_MODEL` + `ZREVIEW_CHEAP_PROVIDER` opt in; cheap falls
+`SACR_CHEAP_MODEL` + `SACR_CHEAP_PROVIDER` opt in; cheap falls
 back to Main when unset. Foundational for Phases 15 and 17.
 
 Deliverable: `internal/llm/tiers.go` + `Tiers{Main, Cheap}` consumed
-by `cmd/zreview/review_cmd.go`. Measured target: 30-40% cost cut on
+by `cmd/sacr/review_cmd.go`. Measured target: 30-40% cost cut on
 reviews that add PR summary + labels (Ellipsis benchmark).
 
 ## Phase 13 — Fingerprinting + incremental re-review (shipped)
 
-Persistent per-PR findings under `~/.zreview/findings/<owner>_<repo>_<pr>.json`.
+Persistent per-PR findings under `~/.sacr/findings/<owner>_<repo>_<pr>.json`.
 Stable fingerprint = `sha256(owner|repo|category|normalized_path|symbol|normalized_snippet)`,
 whitespace-collapsed and comment-stripped so pure formatting doesn't
 reset state. On re-review: findings whose file is untouched
@@ -111,7 +111,7 @@ carry-over as `unchanged → keep`; matching fresh finding →
 `resolved → drop`; files touched with nothing found → `fixed → resolve`.
 
 Deliverable: `internal/fingerprint/*` + `internal/findings/*` +
-integration in `cmd/zreview/review_cmd.go`. Measured target: 40-50%
+integration in `cmd/sacr/review_cmd.go`. Measured target: 40-50%
 token cut on iterative PR pushes (Ellipsis benchmark).
 
 ## Phase 14 — Deterministic security scanners (shipped)
@@ -137,14 +137,14 @@ scanners in an `errgroup`. Summarizer produces
 empty on failure.
 
 Deliverable: `internal/prompts/{summarizer,labeler}.md` +
-`cmd/zreview/{summary,label}.go`. Consumed by Phase 17's PR
+`cmd/sacr/{summary,label}.go`. Consumed by Phase 17's PR
 description block and by GitHub labels.
 
 ## Phase 16 — Scoring engine (shipped)
 
 Deterministic policy: `Score(finding) → {Severity, Confidence, Impact}`,
 table-driven from `internal/scoring/policy.yaml` (embedded default,
-overridable via `ZREVIEW_SCORING_POLICY` or `.zreview/scoring.yaml`).
+overridable via `SACR_SCORING_POLICY` or `.sacr/scoring.yaml`).
 `emit.go`'s `filterResolved` becomes `filterByScore`; `--min-severity`
 flag gates the publish stream (default `MEDIUM`).
 
@@ -157,14 +157,14 @@ data ruled out reflection loops as a substitute.
   against the schema. `--format sarif` emits to file or stdout.
 - `internal/gh/` gains `GetPRBody`, `UpdatePRBody`, `AddLabels`,
   `UploadSARIF`. Feature-gate initial SARIF upload behind
-  `ZREVIEW_UPLOAD_SARIF=1`.
-- `cmd/zreview/description.go` — idempotent PR body update between
-  `<!-- ZREVIEW:BEGIN -->` and `<!-- ZREVIEW:END -->` markers with
+  `SACR_UPLOAD_SARIF=1`.
+- `cmd/sacr/description.go` — idempotent PR body update between
+  `<!-- SACR:BEGIN -->` and `<!-- SACR:END -->` markers with
   the Phase 15 walkthrough + Phase 16 severity summary.
 
 Deliverable: security findings flow to GitHub Code Scanning (SARIF);
 review comments stay on the diff; PR description carries the
-zreview-managed walkthrough block.
+sacr-managed walkthrough block.
 
 ## Explicitly excluded (from the LangGraph-Edition design)
 

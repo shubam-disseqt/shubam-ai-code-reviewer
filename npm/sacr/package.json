@@ -1,0 +1,41 @@
+{
+  "name": "sacr",
+  "version": "0.0.0",
+  "description": "shubam-ai-code-reviewer (sacr) — Go CLI for AI-assisted code review. Distributed as a native binary via platform sub-packages.",
+  "homepage": "https://github.com/shubam-disseqt/shubam-ai-code-reviewer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shubam-disseqt/shubam-ai-code-reviewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shubam-disseqt/shubam-ai-code-reviewer/issues"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "sacr",
+    "shubam-ai-code-reviewer",
+    "code-review",
+    "llm",
+    "ai",
+    "static-analysis",
+    "cli"
+  ],
+  "bin": {
+    "sacr": "bin/sacr.js"
+  },
+  "files": [
+    "bin/sacr.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "sacr-linux-x64": "0.0.0",
+    "sacr-linux-arm64": "0.0.0",
+    "sacr-darwin-x64": "0.0.0",
+    "sacr-darwin-arm64": "0.0.0",
+    "sacr-win32-x64": "0.0.0",
+    "sacr-win32-arm64": "0.0.0"
+  }
+}

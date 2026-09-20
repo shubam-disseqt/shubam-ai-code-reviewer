@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/filetype"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/filetype"
 )
 
 // Concurrency + size thresholds. Match Mira exactly — see PORTING.md §7

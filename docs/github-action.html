@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>GitHub Action &mdash; z-code-reviewer</title>
+  <title>GitHub Action &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -36,7 +36,7 @@
 
   <main>
     <h1>GitHub Action</h1>
-    <p class="lede">Drop the <code>shubam-disseqt/z-code-reviewer</code> action into a workflow to run <code>zreview review</code> on every pull request. Composite action &mdash; installs the CLI and calls it in the same job.</p>
+    <p class="lede">Drop the <code>shubam-disseqt/shubam-ai-code-reviewer</code> action into a workflow to run <code>sacr review</code> on every pull request. Composite action &mdash; installs the CLI and calls it in the same job.</p>
 
     <h2 id="minimal">Minimal workflow</h2>
     <pre><code># .github/workflows/review.yml
@@ -57,7 +57,7 @@ jobs:
         with:
           fetch-depth: 0        # required so the PR base ref is available
 
-      - uses: shubam-disseqt/z-code-reviewer@v0
+      - uses: shubam-disseqt/shubam-ai-code-reviewer@v0
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}</code></pre>
 
@@ -70,7 +70,7 @@ jobs:
       <tbody>
         <tr>
           <td><code>version</code></td>
-          <td>zreview version to install. Empty means latest release.</td>
+          <td>sacr version to install. Empty means latest release.</td>
           <td>latest</td>
         </tr>
         <tr>
@@ -100,17 +100,17 @@ jobs:
         </tr>
         <tr>
           <td><code>db-url</code></td>
-          <td><code>ZREVIEW_DB_URL</code> passthrough for a persistent index.</td>
+          <td><code>SACR_DB_URL</code> passthrough for a persistent index.</td>
           <td>none (JIT mode)</td>
         </tr>
         <tr>
           <td><code>rules-repo</code></td>
-          <td><code>ZREVIEW_ORG_RULES_REPO</code> passthrough &mdash; <code>owner/repo[@ref]</code>.</td>
+          <td><code>SACR_ORG_RULES_REPO</code> passthrough &mdash; <code>owner/repo[@ref]</code>.</td>
           <td>none</td>
         </tr>
         <tr>
           <td><code>extra-args</code></td>
-          <td>Additional flags spliced into the <code>zreview review</code> call.</td>
+          <td>Additional flags spliced into the <code>sacr review</code> call.</td>
           <td>&mdash;</td>
         </tr>
       </tbody>
@@ -126,11 +126,11 @@ jobs:
     <p>If you also want the cross-PR overlap surface, that already reads via <code>pull-requests: read</code>, which <code>write</code> subsumes. Nothing extra to add. <code>security-events: write</code> is only needed when you opt into SARIF upload &mdash; see <a href="/sarif.html">SARIF output</a>.</p>
 
     <h2 id="code-scanning">Code Scanning integration</h2>
-    <p>Set <code>ZREVIEW_UPLOAD_SARIF=1</code> to upload scanner findings (gitleaks / semgrep / govulncheck) to GitHub Code Scanning in the same run that posts inline comments. Scanner-sourced comments are routed to SARIF only; LLM comments continue to land inline. See <a href="/sarif.html">SARIF output</a> for the severity mapping and fingerprint semantics.</p>
-    <pre><code>- uses: shubam-disseqt/z-code-reviewer@v0
+    <p>Set <code>SACR_UPLOAD_SARIF=1</code> to upload scanner findings (gitleaks / semgrep / govulncheck) to GitHub Code Scanning in the same run that posts inline comments. Scanner-sourced comments are routed to SARIF only; LLM comments continue to land inline. See <a href="/sarif.html">SARIF output</a> for the severity mapping and fingerprint semantics.</p>
+    <pre><code>- uses: shubam-disseqt/shubam-ai-code-reviewer@v0
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-    ZREVIEW_UPLOAD_SARIF: "1"</code></pre>
+    SACR_UPLOAD_SARIF: "1"</code></pre>
 
     <div class="note">
       <strong>Forked PRs.</strong> By default, GitHub gives fork PRs a read-only token &mdash; the action cannot post comments. Configure workflow_run or pull_request_target patterns carefully if you need reviews on fork PRs, and read the <a href="https://securitylab.github.com/research/github-actions-preventing-pwn-requests/">preventing pwn-requests</a> guide first. Do not blindly copy <code>pull_request_target</code> patterns.
@@ -151,7 +151,7 @@ jobs:
 
     <h2 id="pinning">Pinning versions</h2>
     <p>Composite actions pin best by SHA. If you need reproducible reviews across PRs, replace the tag with a commit SHA:</p>
-    <pre><code>- uses: shubam-disseqt/z-code-reviewer@&lt;40-char-sha&gt;
+    <pre><code>- uses: shubam-disseqt/shubam-ai-code-reviewer@&lt;40-char-sha&gt;
   with:
     version: v0.1.0             # pin the CLI too</code></pre>
     <p>Renovate and Dependabot both understand this form and will PR updates on release.</p>
@@ -160,23 +160,23 @@ jobs:
 
     <h3>Shared index database</h3>
     <p>Point every reviewer at the same Postgres so summaries are computed once. Populate the DB from a scheduled indexer job, not from the review workflow itself.</p>
-    <pre><code>- uses: shubam-disseqt/z-code-reviewer@v0
+    <pre><code>- uses: shubam-disseqt/shubam-ai-code-reviewer@v0
   with:
-    db-url: ${{ secrets.ZREVIEW_DB_URL }}
+    db-url: ${{ secrets.SACR_DB_URL }}
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}</code></pre>
 
     <h3>Org rules from a separate repo</h3>
-    <pre><code>- uses: shubam-disseqt/z-code-reviewer@v0
+    <pre><code>- uses: shubam-disseqt/shubam-ai-code-reviewer@v0
   with:
     rules-repo: disseqt/z-review-rules@main
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-    ZREVIEW_ORG_RULES_TOKEN: ${{ secrets.RULES_REPO_READ_TOKEN }}</code></pre>
+    SACR_ORG_RULES_TOKEN: ${{ secrets.RULES_REPO_READ_TOKEN }}</code></pre>
 
     <h3>Block merge on blocker findings</h3>
     <p>Review exit code <code>3</code> means &ldquo;completed, found a blocker.&rdquo; Wire that to a required check:</p>
-    <pre><code>- uses: shubam-disseqt/z-code-reviewer@v0
+    <pre><code>- uses: shubam-disseqt/shubam-ai-code-reviewer@v0
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 # The step fails (exit 3) if any comment has severity: blocker.

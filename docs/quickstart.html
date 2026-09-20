@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>Quickstart &mdash; z-code-reviewer</title>
+  <title>Quickstart &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -39,33 +39,33 @@
     <p class="lede">Once binaries ship (Phase 9), this is the shortest path to your first review.</p>
 
     <div class="note">
-      <strong>Not yet functional.</strong> The full <code>zreview review</code> command lands in Phase 8. Today, only <code>zreview version</code> and <code>zreview docs</code> work end-to-end. See <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/ROADMAP.md">ROADMAP.md</a> for phase status.
+      <strong>Not yet functional.</strong> The full <code>sacr review</code> command lands in Phase 8. Today, only <code>sacr version</code> and <code>sacr docs</code> work end-to-end. See <a href="https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/ROADMAP.md">ROADMAP.md</a> for phase status.
     </div>
 
     <h2>Install</h2>
-    <pre><code>curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/z-code-reviewer/main/install.sh | sh</code></pre>
+    <pre><code>curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/shubam-ai-code-reviewer/main/install.sh | sh</code></pre>
 
     <h2>Configure a provider</h2>
     <pre><code>export ANTHROPIC_API_KEY=...        # or OPENAI_API_KEY, or use Bedrock via the AWS credential chain</code></pre>
 
     <h2>Optional: point at an index database</h2>
     <p>For repo-wide context and cross-PR overlap, provide a Postgres or local SQLite database:</p>
-    <pre><code>export ZREVIEW_DB_URL="postgres://user:pass@host:5432/zreview?sslmode=require"
+    <pre><code>export SACR_DB_URL="postgres://user:pass@host:5432/sacr?sslmode=require"
 # or
-export ZREVIEW_DB_URL="sqlite:///path/to/index.db"</code></pre>
+export SACR_DB_URL="sqlite:///path/to/index.db"</code></pre>
 
     <h2>Optional: point at an org rules repo</h2>
-    <pre><code>export ZREVIEW_ORG_RULES_REPO=disseqt/z-review-rules</code></pre>
+    <pre><code>export SACR_ORG_RULES_REPO=disseqt/z-review-rules</code></pre>
 
     <h2>Review the current diff</h2>
     <pre><code>cd your-project
-zreview review --from main --to HEAD --format json --output result.json</code></pre>
+sacr review --from main --to HEAD --format json --output result.json</code></pre>
 
     <h2>Post inline comments to a PR</h2>
-    <pre><code>zreview review --from main --to HEAD --format github --pr 42</code></pre>
+    <pre><code>sacr review --from main --to HEAD --format github --pr 42</code></pre>
 
     <h2>See the docs</h2>
-    <pre><code>zreview docs</code></pre>
+    <pre><code>sacr docs</code></pre>
 
     <footer>
       &copy; 2026 disseqt. Apache-2.0.

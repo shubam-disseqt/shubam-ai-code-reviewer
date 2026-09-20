@@ -1,4 +1,4 @@
-## Curated Python security rules bundled with zreview.
+## Curated Python security rules bundled with sacr.
 ## Bandit-inspired but scoped to high-signal issues.
 ## Override via ZREVIEW_SEMGREP_CONFIG. Disable via ZREVIEW_DISABLE_SEMGREP_PRESETS=1.
 rules:

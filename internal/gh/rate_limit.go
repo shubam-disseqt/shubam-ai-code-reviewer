@@ -39,8 +39,8 @@ func (t *rateLimitedTransport) RoundTrip(req *http.Request) (*http.Response, err
 // or falling back to defaults. rps <= 0 or burst <= 0 falls back to defaults —
 // callers who want "off" should skip the wrapper entirely.
 func newRateLimitedTransport(next http.RoundTripper) http.RoundTripper {
-	rps := envFloat("ZREVIEW_GH_RATE_LIMIT_RPS", defaultRateRPS)
-	burst := envInt("ZREVIEW_GH_RATE_LIMIT_BURST", defaultRateBurst)
+	rps := envFloat("SACR_GH_RATE_LIMIT_RPS", defaultRateRPS)
+	burst := envInt("SACR_GH_RATE_LIMIT_BURST", defaultRateBurst)
 	if rps <= 0 {
 		rps = defaultRateRPS
 	}

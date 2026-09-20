@@ -6,7 +6,7 @@ package diff
 import (
 	"strings"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // ResolveLineNumbers populates StartLine/EndLine on each comment by matching

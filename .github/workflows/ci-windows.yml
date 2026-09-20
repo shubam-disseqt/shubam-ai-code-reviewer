@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           # autocrlf mangles Go source, testdata, and golden files. Force LF.
-          # ponytail: repo-wide autocrlf=false, revisit if a contributor needs mixed line endings.
+          # note: repo-wide autocrlf=false, revisit if a contributor needs mixed line endings.
           fetch-depth: 1
 
       - name: Disable autocrlf

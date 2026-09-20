@@ -1,5 +1,5 @@
-bin/zreview
-bin/zreview.exe
+bin/sacr
+bin/sacr.exe
 bin/*.tar.gz
 bin/*.zip
 node_modules/

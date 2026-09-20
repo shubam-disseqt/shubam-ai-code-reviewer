@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 alibaba/open-code-review Contributors
-// Portions Copyright 2026 disseqt — adapted from alibaba/open-code-review
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors — adapted from alibaba/open-code-review
 // Adapted from alibaba/open-code-review internal/diff/relocation.go
 
 package diff
@@ -9,8 +9,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // BuildReLocationMessages renders the re-location prompt for cm against d.

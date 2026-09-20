@@ -1,4 +1,4 @@
-module github.com/shubam-disseqt/z-code-reviewer
+module github.com/shubam-disseqt/shubam-ai-code-reviewer
 
 go 1.26.2
 

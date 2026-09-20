@@ -1,12 +1,12 @@
-# zreview (npm)
+# sacr (npm)
 
 Deterministic, LLM-free code review CLI. This package is the npm distribution
-channel for [`zreview`](https://github.com/shubam-disseqt/z-code-reviewer).
+channel for [`sacr`](https://github.com/shubam-disseqt/shubam-ai-code-reviewer).
 
 ## Install
 
 ```sh
-npm i -g zreview
+npm i -g sacr
 ```
 
 The `postinstall` step downloads the matching prebuilt binary from GitHub
@@ -15,9 +15,9 @@ Releases and drops it next to a small Node wrapper on your `PATH`.
 ## Use
 
 ```sh
-zreview review
-zreview version
-zreview --help
+sacr review
+sacr version
+sacr --help
 ```
 
 ## Supported platforms
@@ -32,7 +32,7 @@ zreview --help
 | Windows | x64   |
 
 Unsupported platforms fall back to building from source — see the main
-[README](https://github.com/shubam-disseqt/z-code-reviewer#build-from-source).
+[README](https://github.com/shubam-disseqt/shubam-ai-code-reviewer#build-from-source).
 
 ## Environment overrides
 
@@ -44,7 +44,7 @@ Unsupported platforms fall back to building from source — see the main
 ## What ships in this package
 
 - `install.js` — postinstall downloader that fetches the binary tarball.
-- `bin/zreview.js` — Node wrapper that execs the downloaded binary.
+- `bin/sacr.js` — Node wrapper that execs the downloaded binary.
 - Downloaded artifacts land in `bin/` at install time and are ignored by git.
 
 ## License

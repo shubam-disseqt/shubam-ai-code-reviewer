@@ -12,7 +12,7 @@ package index
 import (
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/filetype"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/filetype"
 )
 
 // FileSummary is the top-level record stored per file.

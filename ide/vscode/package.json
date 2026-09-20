@@ -1,7 +1,7 @@
 {
-  "name": "zreview",
-  "displayName": "zreview — AI code reviewer",
-  "description": "Run zreview against the current diff or file and render findings in the Problems panel.",
+  "name": "sacr",
+  "displayName": "sacr — AI code reviewer",
+  "description": "Run sacr against the current diff or file and render findings in the Problems panel.",
   "version": "0.1.0",
   "publisher": "disseqt",
   "license": "Apache-2.0",
@@ -14,33 +14,33 @@
   ],
   "main": "./out/extension.js",
   "activationEvents": [
-    "onCommand:zreview.reviewCurrentDiff",
-    "onCommand:zreview.reviewFile"
+    "onCommand:sacr.reviewCurrentDiff",
+    "onCommand:sacr.reviewFile"
   ],
   "contributes": {
     "commands": [
       {
-        "command": "zreview.reviewCurrentDiff",
-        "title": "zreview: Review Current Diff"
+        "command": "sacr.reviewCurrentDiff",
+        "title": "sacr: Review Current Diff"
       },
       {
-        "command": "zreview.reviewFile",
-        "title": "zreview: Review Current File"
+        "command": "sacr.reviewFile",
+        "title": "sacr: Review Current File"
       }
     ],
     "configuration": {
-      "title": "zreview",
+      "title": "sacr",
       "properties": {
-        "zreview.binaryPath": {
+        "sacr.binaryPath": {
           "type": "string",
-          "default": "zreview",
-          "description": "Path to the zreview binary. Use an absolute path if it is not on PATH."
+          "default": "sacr",
+          "description": "Path to the sacr binary. Use an absolute path if it is not on PATH."
         },
-        "zreview.format": {
+        "sacr.format": {
           "type": "string",
           "default": "json",
           "enum": ["json"],
-          "description": "Output format zreview should emit. Only 'json' is consumed by this extension."
+          "description": "Output format sacr should emit. Only 'json' is consumed by this extension."
         }
       }
     }

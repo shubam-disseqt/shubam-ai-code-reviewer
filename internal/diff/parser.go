@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/gitcmd"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gitcmd"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 var (

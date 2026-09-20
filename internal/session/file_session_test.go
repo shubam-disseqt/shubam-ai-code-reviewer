@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llmloop"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llmloop"
 )
 
 func TestFileSession_ConcurrentAppendNoInterleave(t *testing.T) {

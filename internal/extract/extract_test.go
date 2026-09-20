@@ -6,7 +6,7 @@ package extract
 import (
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/filetype"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/filetype"
 )
 
 func TestDispatch(t *testing.T) {

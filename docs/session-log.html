@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>Session log &mdash; z-code-reviewer</title>
+  <title>Session log &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -36,10 +36,10 @@
 
   <main>
     <h1>Session log</h1>
-    <p class="lede">Every review run appends a JSONL log to <code>~/.zreview/sessions/&lt;uuid&gt;.jsonl</code>. It's the audit trail, the resume input, and the debug artifact &mdash; one file, one run.</p>
+    <p class="lede">Every review run appends a JSONL log to <code>~/.sacr/sessions/&lt;uuid&gt;.jsonl</code>. It's the audit trail, the resume input, and the debug artifact &mdash; one file, one run.</p>
 
     <h2 id="location">Where the log lives</h2>
-    <p>Default: <code>$HOME/.zreview/sessions/&lt;session-id&gt;.jsonl</code>. Override with <code>ZREVIEW_SESSION_DIR</code>.</p>
+    <p>Default: <code>$HOME/.sacr/sessions/&lt;session-id&gt;.jsonl</code>. Override with <code>SACR_SESSION_DIR</code>.</p>
     <p>The session ID is a UUIDv4 minted at run start. It's printed at the end of every review so CI logs are searchable back to the JSONL file.</p>
 
     <h2 id="format">The JSONL shape</h2>
@@ -101,11 +101,11 @@
     <p>The log is append-only. Every record is flushed to disk immediately after write. A crash mid-run leaves at most one truncated line at the tail &mdash; every prior record is intact and parseable. Never edit the file in place.</p>
 
     <div class="note">
-      <strong>Concurrency.</strong> One <code>Session</code> per run, one file per <code>Session</code>. The writer is guarded by a mutex &mdash; you can run <code>zreview review</code> in parallel, but each instance owns its own JSONL file. Never point two processes at the same session ID.
+      <strong>Concurrency.</strong> One <code>Session</code> per run, one file per <code>Session</code>. The writer is guarded by a mutex &mdash; you can run <code>sacr review</code> in parallel, but each instance owns its own JSONL file. Never point two processes at the same session ID.
     </div>
 
     <h2 id="resume">Resume semantics</h2>
-    <p><code>zreview review --resume &lt;session-id&gt;</code> re-opens an existing JSONL file and appends new records to the tail. What survives across the resume:</p>
+    <p><code>sacr review --resume &lt;session-id&gt;</code> re-opens an existing JSONL file and appends new records to the tail. What survives across the resume:</p>
     <ul>
       <li><strong>Comments already produced.</strong> The collector reads every <code>comment_produced</code> record from the existing log before doing any new work. Successful comments are not re-generated.</li>
       <li><strong>Failed sub-tasks are retried.</strong> Any file whose main-task chain ended in <code>llm_failure</code> is re-dispatched.</li>
@@ -116,20 +116,20 @@
     <h2 id="reading">Reading the log</h2>
     <p>The JSONL is designed to be greppable with standard tools.</p>
     <pre><code># count LLM calls
-grep -c '"type":"llm_request"' ~/.zreview/sessions/&lt;id&gt;.jsonl
+grep -c '"type":"llm_request"' ~/.sacr/sessions/&lt;id&gt;.jsonl
 
 # every comment produced
 jq -c 'select(.type == "comment_produced") | {path, start_line, severity, body}' \
-  ~/.zreview/sessions/&lt;id&gt;.jsonl
+  ~/.sacr/sessions/&lt;id&gt;.jsonl
 
 # any LLM failures
-jq -c 'select(.type == "llm_failure")' ~/.zreview/sessions/&lt;id&gt;.jsonl
+jq -c 'select(.type == "llm_failure")' ~/.sacr/sessions/&lt;id&gt;.jsonl
 
 # session-end summary
-jq -c 'select(.type == "session_end")' ~/.zreview/sessions/&lt;id&gt;.jsonl</code></pre>
+jq -c 'select(.type == "session_end")' ~/.sacr/sessions/&lt;id&gt;.jsonl</code></pre>
 
     <h2 id="retention">Retention</h2>
-    <p><code>zreview</code> does not auto-prune. Old session files sit under <code>~/.zreview/sessions/</code> until you clean them up. Sensible retention:</p>
+    <p><code>sacr</code> does not auto-prune. Old session files sit under <code>~/.sacr/sessions/</code> until you clean them up. Sensible retention:</p>
     <ul>
       <li><strong>Local dev.</strong> Prune on a weekly cron. Anything older than 30 days is post-mortem material at best.</li>
       <li><strong>CI runners.</strong> Emit the JSONL as a build artifact and expire with the build. Keeps the runner disk clean.</li>
@@ -173,7 +173,7 @@ jq -c 'select(.type == "session_end")' ~/.zreview/sessions/&lt;id&gt;.jsonl</cod
 
     <footer>
       &copy; 2026 disseqt. Apache-2.0.
-      Adapted from OCR's session persistence layer &mdash; see <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/PORTING.md">PORTING.md</a>.
+      Adapted from OCR's session persistence layer &mdash; see <a href="https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/PORTING.md">PORTING.md</a>.
     </footer>
   </main>
 </div>

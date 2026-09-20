@@ -1,19 +1,19 @@
 # Architecture
 
-This document is the source of truth for how `z-code-reviewer` is built.
+This document is the source of truth for how `shubam-ai-code-reviewer` is built.
 It is authored to match the shape of `alibaba/open-code-review`'s
 [architecture doc](https://github.com/alibaba/open-code-review) and
 [`ASSURANCE_CASE.md`](https://github.com/alibaba/open-code-review/blob/main/ASSURANCE_CASE.md):
 Mermaid for the data-flow pipeline, ASCII for trust boundaries.
 
-The same content is embedded in the binary — run `zreview docs` to view
+The same content is embedded in the binary — run `sacr docs` to view
 it offline.
 
 ---
 
 ## 1. What we build, in one paragraph
 
-`zreview` is a Go CLI. It takes a git diff (or a range, or a commit),
+`sacr` is a Go CLI. It takes a git diff (or a range, or a commit),
 optionally consults a **persistent code index** for repo-wide context,
 optionally consults an **org-level rules repo** for team-specific review
 policy, calls an LLM through a **thin agent loop** with a small set of
@@ -78,7 +78,7 @@ source of the approach.
 
 | Package | Job | Source |
 |---|---|---|
-| `cmd/zreview` | Cobra CLI: `review`, `scan`, `docs`, `version`, `config`, `llm`, `rules` | OCR shape |
+| `cmd/sacr` | Cobra CLI: `review`, `scan`, `docs`, `version`, `config`, `llm`, `rules` | OCR shape |
 | `internal/diff` | Unified-diff parser, hunk resolution, gitignore, workspace file guard | OCR — copy verbatim |
 | `internal/gitcmd` | Bounded-concurrency git subprocess runner, `--end-of-options` safe | OCR — copy verbatim |
 | `internal/pathutil` | `CanonicalPath`, `WithinBase` (symlink + escape guards) | OCR — copy verbatim |
@@ -98,14 +98,14 @@ source of the approach.
 | `internal/overlap` | Cross-PR fingerprinting, Jaccard prefilter, batched LLM verdict, tolerant JSON parse | Mira `core/overlap.py` — port |
 | `internal/gh` | GitHub REST via `google/go-github`: list open PRs, get PR files, post review comments | Mira `providers/github.py` — port shape |
 | `internal/session` | JSONL append log for `--resume`, chained by `parentUuid` | OCR `internal/session/*` — copy, drop viewer, drop manifest coverage sets (v2) |
-| `internal/docs` | Embedded static docs + local HTTP server for `zreview docs` | New — modeled on OCR `internal/viewer/{server,hostguard,securityheaders}.go` |
+| `internal/docs` | Embedded static docs + local HTTP server for `sacr docs` | New — modeled on OCR `internal/viewer/{server,hostguard,securityheaders}.go` |
 | `internal/prompts` | Embedded prompt templates (`main_task_system.md`, `main_task_user.md`, `memory_compression_task.md`, `summarize.md`, `overlap.md`, `summarizer.md`, `labeler.md`) | OCR + Mira + New |
 | `internal/fingerprint` | Stable finding hash: `owner\|repo\|category\|normalized_path\|symbol\|normalized_snippet`. Whitespace-collapsed and comment-stripped so pure formatting diffs don't reset findings. | New — semantics from PDF §5 |
 | `internal/findings` | Per-PR JSON persistence keyed by `(owner, repo, pr, fingerprint)`; drives the `fixed / unchanged / affected` re-review split. Atomic write via tmp+rename. | New |
 | `internal/scanner` | Deterministic security scanner adapters: Gitleaks (secrets), Semgrep (SAST), govulncheck (Go stdlib CVE). Concurrent runner with best-effort skip when a binary is missing. | New |
-| `internal/scoring` | Deterministic severity policy: `confidence × impact × category → CRITICAL / HIGH / MEDIUM / LOW / SUPPRESS`. Table-driven YAML, embeddable defaults, overridable via `ZREVIEW_SCORING_POLICY`. | New — from PDF §6 |
+| `internal/scoring` | Deterministic severity policy: `confidence × impact × category → CRITICAL / HIGH / MEDIUM / LOW / SUPPRESS`. Table-driven YAML, embeddable defaults, overridable via `SACR_SCORING_POLICY`. | New — from PDF §6 |
 | `internal/sarif` | SARIF 2.1.0 encoder for GitHub Code Scanning uploads. Golden-file tested against schema. | New |
-| `internal/llm` (tiers) | `Tiers{Main, Cheap}` client + model resolution. `ZREVIEW_CHEAP_MODEL` and `ZREVIEW_CHEAP_PROVIDER` env vars; cheap falls back to Main when unset. | New addition to existing package |
+| `internal/llm` (tiers) | `Tiers{Main, Cheap}` client + model resolution. `SACR_CHEAP_MODEL` and `SACR_CHEAP_PROVIDER` env vars; cheap falls back to Main when unset. | New addition to existing package |
 
 The per-file map, LOC estimates, and modifications needed live in
 [PORTING.md](PORTING.md).
@@ -114,7 +114,7 @@ The per-file map, LOC estimates, and modifications needed live in
 
 ## 4. Deterministic vs LLM boundary
 
-`zreview` is not a pure agent. It is a rigid Go pipeline with an LLM
+`sacr` is not a pure agent. It is a rigid Go pipeline with an LLM
 loop wedged in the middle. Determinism sits on both ends because that
 is where the model's failure modes live.
 
@@ -143,14 +143,14 @@ is where the model's failure modes live.
 
 The threat surface is intentionally small. This is a per-invocation
 CLI — no persistent process, no webhook endpoint, no bound port
-except when the user explicitly runs `zreview docs`.
+except when the user explicitly runs `sacr docs`.
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
 │  User machine or CI runner (Trusted Zone)                     │
 │                                                               │
 │  ┌──────────┐    ┌──────────────┐    ┌────────────────────┐   │
-│  │ Git repo │───▶│  zreview CLI │───▶│ Local output       │   │
+│  │ Git repo │───▶│  sacr CLI │───▶│ Local output       │   │
 │  │ (diffs)  │    │  (core)      │    │  stdout / json /   │   │
 │  └──────────┘    └──┬──────┬────┘    │  session .jsonl    │   │
 │                     │      │         └────────────────────┘   │
@@ -191,7 +191,7 @@ except when the user explicitly runs `zreview docs`.
 | T1 | Command injection via crafted diff content | External process execution restricted to `git`, hardcoded subcommands, `--end-of-options`, no shell interpolation (ported from OCR `internal/gitcmd`) |
 | T2 | API key leakage | Keys read from environment variables only; never logged, never written to session JSONL, never transmitted beyond the configured endpoint |
 | T3 | Path traversal via LLM-suggested file paths | `internal/pathutil.WithinBase()` validates all file paths against the repository root, pre- and post-symlink resolution (ported from OCR) |
-| T4 | DNS rebinding against local `zreview docs` server | Host-header allowlist rejects requests from non-loopback origins; wildcard binds require explicit `ZREVIEW_DOCS_ALLOWED_HOSTS` (ported from OCR `internal/viewer/hostguard.go`) |
+| T4 | DNS rebinding against local `sacr docs` server | Host-header allowlist rejects requests from non-loopback origins; wildcard binds require explicit `SACR_DOCS_ALLOWED_HOSTS` (ported from OCR `internal/viewer/hostguard.go`) |
 | T5 | MITM on API communication | Go's `net/http` enforces TLS 1.2+ with certificate verification by default; `InsecureSkipVerify` is never set anywhere in the codebase |
 | T6 | Malicious LLM response (fabricated line numbers, off-diff comments) | JSON schema validation on response structure; line-number bounds checking against actual diff ranges; line-snap positioning fixes off-by-N |
 | T7 | Malicious LLM response (over-escaped JSON, prose read as structure) | `internal/comment.CommentArgsRepair` refuses partial recovery; rejects on odd double-quote count and unknown schema fields |
@@ -210,7 +210,7 @@ except when the user explicitly runs `zreview docs`.
 | Open design | Apache-2.0. Security relies on TLS, not obscurity. |
 | Separation of privilege | API credentials, database credentials, and org-rules-repo access credentials are three distinct env vars; no single leak escalates. |
 | Least common mechanism | Each review invocation writes to its own session file. No shared state between concurrent invocations. |
-| Psychological acceptability | Security defaults (TLS, localhost, allowlist) require no user config. Overrides (`ZREVIEW_DOCS_ALLOWED_HOSTS`, `ZREVIEW_DB_URL`) are explicit and documented. |
+| Psychological acceptability | Security defaults (TLS, localhost, allowlist) require no user config. Overrides (`SACR_DOCS_ALLOWED_HOSTS`, `SACR_DB_URL`) are explicit and documented. |
 
 ---
 
@@ -226,7 +226,7 @@ What leaves the user's machine and where:
 | HTTPS | GitHub API | Repo metadata, open PR list, PR files, PR review comment posts | Cross-PR overlap and `--format github` |
 
 Nothing leaves for telemetry unless the operator explicitly sets
-`ZREVIEW_TELEMETRY=1`, and even then only anonymous run counters — no
+`SACR_TELEMETRY=1`, and even then only anonymous run counters — no
 code, no diffs, no comments.
 
 ---
@@ -238,13 +238,13 @@ Four durable stores. Only the first is required.
 | Store | Required? | What it holds | Rebuildable? |
 |---|---|---|---|
 | Filesystem session log | Yes (always local) | Append-only JSONL per invocation for `--resume` | Rebuildable — session is rerun-safe |
-| Index DB (Postgres or SQLite) | Optional (features degrade to JIT context if absent) | Per-file summaries, symbols, imports, external refs, package manifests | Rebuildable — `zreview index --full` recomputes |
+| Index DB (Postgres or SQLite) | Optional (features degrade to JIT context if absent) | Per-file summaries, symbols, imports, external refs, package manifests | Rebuildable — `sacr index --full` recomputes |
 | Org rules repo (git) | Optional (features degrade to no-rules if absent) | YAML files describing review rules with scope + severity + category | Source of truth in git |
-| Per-PR findings JSON | Optional (drives incremental re-review) | Fingerprinted findings from prior review runs of the same `(owner, repo, pr)` at `~/.zreview/findings/<owner>_<repo>_<pr>.json`. Atomic write (`tmp → rename`). | Rebuildable — deletion just means the next review is a full pass |
+| Per-PR findings JSON | Optional (drives incremental re-review) | Fingerprinted findings from prior review runs of the same `(owner, repo, pr)` at `~/.sacr/findings/<owner>_<repo>_<pr>.json`. Atomic write (`tmp → rename`). | Rebuildable — deletion just means the next review is a full pass |
 
 No review history is persisted. Comments are ephemeral — they land in
 the PR (via `--format github`), or in stdout / JSON, and that is the
-end of their lifecycle in `zreview`.
+end of their lifecycle in `sacr`.
 
 ### Index schema (indexing subset only)
 
@@ -333,7 +333,7 @@ enabled: true
 ```
 
 Loaded at review time via shallow `git clone` of
-`$ZREVIEW_ORG_RULES_REPO`, filtered by `scope` and glob against the
+`$SACR_ORG_RULES_REPO`, filtered by `scope` and glob against the
 current diff's file list, then rendered into the review prompt under a
 `## Custom Review Rules` block. See [PORTING.md](PORTING.md) §Rules.
 
@@ -351,9 +351,9 @@ core:
 | New symbol-extraction language | Add a regex + walker in `internal/extract/` keyed by language enum. |
 | New docs page | Drop a plain HTML file into `docs/` — `embed.go`'s `//go:embed *.html *.css` picks it up automatically. Update the sidebar in the other pages. |
 | New tool the agent can call | Implement `tool.Provider` in `internal/tool/`, register in `Registry` at startup, add its JSON schema to `internal/tool/tools.json`. |
-| New output format | Add a formatter under `cmd/zreview/emit.go` and register via `--format` flag switch in `cmd/zreview/review_cmd.go`. |
+| New output format | Add a formatter under `cmd/sacr/emit.go` and register via `--format` flag switch in `cmd/sacr/review_cmd.go`. |
 | New security scanner | Implement `scanner.Runner` in `internal/scanner/` (parse tool JSON → `ScannerFinding`). Register in `internal/scanner/runner.go`'s concurrent errgroup. Best-effort: a missing binary skips with an info line. |
-| Change severity policy | Drop a YAML override at `.zreview/scoring.yaml` or point `$ZREVIEW_SCORING_POLICY` at any YAML file. Keys: `category\|rule → {impact, confidence_floor, severity_map}`. Reload is per-invocation. |
+| Change severity policy | Drop a YAML override at `.sacr/scoring.yaml` or point `$SACR_SCORING_POLICY` at any YAML file. Keys: `category\|rule → {impact, confidence_floor, severity_map}`. Reload is per-invocation. |
 
 ---
 

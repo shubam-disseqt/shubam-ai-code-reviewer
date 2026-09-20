@@ -1,7 +1,7 @@
 # Go
 /dist/
 /bin/
-/zreview
+/sacr
 *.test
 *.out
 coverage.out
@@ -15,8 +15,8 @@ docs/.astro/
 .pnpm-store/
 
 # npm packaging platform stubs (native binaries populated at release time).
-# The launcher script npm/zreview/bin/zreview.js IS source and must be tracked.
-npm/zreview-*/bin/
+# The launcher script npm/sacr/bin/sacr.js IS source and must be tracked.
+npm/sacr-*/bin/
 
 # Editor / OS
 .DS_Store
@@ -31,5 +31,8 @@ npm/zreview-*/bin/
 !.env.example
 
 # Session data / local runs
-.zreview/
-zreview-session-*.jsonl
+.sacr/
+sacr-session-*.jsonl
+
+# Local agent-harness worktrees
+.claude/

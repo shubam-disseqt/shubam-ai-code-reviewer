@@ -6,7 +6,7 @@ package scoring
 import (
 	"strings"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // suggestionCategories lists the LlmComment.Category values that are

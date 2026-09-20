@@ -1,9 +1,9 @@
-# z-code-reviewer Makefile
+# shubam-ai-code-reviewer Makefile
 # All targets run from the repo root.
 
-BINARY      := zreview
-PKG         := github.com/shubam-disseqt/z-code-reviewer
-CMD_PKG     := $(PKG)/cmd/zreview
+BINARY      := sacr
+PKG         := github.com/shubam-disseqt/shubam-ai-code-reviewer
+CMD_PKG     := $(PKG)/cmd/sacr
 BIN_DIR     := bin
 DIST_DIR    := dist
 
@@ -21,12 +21,12 @@ GO_BUILD := CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
 
 .PHONY: build test coverage lint vet fmt check clean tidy docs vuln install-scanners help
 
-## build: build the zreview binary for the host platform into ./bin/
+## build: build the sacr binary for the host platform into ./bin/
 build: $(BIN_DIR)/$(BINARY)
 
 $(BIN_DIR)/$(BINARY):
 	@mkdir -p $(BIN_DIR)
-	$(GO_BUILD) -o $(BIN_DIR)/$(BINARY) ./cmd/zreview
+	$(GO_BUILD) -o $(BIN_DIR)/$(BINARY) ./cmd/sacr
 
 ## test: run all unit tests
 test:
@@ -58,7 +58,7 @@ check: tidy lint test
 ## docs: docs are plain HTML+CSS under docs/, embedded via //go:embed
 docs:
 	@echo "Docs are plain HTML+CSS under docs/ — no build step."
-	@echo "Served offline by 'zreview docs' and online via GitHub Pages."
+	@echo "Served offline by 'sacr docs' and online via GitHub Pages."
 
 ## vuln: run govulncheck against all packages (matches CI)
 vuln:

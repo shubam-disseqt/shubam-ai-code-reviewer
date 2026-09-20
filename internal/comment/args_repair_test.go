@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/tool"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/tool"
 )
 
 // These fixtures are the observed shape of the failure: `comments` arrives as a

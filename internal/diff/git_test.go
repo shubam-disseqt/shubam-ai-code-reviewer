@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/gitcmd"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gitcmd"
 )
 
 // runGitTest runs a git command in dir and fails the test on error.

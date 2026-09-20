@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 alibaba/open-code-review Contributors
-// Portions Copyright 2026 disseqt
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors
 //
 // Adapted from alibaba/open-code-review internal/session/history.go under
 // Apache License 2.0. Modifications: dropped viewer, manifest coverage, and
@@ -12,8 +12,8 @@ package session
 import (
 	"sync"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llmloop"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llmloop"
 )
 
 // FileSession is the per-taskKey append surface. RequestNo is scoped to this

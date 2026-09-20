@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/scoring"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/scoring"
 )
 
 // Finding is the emitter-facing input shape. Callers translate their own
@@ -35,7 +35,7 @@ type Finding struct {
 	// rule's defaultConfiguration.level.
 	Severity scoring.Severity
 	// Fingerprint is the Phase 13 stable identity. Attached as
-	// partialFingerprints["zreview/v1"] so GitHub Code Scanning can carry
+	// partialFingerprints["sacr/v1"] so GitHub Code Scanning can carry
 	// alert state across pushes even when the diff line drifts.
 	Fingerprint string
 	// HelpURI optionally points at documentation for the rule.
@@ -51,13 +51,13 @@ type Meta struct {
 	Version string
 }
 
-// zreviewSchema is the published SARIF 2.1.0 JSON Schema URL. Optional in
+// sacrSchema is the published SARIF 2.1.0 JSON Schema URL. Optional in
 // the spec but GitHub's SARIF validator surfaces a clearer error when it's
 // present.
-const zreviewSchema = "https://json.schemastore.org/sarif-2.1.0.json"
+const sacrSchema = "https://json.schemastore.org/sarif-2.1.0.json"
 
 // toolInfoURI is the informationUri baked into every run.
-const toolInfoURI = "https://github.com/shubam-disseqt/z-code-reviewer"
+const toolInfoURI = "https://github.com/shubam-disseqt/shubam-ai-code-reviewer"
 
 // Encode renders findings as SARIF 2.1.0 JSON. Output is deterministic:
 // rules are sorted by ID, results preserve caller order. An empty findings
@@ -77,12 +77,12 @@ func Encode(findings []Finding, meta Meta) ([]byte, error) {
 	}
 
 	log := Log{
-		Schema:  zreviewSchema,
+		Schema:  sacrSchema,
 		Version: "2.1.0",
 		Runs: []Run{{
 			Tool: Tool{
 				Driver: ToolComponent{
-					Name:           "zreview",
+					Name:           "sacr",
 					Version:        meta.Version,
 					InformationURI: toolInfoURI,
 					Rules:          rules,
@@ -160,7 +160,7 @@ func findingToResult(f Finding) Result {
 	}
 	if f.Fingerprint != "" {
 		res.PartialFingerprints = map[string]string{
-			"zreview/v1": f.Fingerprint,
+			"sacr/v1": f.Fingerprint,
 		}
 	}
 	return res

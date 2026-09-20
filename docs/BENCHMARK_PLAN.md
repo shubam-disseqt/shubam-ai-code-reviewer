@@ -6,7 +6,7 @@ model-tier comparison before we spend real money running it.
 ## Baseline we're measuring against
 
 From the Sep 2026 gpt-4o-mini audit on the 10-PR + 1 mega-PR matrix
-(`zreview-e2e-matrix`, see README "Audit results"):
+(`sacr-e2e-matrix`, see README "Audit results"):
 
 - **Recall:** 21/21 seeded bugs → 100%
 - **False-positive rate:** ~1 per 10 findings (~10%)
@@ -20,7 +20,7 @@ willing to pay?**
 
 ## 1. Test corpus
 
-Reuse `zreview-e2e-matrix` unchanged. Rationale: ground truth already
+Reuse `sacr-e2e-matrix` unchanged. Rationale: ground truth already
 exists (21 seeded bugs, known archetypes, closed-loop fixes verified).
 Swapping the corpus dilutes the comparison.
 
@@ -99,17 +99,17 @@ scripts/benchmark.sh
   for model in $MODELS; do
     for pr in $PRS; do
       for run in 1..3; do
-        ZREVIEW_PROVIDER=$prov ZREVIEW_MODEL=$model \
-          ./zreview review --from base --to HEAD --format json \
+        SACR_PROVIDER=$prov SACR_MODEL=$model \
+          ./sacr review --from base --to HEAD --format json \
           > out/${model}_${pr}_${run}.json
       done
     done
   done
 ```
 
-Env-var override already exists (`ZREVIEW_PROVIDER` /
-`ZREVIEW_MODEL`, see `cmd/zreview/review_cmd.go:539`). **Zero
-zreview code changes required.** Session log already emits JSONL with
+Env-var override already exists (`SACR_PROVIDER` /
+`SACR_MODEL`, see `cmd/sacr/review_cmd.go:539`). **Zero
+sacr code changes required.** Session log already emits JSONL with
 cost + latency; aggregate with a Go one-off in `scripts/`.
 
 Output: one Markdown table (`docs/BENCHMARK_RESULTS.md`) with 5×N
@@ -119,7 +119,7 @@ grid and a short verdict paragraph. No dashboard.
 
 - [ ] `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY` in benchmark env
 - [ ] $25 budget approval
-- [ ] Corpus tag: pin `zreview-e2e-matrix` to a commit so we can re-run
+- [ ] Corpus tag: pin `sacr-e2e-matrix` to a commit so we can re-run
 - [ ] Human triage bandwidth for precision scoring on ~500 findings
   (~2 hours; only reviewer needed is the person running the benchmark)
 

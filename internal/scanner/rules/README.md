@@ -1,7 +1,7 @@
 # Bundled semgrep presets
 
-zreview ships a small, curated semgrep ruleset per language so
-`zreview review` finds real issues out-of-the-box, without asking users
+sacr ships a small, curated semgrep ruleset per language so
+`sacr review` finds real issues out-of-the-box, without asking users
 to configure semgrep themselves. The rules are embedded into the binary
 at build time via `go:embed`.
 

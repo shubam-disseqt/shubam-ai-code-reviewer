@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>Testing &mdash; z-code-reviewer</title>
+  <title>Testing &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -39,12 +39,12 @@
     <p class="lede">The unit-test tree covers every internal package in isolation. A single end-to-end test, <code>TestReviewE2E_WorkspaceMode_ProducesJSON</code>, drives the compiled binary as a subprocess against a fake Anthropic endpoint so the whole pipeline &mdash; env resolution, LLM wiring, tool dispatch, JSON emit &mdash; is exercised in one place.</p>
 
     <h2 id="why">Why an e2e test exists</h2>
-    <p>The audit-blocker phrasing was <em>&ldquo;every LLM test uses <code>httptest</code> in-process; no commit has run <code>zreview review</code> against a real Anthropic / OpenAI / Bedrock / DeepSeek endpoint&rdquo;</em>. The e2e test does not remove that gap on paper, but it closes the practical part of it: a real subprocess, a real git diff, a real HTTP round trip through the resolver &rarr; SDK &rarr; wire &rarr; response &rarr; tool dispatch &rarr; scoring &rarr; JSON emit chain. If any link regresses, this test fails on the next PR.</p>
+    <p>The audit-blocker phrasing was <em>&ldquo;every LLM test uses <code>httptest</code> in-process; no commit has run <code>sacr review</code> against a real Anthropic / OpenAI / Bedrock / DeepSeek endpoint&rdquo;</em>. The e2e test does not remove that gap on paper, but it closes the practical part of it: a real subprocess, a real git diff, a real HTTP round trip through the resolver &rarr; SDK &rarr; wire &rarr; response &rarr; tool dispatch &rarr; scoring &rarr; JSON emit chain. If any link regresses, this test fails on the next PR.</p>
     <p>Everything that a hosted-provider test would additionally catch (auth quirks, model-specific quirks, throttling behavior) still needs a manual run against a real key. See the manual repro below.</p>
 
     <h2 id="run">Running the test</h2>
-    <pre><code>go test -run TestReviewE2E_WorkspaceMode_ProducesJSON -v ./cmd/zreview/</code></pre>
-    <p>Expected runtime: 2&ndash;5&nbsp;s locally, dominated by <code>go build ./cmd/zreview</code>. Race detector adds &lt;3&nbsp;s.</p>
+    <pre><code>go test -run TestReviewE2E_WorkspaceMode_ProducesJSON -v ./cmd/sacr/</code></pre>
+    <p>Expected runtime: 2&ndash;5&nbsp;s locally, dominated by <code>go build ./cmd/sacr</code>. Race detector adds &lt;3&nbsp;s.</p>
     <p><code>-short</code> skips the test:</p>
     <pre><code>go test -short ./...        # e2e skipped
 go test ./...                # e2e runs</code></pre>
@@ -54,8 +54,8 @@ go test ./...                # e2e runs</code></pre>
     <ol>
       <li>Spins up <code>httptest.NewServer</code> that returns a hard-coded Anthropic Messages response with two <code>tool_use</code> blocks: <code>code_comment</code> on <code>main.go</code>, then <code>task_done</code>.</li>
       <li>Creates a fresh git repo under <code>t.TempDir()</code>. First commit is <code>main.go</code> with an empty <code>main()</code>; the second change is staged (not committed) so workspace-mode diff picks it up.</li>
-      <li>Runs <code>go build -o &lt;tmp&gt;/zreview ./cmd/zreview</code>. Clean build every run &mdash; slow but reproducible.</li>
-      <li>Runs the binary as a subprocess with a scrubbed env: <code>OCR_LLM_URL</code> pointed at the httptest URL (highest-priority resolver strategy wins here), <code>ANTHROPIC_API_KEY</code> set alongside to keep the friendly-var path warm, <code>HOME</code> and <code>ZREVIEW_SESSION_DIR</code> forced to temp dirs so nothing leaks from the developer&rsquo;s real config.</li>
+      <li>Runs <code>go build -o &lt;tmp&gt;/sacr ./cmd/sacr</code>. Clean build every run &mdash; slow but reproducible.</li>
+      <li>Runs the binary as a subprocess with a scrubbed env: <code>OCR_LLM_URL</code> pointed at the httptest URL (highest-priority resolver strategy wins here), <code>ANTHROPIC_API_KEY</code> set alongside to keep the friendly-var path warm, <code>HOME</code> and <code>SACR_SESSION_DIR</code> forced to temp dirs so nothing leaks from the developer&rsquo;s real config.</li>
       <li>Asserts: exit 0, stdout is a valid <code>emitResult</code> JSON envelope, at least one request reached the fake, one <code>*.jsonl</code> session log was written.</li>
     </ol>
 
@@ -81,8 +81,8 @@ git add main.go
 
 export ANTHROPIC_API_KEY=sk-ant-...       # your real key
 export ANTHROPIC_MODEL=claude-sonnet-4-6
-zreview review --repo "$tmp" --format json --output -</code></pre>
-    <p>Expected: valid JSON envelope on stdout, one <code>*.jsonl</code> under <code>~/.zreview/sessions/</code>, exit 0. Repeat for <code>--format github --pr N</code> (needs <code>GITHUB_TOKEN</code>) and <code>--format sarif</code> to exercise the remaining emit paths against real GitHub.</p>
+sacr review --repo "$tmp" --format json --output -</code></pre>
+    <p>Expected: valid JSON envelope on stdout, one <code>*.jsonl</code> under <code>~/.sacr/sessions/</code>, exit 0. Repeat for <code>--format github --pr N</code> (needs <code>GITHUB_TOKEN</code>) and <code>--format sarif</code> to exercise the remaining emit paths against real GitHub.</p>
     <p>The manual runs are what turn the audit finding from &ldquo;proven in-process&rdquo; to &ldquo;proven against real hosted providers&rdquo;. Log the model + provider + exit code in the PR body when you claim it.</p>
 
     <h2 id="known-gaps">Known gaps</h2>

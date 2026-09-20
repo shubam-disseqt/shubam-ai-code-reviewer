@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/index"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/index"
 )
 
 // trivialSummaryFloor mirrors Mira's <600 byte "trivial file" rule: summaries

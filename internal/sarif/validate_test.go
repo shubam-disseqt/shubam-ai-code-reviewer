@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/scoring"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/scoring"
 )
 
 // TestValidate_AcceptsEncoderOutput is the load-bearing check: whatever

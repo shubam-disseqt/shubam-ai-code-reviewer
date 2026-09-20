@@ -118,8 +118,8 @@ func presetNames(ps []preset) []string {
 
 func TestResolveSemgrepConfigs(t *testing.T) {
 	t.Run("override env wins", func(t *testing.T) {
-		t.Setenv("ZREVIEW_SEMGREP_CONFIG", "p/owasp-top-ten")
-		t.Setenv("ZREVIEW_DISABLE_SEMGREP_PRESETS", "1") // ignored when override set
+		t.Setenv("SACR_SEMGREP_CONFIG", "p/owasp-top-ten")
+		t.Setenv("SACR_DISABLE_SEMGREP_PRESETS", "1") // ignored when override set
 		cfgs, cleanup, err := resolveSemgrepConfigs([]string{"a.py"})
 		defer cleanup()
 		if err != nil {
@@ -131,8 +131,8 @@ func TestResolveSemgrepConfigs(t *testing.T) {
 	})
 
 	t.Run("disable flag returns nil", func(t *testing.T) {
-		t.Setenv("ZREVIEW_SEMGREP_CONFIG", "")
-		t.Setenv("ZREVIEW_DISABLE_SEMGREP_PRESETS", "1")
+		t.Setenv("SACR_SEMGREP_CONFIG", "")
+		t.Setenv("SACR_DISABLE_SEMGREP_PRESETS", "1")
 		cfgs, cleanup, err := resolveSemgrepConfigs([]string{"a.py", "b.js"})
 		defer cleanup()
 		if err != nil {
@@ -144,8 +144,8 @@ func TestResolveSemgrepConfigs(t *testing.T) {
 	})
 
 	t.Run("presets materialised for py+js diff", func(t *testing.T) {
-		t.Setenv("ZREVIEW_SEMGREP_CONFIG", "")
-		t.Setenv("ZREVIEW_DISABLE_SEMGREP_PRESETS", "")
+		t.Setenv("SACR_SEMGREP_CONFIG", "")
+		t.Setenv("SACR_DISABLE_SEMGREP_PRESETS", "")
 		cfgs, cleanup, err := resolveSemgrepConfigs([]string{"scripts/deploy.py", "src/app.js"})
 		defer cleanup()
 		if err != nil {
@@ -165,8 +165,8 @@ func TestResolveSemgrepConfigs(t *testing.T) {
 	})
 
 	t.Run("go-only diff produces no configs", func(t *testing.T) {
-		t.Setenv("ZREVIEW_SEMGREP_CONFIG", "")
-		t.Setenv("ZREVIEW_DISABLE_SEMGREP_PRESETS", "")
+		t.Setenv("SACR_SEMGREP_CONFIG", "")
+		t.Setenv("SACR_DISABLE_SEMGREP_PRESETS", "")
 		cfgs, cleanup, err := resolveSemgrepConfigs([]string{"main.go", "internal/x/y.go"})
 		defer cleanup()
 		if err != nil {

@@ -25,7 +25,7 @@ import (
 )
 
 // Options tune the graph. ModulePrefix is the module path of the repo (e.g.
-// "github.com/shubam-disseqt/z-code-reviewer") for Go imports. For
+// "github.com/shubam-disseqt/shubam-ai-code-reviewer") for Go imports. For
 // TypeScript and Python it acts as an optional path-prefix that marks
 // non-relative imports as in-repo (e.g. "@app/" or "myapp."). External
 // imports (stdlib, third-party) are dropped unless IncludeExternal is true.
@@ -38,7 +38,7 @@ type Options struct {
 	MaxNodes int
 }
 
-// DefaultOptions returns a sensible default for zreview review.
+// DefaultOptions returns a sensible default for sacr review.
 func DefaultOptions(modulePrefix string) Options {
 	return Options{
 		ModulePrefix:    modulePrefix,

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 alibaba/open-code-review Contributors
-// Portions Copyright 2026 disseqt
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors
 //
 // Adapted from alibaba/open-code-review internal/session/history.go and
 // persist.go under Apache License 2.0. Modifications: dropped viewer,
@@ -27,7 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llmloop"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llmloop"
 )
 
 // Compile-time check: Session satisfies llmloop.Session. If llmloop's

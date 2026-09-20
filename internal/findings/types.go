@@ -9,7 +9,7 @@ package findings
 import (
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // State is the reconciled lifecycle of a finding across review passes.
