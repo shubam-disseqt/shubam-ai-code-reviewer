@@ -117,8 +117,10 @@ func TestPythonLargeFile(t *testing.T) {
 	}
 	start := time.Now()
 	res := PythonExtractor(b.String(), "big.py")
-	if d := time.Since(start); d > 500*time.Millisecond {
-		t.Errorf("500-line python file took %v (>500ms)", d)
+	// Perf guard; shared GH runners (esp. Windows) can be 2-3x slower than
+	// a local dev laptop. 2s is the "clearly regressed" boundary.
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("500-line python file took %v (>2s)", d)
 	}
 	if len(res.Symbols) < 500 {
 		t.Errorf("expected 500 symbols, got %d", len(res.Symbols))

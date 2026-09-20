@@ -131,8 +131,10 @@ func TestJSLargeFile(t *testing.T) {
 	}
 	start := time.Now()
 	res := JavaScriptExtractor(b.String(), "big.js")
-	if d := time.Since(start); d > 500*time.Millisecond {
-		t.Errorf("500-line js took %v", d)
+	// Perf guard; shared GH runners (esp. Windows) can be 2-3x slower
+	// than a local dev laptop. 2s is the "clearly regressed" boundary.
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("500-line js took %v (>2s)", d)
 	}
 	if len(res.Symbols) < 500 {
 		t.Errorf("expected 500 symbols, got %d", len(res.Symbols))
