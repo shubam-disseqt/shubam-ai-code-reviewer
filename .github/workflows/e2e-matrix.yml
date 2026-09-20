@@ -1,0 +1,178 @@
+name: sacr E2E matrix
+
+on:
+  schedule:
+    # Nightly 03:00 UTC — catches recall drift from prompt/model changes
+    # or upstream provider drift.
+    - cron: "0 3 * * *"
+  push:
+    tags: [v*]
+  workflow_dispatch:
+    inputs:
+      min_recall:
+        description: "Gate threshold on aggregate hard recall (0.0-1.0)"
+        required: false
+        default: "0.8"
+      model:
+        description: "SACR_MODEL override (e.g. gpt-4o-mini, claude-sonnet-4-6)"
+        required: false
+        default: "gpt-4o-mini"
+
+permissions:
+  contents: read
+
+concurrency:
+  # One matrix run at a time so cases don't race for the LLM rate limit.
+  group: e2e-matrix
+  cancel-in-progress: false
+
+env:
+  # Matrix repo layout — one branch per case at `pr-N-branch`, plus
+  # `rollup-mega`. .matrix/expected.json at the repo root of each branch
+  # is the ground truth.
+  MATRIX_REPO: shubam-disseqt/zreview-e2e-matrix
+  # First 5 cases only for the launch cut. Expand once real numbers land.
+  # Cases must have `.matrix/expected.json` on their branch.
+  # Every case listed here MUST have .matrix/expected.json committed on
+  # its branch. pr-2/4/6/7/8/9 exist on the matrix repo but don't yet
+  # have expected.json — add and enable in follow-ups.
+  CASES: '["pr-1-branch","pr-3-branch","pr-5-branch","pr-10-branch"]'
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      cases: ${{ steps.set.outputs.cases }}
+      min_recall: ${{ steps.set.outputs.min_recall }}
+      model: ${{ steps.set.outputs.model }}
+    steps:
+      - id: set
+        run: |
+          echo "cases=$CASES" >> "$GITHUB_OUTPUT"
+          echo "min_recall=${{ inputs.min_recall || '0.8' }}" >> "$GITHUB_OUTPUT"
+          echo "model=${{ inputs.model || 'gpt-4o-mini' }}" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case: ${{ fromJson(needs.plan.outputs.cases) }}
+    steps:
+      - name: Checkout product repo
+        uses: actions/checkout@v4
+        with:
+          path: product
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: product/go.mod
+      - name: Build sacr + assert
+        working-directory: product
+        run: |
+          go build -o "$RUNNER_TEMP/sacr" ./cmd/sacr
+          go build -o "$RUNNER_TEMP/assert" ./scripts/e2e/assert
+      - name: Checkout matrix case
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MATRIX_REPO }}
+          ref: ${{ matrix.case }}
+          token: ${{ secrets.E2E_MATRIX_TOKEN }}
+          path: matrix
+          fetch-depth: 2
+      - name: Sanity — expected.json present
+        working-directory: matrix
+        run: |
+          if [ ! -f .matrix/expected.json ]; then
+            echo "::error::matrix branch ${{ matrix.case }} has no .matrix/expected.json"
+            exit 1
+          fi
+          jq empty .matrix/expected.json
+      - name: Review case with sacr
+        working-directory: matrix
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SACR_MODEL: ${{ needs.plan.outputs.model }}
+        run: |
+          "$RUNNER_TEMP/sacr" review \
+            --commit HEAD \
+            --format json \
+            --min-severity LOW \
+            --output "$RUNNER_TEMP/actual.json" \
+            --repo .
+      - name: Assert against expected.json
+        working-directory: matrix
+        run: |
+          "$RUNNER_TEMP/assert" \
+            -expected .matrix/expected.json \
+            -actual "$RUNNER_TEMP/actual.json" \
+            -case "${{ matrix.case }}" \
+            -json > "$RUNNER_TEMP/result.json" || true
+          cat "$RUNNER_TEMP/result.json"
+      - name: Upload per-case artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-case-${{ matrix.case }}
+          path: |
+            ${{ runner.temp }}/actual.json
+            ${{ runner.temp }}/result.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  report:
+    needs: [plan, run]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout product repo
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build aggregate
+        run: go build -o "$RUNNER_TEMP/aggregate" ./scripts/e2e/aggregate
+      - name: Download all case artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+          pattern: e2e-case-*
+      - name: Aggregate
+        id: agg
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          RESULT_FILES=(results/**/result.json)
+          if [ "${#RESULT_FILES[@]}" -eq 0 ]; then
+            echo "::warning::no per-case results downloaded"
+            RESULT_FILES=()
+          fi
+          "$RUNNER_TEMP/aggregate" \
+            -min-recall "${{ needs.plan.outputs.min_recall }}" \
+            -summary "$RUNNER_TEMP/summary.json" \
+            -markdown "$RUNNER_TEMP/report.md" \
+            "${RESULT_FILES[@]}" || AGG_EXIT=$?
+          echo "===== SUMMARY ====="
+          cat "$RUNNER_TEMP/summary.json"
+          echo "===== REPORT ====="
+          cat "$RUNNER_TEMP/report.md"
+          # Publish to the job step summary so it's visible on the Actions run page.
+          cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
+          # Preserve the exit code for the gate step.
+          echo "exit=${AGG_EXIT:-0}" >> "$GITHUB_OUTPUT"
+      - name: Upload aggregated report
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-matrix-report
+          path: |
+            ${{ runner.temp }}/summary.json
+            ${{ runner.temp }}/report.md
+          retention-days: 90
+      - name: Gate
+        run: |
+          if [ "${{ steps.agg.outputs.exit }}" != "0" ]; then
+            echo "::error::E2E matrix failed the recall gate — see summary above"
+            exit 1
+          fi
