@@ -38,6 +38,12 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    # Non-blocking until Pages is enabled in repo Settings → Pages → Source:
+    # "GitHub Actions". Before that flag is flipped, deploy-pages@v4 returns
+    # 404 "Ensure GitHub Pages has been enabled". continue-on-error keeps
+    # the workflow green so unrelated pushes to main don't turn red. Once
+    # Pages is enabled, this job actually publishes and its outcome is real.
+    continue-on-error: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
