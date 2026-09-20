@@ -1,0 +1,36 @@
+---
+title: Getting Started
+description: Install sacr, run your first review, and wire it into CI. Pick the path that matches your environment.
+---
+
+`sacr` is a single binary. Install it, point it at a diff, get an inline review. This section walks through the shortest path for each supported environment.
+
+<Callout type="info">
+  `sacr review` lands in Phase 8. Today, `sacr version` and `sacr docs` work end-to-end; the full review pipeline is next. See the repo's `ROADMAP.md` for phase status.
+</Callout>
+
+## Pick your path
+
+<Cards>
+  <Card title="Installation" href="/docs/getting-started/installation" description="Build from source today; shell installer, npm, and Docker channels ship in Phase 9." />
+  <Card title="Quickstart" href="/docs/getting-started/quickstart" description="Configure a provider, point at an index DB, run your first review." />
+  <Card title="Docker" href="/docs/getting-started/docker" description="Static multi-arch image on ghcr.io with SBOM + provenance attestations." />
+  <Card title="GitHub Action" href="/docs/getting-started/github-action" description="Drop-in reusable action — three lines of `with:` and every PR gets a review." />
+  <Card title="Windows" href="/docs/getting-started/windows" description="Native-Windows notes, autocrlf gotchas, and known workarounds." />
+</Cards>
+
+## What ships in the box
+
+- One binary, `CGO_ENABLED=0` and `-trimpath` — no dynamic linker surface.
+- Embedded local docs (`sacr docs`) — the same content you're reading now.
+- Providers: Anthropic, OpenAI, AWS Bedrock, DeepSeek.
+- Formatters: `stdout`, `json`, `github` (inline PR comments), `sarif` (Code Scanning).
+
+## Where to go after Getting Started
+
+<Cards>
+  <Card title="CLI reference" href="/docs/reference/cli-reference" description="Every flag, every subcommand." />
+  <Card title="Configuration" href="/docs/reference/configuration" description="Env vars, config file, precedence rules." />
+  <Card title="Providers" href="/docs/reference/providers" description="Provider matrix, key routing, model defaults." />
+  <Card title="Architecture" href="/docs/architecture" description="How the review loop actually works." />
+</Cards>

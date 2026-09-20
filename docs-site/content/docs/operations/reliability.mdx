@@ -1,0 +1,92 @@
+---
+title: Reliability
+description: Rate limiting, retry policy, backoff schedule, and covered endpoints for sacr's GitHub and scanner interactions.
+---
+
+Every GitHub REST call `sacr` makes goes through two HTTP middlewares: a client-side rate limiter and a transient-failure retry. Local scanner subprocess flakiness is retried too. This page documents which endpoints get which policy and what knobs are exposed.
+
+## Why this exists
+
+A single `sacr review` run can talk to GitHub a dozen times: list overlap candidates, fetch files per candidate, update the PR body, add labels, upload SARIF, poll SARIF status, post inline comments. Two failure modes previously derailed the whole review:
+
+- Hitting GitHub's hourly rate limit on a busy CI runner — a single 429 aborted the SARIF upload step.
+- A transient GitHub 5xx during PR-body update or SARIF upload failed the whole review with no recovery.
+
+Both are now handled at the transport layer, so callers get retry-with-backoff for free regardless of which endpoint they invoke.
+
+## Rate limit
+
+A token-bucket limiter paces every outbound GitHub request. Defaults target GitHub's authenticated hourly quota (5000 req/hr ≈ 1.39 req/s) with a burst of 20 to accommodate the natural cluster at the start of a review (overlap enumeration, file lists).
+
+| Env var | Default | Type |
+|---------|---------|------|
+| `SACR_GH_RATE_LIMIT_RPS` | `1.39` | float |
+| `SACR_GH_RATE_LIMIT_BURST` | `20` | int |
+
+An `rps` of `0` or a negative burst falls back to the defaults — there is no "off" switch on purpose. If you need to disable rate limiting for local integration testing, replace `Options.HTTPClient` when constructing the client from Go.
+
+## Retry
+
+Every request is retried on:
+
+- **Network-level failures** (connection refused, DNS timeout, TLS handshake error).
+- **HTTP 5xx** (500-599).
+- **HTTP 429** — rate-limit throttling from GitHub itself, distinct from our client-side limiter.
+
+Anything else — `2xx`, `3xx`, `4xx` other than 429 — is returned to the caller as-is. A 404 or 422 is a caller bug and won't improve on retry.
+
+### Backoff schedule
+
+| Attempt | Wait before this attempt |
+|---------|--------------------------|
+| 1 | 0 |
+| 2 | ~500 ms (jittered) |
+| 3 | ~1 s (jittered) |
+| 4 | ~2 s (jittered) |
+| 5 | ~4 s (jittered, capped at 8 s) |
+
+Full jitter is applied: the actual wait is a random duration between 0 and the tabulated ceiling. This spreads out retries when multiple in-flight requests hit the same 5xx wave. Maximum total time in retry-and-wait is bounded — a persistently broken endpoint aborts after ~15 s, not indefinitely.
+
+### `Retry-After` header
+
+When the server sets `Retry-After` (spec: RFC 7231 § 7.1.3), it wins over exponential backoff. Both forms are accepted:
+
+- **Integer seconds:** `Retry-After: 30`
+- **HTTP-date:** `Retry-After: Wed, 21 Oct 2026 07:28:00 GMT`
+
+Values that would stall `sacr` beyond `32 s` (retryMaxDelay × 4) are clamped. A pathological server can't hang a review indefinitely by requesting an unreasonable pause.
+
+## Covered endpoints
+
+Because both middlewares sit on the shared HTTP transport, *every* go-github SDK method `sacr` calls gets the same policy. In practice the calls that matter are:
+
+| Operation | Method | Where |
+|-----------|--------|-------|
+| List open PRs (overlap) | `GET` | overlap batches |
+| List PR files | `GET` | overlap batches |
+| Get PR body | `GET` | PR description block |
+| Update PR body | `PATCH` | PR description block |
+| Add labels | `POST` | Phase 15 labeler |
+| Post review comment | `POST` | inline comments (`--format github`) |
+| Upload SARIF | `POST` | Code Scanning integration |
+| Get SARIF status | `GET` | `--wait-sarif` polling |
+
+Request bodies (PATCH, POST) are buffered before the first attempt so retries can replay the same payload byte-for-byte.
+
+## Scanner subprocesses
+
+Local scanner adapters (gitleaks, semgrep, govulncheck) get a light two-attempt retry on transient exec failure with 200 ms between attempts. This is deliberately smaller than the HTTP policy — local subprocesses don't have network flakiness, but a Go binary occasionally fails to start under memory pressure or a temporary file lock, and one retry is enough to paper over that.
+
+The retry never fires when the tool binary is missing — that path is caught by `exec.LookPath` before the retry helper is reached, so the "missing binary skips silently" contract is preserved.
+
+## LLM retries
+
+The LLM path already has its own retry-code middleware wired via the Anthropic / OpenAI SDKs (see `internal/llm/client.go`). This page covers everything *except* that path.
+
+## Observability
+
+Retries are silent by design — a review that transparently recovered from a 500 should not spam CI logs. If you suspect retry-related latency:
+
+- Run `sacr review -vv` to surface the underlying go-github request timing.
+- The session log (`--session-log`) captures every LLM turn but does not log successful retries at the HTTP layer — only the final response.
+- Persistent 429s that outlast five attempts land in the review's stderr as a wrapped `gh:` error. Treat that as a signal to reduce parallelism (`--max-overlap-candidates`) or lengthen the token TTL.

@@ -1,0 +1,35 @@
+---
+title: Reference
+description: Flags, env vars, provider presets, and manual test protocols for sacr.
+---
+
+Everything you need to look up while running `sacr`: every subcommand, every environment variable, every provider preset, and the manual test protocols used to smoke-test provider credentials.
+
+Skim the overview first if you haven't wired up a run yet, then come back here when you need the exact flag name or the exact env var.
+
+<Cards>
+  <Card title="CLI reference" href="/docs/reference/cli" />
+  <Card title="Configuration" href="/docs/reference/configuration" />
+  <Card title="Providers" href="/docs/reference/providers" />
+  <Card title="Provider testing" href="/docs/reference/provider-testing" />
+</Cards>
+
+## What's inside
+
+| Page | What it covers |
+|---|---|
+| [CLI reference](/docs/reference/cli) | Every subcommand (`sacr version`, `sacr docs`, `sacr review`, `sacr index`, `sacr rules`, `sacr overlap`, `sacr doctor`), their flags, and the uniform exit-code contract. |
+| [Configuration](/docs/reference/configuration) | Environment variables, the repo-local `.sacr.yaml` schema, the org-rules YAML schema, and precedence between all four layers. |
+| [Providers](/docs/reference/providers) | The five built-in LLM presets (Anthropic, Bedrock, OpenAI Chat, OpenAI Responses, DeepSeek), model IDs, endpoint resolution order, and two-tier routing. |
+| [Provider testing](/docs/reference/provider-testing) | 15-minute manual smoke protocols for each provider, code-path audit findings, and common-error tables. |
+
+<Callout type="info">
+Not every subcommand has shipped yet. Only `sacr version` and `sacr docs` are wired end-to-end today; the rest are documented against their locked target UX. Phase tags appear next to each subcommand on the [CLI reference](/docs/reference/cli) page.
+</Callout>
+
+## Related sections
+
+- [Getting started](/docs/getting-started/quickstart) — install, first run, and CI wiring.
+- [Architecture](/docs/architecture/pipeline) — how the pipeline and index fit together.
+- [Capabilities](/docs/capabilities/review-rules) — review rules, overlap detection, scanners, SARIF output.
+- [Operations](/docs/operations/troubleshooting) — troubleshooting, reliability, and structured logging.

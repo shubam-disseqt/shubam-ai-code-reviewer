@@ -1,0 +1,125 @@
+---
+title: Providers
+description: The five built-in LLM presets, model IDs, endpoint resolution order, and two-tier routing.
+---
+
+Five built-in LLM providers. One credential env var per provider, one model name, one `SACR_PROVIDER` override. No provider adapters to install.
+
+<Callout type="info">
+**Pick one.** Set the API key env var for the provider you want to use. `sacr` resolves the endpoint automatically. Override with `SACR_PROVIDER` and `SACR_MODEL` if you have more than one key configured.
+</Callout>
+
+## The five presets
+
+| Name | Protocol | Auth | Notes |
+|---|---|---|---|
+| `anthropic` | Anthropic Messages API | `ANTHROPIC_API_KEY` | First-party endpoint. Recommended default for review work. |
+| `bedrock` | Anthropic via AWS Bedrock | AWS credential chain (profile, SSO, instance role, or `AWS_*`) | Ambient auth — no API key. Set `AWS_REGION`. Model IDs are region-specific. |
+| `openai` | OpenAI Chat Completions | `OPENAI_API_KEY` | Also works with any OpenAI-compatible endpoint if you override the base URL. |
+| `openai-responses` | OpenAI Responses API | `OPENAI_RESPONSES_API_KEY` | Newer OpenAI surface. Same base URL as `openai`, different request shape. |
+| `deepseek` | OpenAI-compatible (DeepSeek) | `DEEPSEEK_API_KEY` | Cost-efficient. Same protocol as `openai` against DeepSeek's endpoint. |
+
+## Suggested model IDs
+
+The exact list of models each provider ships changes over time. These are the shapes `sacr` is tested against — anything the provider will route is fair game.
+
+### `anthropic`
+
+- `claude-opus-5`, `claude-sonnet-5`
+- `claude-opus-4-8`, `claude-opus-4-7`, `claude-opus-4-6`
+- `claude-sonnet-4-6`
+
+### `bedrock`
+
+Bedrock model IDs are prefixed by region-family (`us.*`, `global.*`). Run `aws bedrock list-inference-profiles` for what your account actually offers.
+
+- `us.anthropic.claude-opus-5`, `us.anthropic.claude-sonnet-5`
+- `us.anthropic.claude-opus-4-8`, `us.anthropic.claude-opus-4-7`
+- `global.anthropic.claude-opus-5`, `global.anthropic.claude-sonnet-5`
+
+### `openai`
+
+- `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`
+
+### `openai-responses`
+
+- `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`
+
+### `deepseek`
+
+- `deepseek-v4-pro`, `deepseek-v4-flash`, `deepseek-flash`
+
+## How endpoint resolution works
+
+`sacr` resolves the endpoint from, in order:
+
+1. `SACR_PROVIDER` + `SACR_MODEL` if set.
+2. `~/.opencodereview/config.json` if present (inherited from the upstream OCR project).
+3. The first provider whose API key env var is set. Anthropic wins on ties.
+
+Bedrock is treated specially: it has no api_key, so its readiness comes from the AWS credential chain. If `AWS_REGION` and any AWS credential source are present, Bedrock will resolve without an explicit `SACR_PROVIDER=bedrock`.
+
+## Cost notes
+
+Two cost knobs matter:
+
+- **Review model** — drives the main task loop. This is where most of the token spend lives. Opus-class models produce more precise comments; Sonnet-class is usually enough for standard PRs.
+- **Index model** — embedding + per-file summaries. Called once per file at index time, then reused across every subsequent review. Point `SACR_INDEX_MODEL` at a cheap model here.
+
+The selector prefilter drops noisy diffs before any LLM call — formatting-only changes and generated files never hit the model. See [Architecture § Deterministic vs LLM](/docs/architecture/pipeline#det-vs-llm).
+
+## Two-tier model routing
+
+`sacr` resolves two LLM clients per run — a **main** tier that drives the reviewer agent loop and a **cheap** tier reserved for structured summary and labeling calls (Phase 15). By default both tiers point at the same client, so nothing changes until you opt in.
+
+| Env var | What it does |
+|---|---|
+| `SACR_CHEAP_MODEL` | Cheap model name. Alone, reuses the main client — same endpoint, different model on the wire. |
+| `SACR_CHEAP_PROVIDER` | Cheap provider preset. Only takes effect when `SACR_CHEAP_MODEL` is also set; resolves an independent client against a second provider. |
+
+Fallback: if either variable is unset, cheap silently reuses the main client. There is no such thing as a "half-configured" cheap tier that breaks the reviewer.
+
+```bash
+# Same key, cheaper model on the reviewer's own provider
+export ANTHROPIC_API_KEY=sk-ant-...
+export SACR_CHEAP_MODEL=claude-haiku-5
+
+# Independent cheap provider
+export ANTHROPIC_API_KEY=sk-ant-...
+export DEEPSEEK_API_KEY=...
+export SACR_CHEAP_PROVIDER=deepseek
+export SACR_CHEAP_MODEL=deepseek-flash
+```
+
+Measured target: 30–40% cost cut once summary and labeling ride the cheap tier (Phase 15).
+
+## Switching providers
+
+```bash
+# Anthropic direct
+export ANTHROPIC_API_KEY=sk-ant-...
+sacr review --from origin/main --to HEAD
+
+# Same key set, but force Bedrock
+export SACR_PROVIDER=bedrock
+export SACR_MODEL=us.anthropic.claude-sonnet-5
+export AWS_REGION=us-east-1
+sacr review --from origin/main --to HEAD
+
+# DeepSeek for cost-sensitive runs
+export DEEPSEEK_API_KEY=...
+export SACR_PROVIDER=deepseek
+export SACR_MODEL=deepseek-v4-flash
+sacr review --from origin/main --to HEAD
+```
+
+## Common issues
+
+See [Troubleshooting](/docs/operations/troubleshooting) for the full list. Provider-specific hits:
+
+- **Anthropic 401.** The API key was rotated. Regenerate under console.anthropic.com and re-export.
+- **Bedrock `AccessDeniedException`.** The model is available in the region but the account doesn't have it enabled. Grant access in the Bedrock console; propagation can take a few minutes.
+- **OpenAI 429.** Rate limit on the org key. `sacr` retries with backoff; if it still fails, drop concurrency or move to a higher tier.
+- **DeepSeek timeouts.** Their endpoint occasionally rate-limits by IP. The retry loop handles transient 5xx; a persistent hang is worth reporting.
+
+See [Provider testing](/docs/reference/provider-testing) for full 15-minute smoke protocols per provider, plus code-path audit notes.

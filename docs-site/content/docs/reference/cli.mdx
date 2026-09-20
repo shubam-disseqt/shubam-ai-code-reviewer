@@ -1,0 +1,175 @@
+---
+title: CLI reference
+description: Every sacr subcommand, every flag, every exit code, in the order you'll reach for them.
+---
+
+Every subcommand, every flag, every exit code. Order matches roughly the order you'll reach for them.
+
+<Callout type="warn">
+**Not every command is wired yet.** Only `sacr version` and `sacr docs` ship end-to-end today. Every other subcommand below is documented against its target UX — the flag names and exit codes are locked, the implementations land in later phases. See the phase tag next to each heading and [ROADMAP.md](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/ROADMAP.md).
+</Callout>
+
+## Global flags
+
+Available on every subcommand.
+
+| Flag | Meaning |
+|---|---|
+| `-v`, `--verbose` | Verbose logs to stderr. Repeat (`-vv`) for debug-level tool traces. |
+| `-h`, `--help` | Print usage for the subcommand and exit 0. |
+| `--version` | Print the version string and exit 0. Equivalent to `sacr version`. |
+
+## `sacr version` — shipped
+
+Prints the build identity. Machine-readable with `--json`.
+
+| Flag | Meaning |
+|---|---|
+| `--json` | Emit a JSON object instead of the human line. |
+
+### Output shape
+
+```bash
+$ sacr version
+sacr 0.2.0 (commit deadbeef, go1.23.4, darwin/arm64)
+
+$ sacr version --json
+{
+  "version":   "0.2.0",
+  "commit":    "deadbeef",
+  "goVersion": "go1.23.4",
+  "os":        "darwin",
+  "arch":      "arm64"
+}
+```
+
+### Exit codes
+
+Always `0`. If `sacr version` is failing, the binary itself is broken.
+
+## `sacr docs` — shipped
+
+Serves this documentation on a local loopback HTTP server. Content is embedded in the binary; no network calls.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--addr` | `127.0.0.1:0` | TCP address to bind. Use `127.0.0.1:0` to pick a free port. Non-loopback binds require the host allowlist below. |
+| `--open` | `auto` | `auto`: open the browser only when a TTY is attached and `$CI` is unset. `always`: always try. `never`: never try. |
+
+### Environment
+
+| Variable | Meaning |
+|---|---|
+| `SACR_DOCS_ALLOWED_HOSTS` | Comma-separated list of `Host:` header values the server will accept in addition to `localhost`, `127.0.0.1`, and `[::1]`. Required when `--addr` binds a non-loopback interface. |
+
+### Security posture
+
+- Loopback-only by default. Non-loopback binds require an explicit `SACR_DOCS_ALLOWED_HOSTS` entry — guards against DNS rebinding (T4 in [Architecture § Threats](/docs/architecture/threats)).
+- All responses ship a strict CSP: `default-src 'self'; script-src 'none'; frame-ancestors 'none'`.
+- No third-party fonts, scripts, or images. Every asset is under the embedded FS.
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Server started, shut down cleanly on SIGINT. |
+| `1` | Bind failed or an unexpected runtime error occurred. |
+
+## `sacr review` — Phase 8
+
+The main event. Runs the review pipeline over a diff and emits comments in the chosen format.
+
+<Callout type="warn">
+**Phase 8 deliverable.** Flag names below are the target UX and are considered stable. Implementation lands in Phase 8 — see [ROADMAP.md](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/ROADMAP.md).
+</Callout>
+
+### Diff selection (pick one)
+
+| Flag | Meaning |
+|---|---|
+| `--from <ref> --to <ref>` | Review the diff `from..to`. Typical PR usage: `--from origin/main --to HEAD`. |
+| `--commit <sha>` | Review a single commit (equivalent to `--from <sha>^ --to <sha>`). |
+| `--pr <number>` | Fetch the PR from the current repo's `origin` and review it. Requires `GITHUB_TOKEN`. |
+
+### Output
+
+| Flag | Meaning |
+|---|---|
+| `--format <fmt>` | `stdout` (default): human-readable. `json`: one JSON array of comments. `github`: post inline review comments back to the PR (requires `--pr` and `GITHUB_TOKEN`). |
+| `--output <path>` | Write to a file instead of stdout. Only meaningful with `--format stdout` or `--format json`. |
+| `--resume <session-id>` | Resume from a prior session JSONL file. Re-runs failed sub-agents; keeps successful comments. See [Architecture § Pipeline](/docs/architecture/pipeline). |
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Review completed. No blocker-severity findings. |
+| `1` | General runtime error (network, LLM provider, git). |
+| `2` | Configuration error (bad flags, missing API key, invalid YAML). See [Configuration](/docs/reference/configuration). |
+| `3` | Review completed but produced one or more `blocker`-severity findings. Wire this to CI to gate merges. |
+
+## `sacr index` — Phase 4
+
+Builds or refreshes the persistent code index used by `sacr review` and `sacr overlap`. Without an index, review falls back to just-in-time context loading via the agent's `file_read` / `code_search` tools — smaller signal, higher token cost per run.
+
+| Flag | Meaning |
+|---|---|
+| `--repo <path>` | Path to the git checkout to index. Defaults to CWD. |
+| `--full` | Force a full re-index. Otherwise the incremental walker only touches files changed since the last run. |
+| `--db <dsn>` | Database DSN. Overrides `$SACR_DB_URL`. Accepts `postgres://...` or `sqlite:///path/to/file.db`. |
+
+<Callout type="info">
+**Cost note.** Indexing calls an embedding model per chunk. Point it at a cheap model (e.g., a small embedding endpoint) separately from your review model — `SACR_INDEX_MODEL` controls that. See [Configuration](/docs/reference/configuration).
+</Callout>
+
+## `sacr rules` — Phase 7
+
+Inspect and refresh the org-level rules pulled from `$SACR_ORG_RULES_REPO`.
+
+| Subcommand | Meaning |
+|---|---|
+| `sacr rules list` | List every loaded rule with id, scope, severity, and whether it would apply to the current repo/path. |
+| `sacr rules sync` | Fetch the latest rules commit from `$SACR_ORG_RULES_REPO` (respecting `$SACR_ORG_RULES_REF`). Idempotent. |
+
+See [Review rules](/docs/capabilities/review-rules) for the YAML schema and authoring guide.
+
+## `sacr overlap` — Phase 5
+
+Reports which currently-open pull requests overlap in scope or risk merge conflicts with the target PR. Runs the deterministic prefilter (Jaccard on title, symbol/file intersection) before spending any LLM budget on a batched verdict pass.
+
+| Flag | Meaning |
+|---|---|
+| `--pr <number>` | PR to compare all other open PRs against. |
+
+Requires `GITHUB_TOKEN` with read access to pull requests. Output is a human-readable table by default; `--format json` for machine consumption. If the LLM batch call fails, the prefilter results are still printed — overlap never blocks review.
+
+## `sacr doctor` — Phase 9
+
+Pre-flight checks. Run this in CI before `sacr review` so misconfigurations fail fast with a readable message.
+
+Checks performed:
+
+- `git` binary on `$PATH` and version ≥ 2.30.
+- Repository is a git checkout and has fetched the requested refs.
+- An LLM provider credential is present: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or a resolvable AWS credential chain for Bedrock.
+- `SACR_DB_URL` (if set) is reachable and the schema matches the binary's expected version.
+- `SACR_ORG_RULES_REPO` (if set) is reachable and the YAML parses.
+- `GITHUB_TOKEN` (if `--format github` is intended) has PR read+write scope.
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | All checks passed. |
+| `2` | One or more configuration problems found. Details printed to stderr. |
+
+## Exit-code summary
+
+Uniform across the CLI so CI wiring is simple.
+
+| Code | Meaning |
+|---|---|
+| `0` | Success. |
+| `1` | General runtime error (network, provider, git, IO). |
+| `2` | Configuration error — bad flags, missing credentials, unreachable dependency. |
+| `3` | `sacr review` only: review completed with at least one `blocker`-severity finding. |

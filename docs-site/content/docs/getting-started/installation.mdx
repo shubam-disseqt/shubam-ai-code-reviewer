@@ -1,0 +1,40 @@
+---
+title: Installation
+description: Build sacr from source today. Shell installer, npm, Docker, and GitHub Action channels ship in Phase 9.
+---
+
+Distribution channels are planned for Phase 9. Until then, build from source.
+
+## Build from source
+
+```bash
+git clone https://github.com/shubam-disseqt/shubam-ai-code-reviewer.git
+cd shubam-ai-code-reviewer
+make build
+./bin/sacr version
+```
+
+## Planned channels (Phase 9)
+
+| Channel | Command |
+| --- | --- |
+| Shell installer (POSIX) | `curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/shubam-ai-code-reviewer/main/install.sh \| sh` |
+| PowerShell installer (Windows) | `irm https://raw.githubusercontent.com/shubam-disseqt/shubam-ai-code-reviewer/main/install.ps1 \| iex` |
+| npm meta package | `npm install -g @disseqt/shubam-ai-code-reviewer` |
+| Docker | `docker run --rm -v $PWD:/repo -w /repo ghcr.io/shubam-disseqt/shubam-ai-code-reviewer:latest review --from main --to HEAD` |
+| GitHub Action | See [GitHub Action](/docs/getting-started/github-action). |
+
+## Supply-chain verification
+
+Every release is attested via GitHub's SLSA build-provenance mechanism. Verify a downloaded binary with:
+
+```bash
+gh attestation verify --owner shubam-disseqt ./sacr-linux-amd64
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Quickstart" href="/docs/getting-started/quickstart" description="Configure a provider and run your first review." />
+  <Card title="Configuration" href="/docs/reference/configuration" description="Env vars and config file reference." />
+</Cards>

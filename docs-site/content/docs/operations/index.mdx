@@ -1,0 +1,24 @@
+---
+title: Operations
+description: Running sacr in production — security posture, reliability guarantees, test coverage, and common troubleshooting.
+---
+
+This section covers what you need to know once `sacr` is past first-run and into daily use: how it treats your source and secrets, what it retries and when, how it is tested, and what to check first when something misbehaves.
+
+## What's here
+
+<Cards>
+  <Card title="Security" href="/docs/operations/security" />
+  <Card title="Threat model" href="/docs/operations/threat-model" />
+  <Card title="Reliability" href="/docs/operations/reliability" />
+  <Card title="Testing" href="/docs/operations/testing" />
+  <Card title="Troubleshooting" href="/docs/operations/troubleshooting" />
+</Cards>
+
+## Where to start
+
+- Deciding whether `sacr` clears your data-handling bar: read [Security](/docs/operations/security) then the full [Threat model](/docs/operations/threat-model).
+- Wiring `sacr` into CI and worried about flakes: read [Reliability](/docs/operations/reliability).
+- Something's broken right now: jump to [Troubleshooting](/docs/operations/troubleshooting).
+
+For the underlying design, see [Architecture](/docs/architecture). For provider setup and env vars, see [Reference](/docs/reference).

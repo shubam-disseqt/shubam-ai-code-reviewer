@@ -1,0 +1,126 @@
+---
+title: Index and Context
+description: How sacr assembles the codebase-context block for each review — indexed mode vs JIT mode.
+---
+
+The reviewer needs to know more than the diff: what the changed
+function calls, who calls it, what conventions the repo enforces. That
+signal comes from one of two paths.
+
+## Two modes, one output
+
+- **Indexed mode.** `SACR_DB_URL` is set. A persistent database holds
+  per-file summaries, symbol maps, and conventions extracted from a
+  previous `sacr index` run. The reviewer pulls the relevant rows and
+  stitches them into the prompt in milliseconds.
+- **JIT (just-in-time) mode.** No `SACR_DB_URL`. The reviewer's tool
+  loop uses `file_read`, `file_find`, and `code_search` to fetch
+  context on demand while the LLM is running. Fewer moving parts,
+  higher token cost per run, weaker cross-file signal.
+
+The prompt shape is identical in both modes — the review loop cannot
+tell them apart. Indexed mode is preferred for anything ongoing; JIT
+is fine for one-shot local runs.
+
+## What gets indexed
+
+Not every file. The indexer walks the repo with the same filter used
+by the review selector, so generated files, vendor dirs, lockfiles,
+and binary blobs are skipped.
+
+- **Per-file summary.** One LLM call per eligible file: exports, key
+  types, dependencies, one-paragraph purpose. Cached by content
+  hash — unchanged files skip on the next incremental pass.
+- **Symbol map.** Cheap heuristic extraction of top-level declarations
+  (functions, types, constants) per language. Used for the "who else
+  touches this symbol" lookup during review.
+- **Conventions.** A short list of repo-scoped idioms detected from
+  the codebase — error style, logger of choice, testing framework.
+  Injected into the review prompt to keep suggestions consistent with
+  what the repo already does.
+- **Manifests.** `go.mod`, `package.json`, `Cargo.toml`, and similar
+  dependency files, so the reviewer knows what's in scope without
+  re-parsing them.
+
+## SQLite vs Postgres
+
+`SACR_DB_URL` accepts two DSN shapes:
+
+| DSN | Backend | When to use |
+|---|---|---|
+| `sqlite:///path/to/index.db` | Local SQLite file | Single-machine, one-repo case. CI runners that keep a persistent cache volume. The default choice. |
+| `postgres://user:pass@host:5432/db?sslmode=require` | Postgres | Shared index across many reviewers — team CI where every runner should reuse the same summaries. Higher operational cost. |
+
+The schema is identical either way. Migration paths from SQLite to
+Postgres are one-shot dumps and imports; there is no built-in
+migration tool because most teams settle on one or the other and stay
+there.
+
+<Callout type="info">
+  **Postgres note.** Point every reviewer at the same database.
+  Concurrent `sacr index` runs are safe — the indexer uses row-level
+  insert-or-update, not table locks — but you'll pay the LLM cost
+  multiple times if two reviewers race on the same fresh file. In
+  practice, run `sacr index --repo .` from one scheduled job and let
+  reviews only read from the shared DB.
+</Callout>
+
+## Running the indexer
+
+```bash
+# first time — index everything
+export SACR_DB_URL="sqlite:///$HOME/.sacr/index.db"
+sacr index --repo .
+
+# subsequent runs — incremental (only re-summarizes changed files)
+sacr index --repo .
+
+# force full re-index (schema bump, embedding-model change, etc.)
+sacr index --repo . --full
+```
+
+Incremental indexing keys off the content hash of each file. If the
+file bytes haven't changed since the last successful summary, the row
+is reused. This is what makes a scheduled indexer cheap after the
+first run.
+
+## JIT context in practice
+
+When `SACR_DB_URL` is unset, `sacr review` still works. The reviewer's
+tool loop:
+
+1. Sees the diff first — nothing else.
+2. Calls `file_read` to inspect files the diff references, or
+   `code_search` to find callers.
+3. Iterates until it has enough context to comment, or hits the
+   tool-call budget (`MaxToolRequestTimes`, default 100).
+
+JIT mode is genuinely useful for exploratory runs and for repos too
+small to justify a database. On large repos, expect noticeably higher
+token cost per review and less consistent cross-file findings — the
+reviewer only sees what it thought to fetch.
+
+## Cost model
+
+Two distinct model roles, priced separately:
+
+| Env | Called when | Sensitivity |
+|---|---|---|
+| `SACR_MODEL` | Every review invocation, once per changed file (main task loop). | High. This is where quality lives. Use a capable model. |
+| `SACR_INDEX_MODEL` | Once per file at index time (per-file summary + embedding). Cached until content changes. | Low. A cheap embedding-class model is usually fine. |
+
+## Common issues
+
+- **Index looks empty after a run.** Check that the walker's filters
+  didn't skip everything. `sacr index -v` logs per-file decisions.
+- **Cross-file suggestions still weak.** The symbol map is heuristic
+  and language-specific. If a repo uses non-standard extensions,
+  extend the file-type detector.
+- **Review is slow without an index.** Expected — JIT mode does more
+  tool calls. Set up an index and re-run.
+- **Postgres connection errors.** Verify `sslmode` matches what your
+  Postgres server expects. Most managed Postgres accepts
+  `sslmode=require`.
+
+Adapted from the Mira project's index/context layer — see the
+[porting spec](/docs/architecture/porting) for provenance.

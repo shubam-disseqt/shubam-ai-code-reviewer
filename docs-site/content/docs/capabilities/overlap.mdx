@@ -1,0 +1,90 @@
+---
+title: Overlap detection
+description: Detect other open pull requests that touch the same code — scope collision, merge-conflict risk, duplicated work — before you merge.
+---
+
+Detect other open pull requests that touch the same code — scope collision, merge-conflict risk, or duplicated work — before you merge.
+
+## Why this exists
+
+Two engineers refactoring the same package in parallel is the most expensive kind of merge conflict: not because the diff is hard to resolve, but because one of the two efforts is usually wasted. Overlap detection surfaces those collisions *while* the second PR is still in review, when it's still cheap to coordinate.
+
+It runs alongside the main review by default. You can also invoke it standalone via `sacr overlap`.
+
+## How it works
+
+1. **Fetch open PRs.** Query the GitHub API for open PRs in the same repo, up to the configured concurrency limit.
+2. **Deterministic prefilter.** For each candidate, score against the current PR using two cheap signals:
+   - **Title Jaccard.** Tokenized title overlap. Catches "refactor storage layer" on both sides.
+   - **File / symbol intersection.** Any file or exported symbol both PRs touch is a strong signal.
+
+   Candidates below the prefilter threshold are dropped without any LLM cost.
+3. **Batched LLM verdict.** Survivors are sent to the LLM as one batch call. The model returns a verdict per candidate (`overlap`, `conflict-risk`, `no-overlap`) with a one-line rationale.
+4. **Render.** A short markdown block goes into the review output. If `--format github`, it's posted as a top-level PR comment.
+
+## Usage
+
+Automatic during a normal review, when a `GITHUB_TOKEN` and `--pr` are both present:
+
+```bash
+export GITHUB_TOKEN=...
+sacr review --from origin/main --to HEAD --pr 42 --format github
+```
+
+Standalone, without running a full review:
+
+```bash
+sacr overlap --owner disseqt --repo shubam-ai-code-reviewer --pr 42
+```
+
+## Output shape
+
+Standalone output is markdown by default. If no overlap is found, the command prints `No overlap detected.` and exits 0.
+
+```markdown
+## Cross-PR overlap
+
+- **#38 — "Refactor storage adapter to use pgx v5"**
+  - conflict-risk: both PRs edit `internal/store/store.go` and `internal/store/pg.go`.
+  - Coordinate with @alice before merging.
+
+- **#41 — "Add retry to storage.Insert"**
+  - overlap: touches the same `Insert` function this PR refactors.
+  - Consider merging #41 first and rebasing this PR on top.
+```
+
+## GitHub token requirements
+
+Overlap detection requires a `GITHUB_TOKEN` with:
+
+- **Repository contents: read** — to list open PRs.
+- **Pull requests: read** — to fetch title, files, and metadata.
+- **Pull requests: write** — only if `--format github` is used and you want the overlap block posted as a comment.
+
+In GitHub Actions, the built-in `secrets.GITHUB_TOKEN` already has these scopes for the current repo. For cross-repo use, mint a fine-grained PAT.
+
+## Config knobs
+
+| Env | Purpose | Default |
+|---|---|---|
+| `SACR_OVERLAP_ENABLED` | Set to `0` to disable the automatic overlap pass during `sacr review`. | enabled |
+| `GITHUB_TOKEN` | Auth for PR listing. If unset, overlap silently skips. | — |
+| `GITHUB_REPOSITORY` | Owner/repo the current PR belongs to. GH Actions sets this automatically. | — |
+
+## Failure semantics
+
+Overlap is best-effort. It **never** blocks the main review output:
+
+- No GitHub token → skipped silently.
+- GitHub API error → skipped, one-line warning to stderr, review proceeds.
+- LLM batch call fails → the deterministic prefilter results are still printed (weaker, but non-zero signal).
+- No candidate PRs → nothing printed at all.
+
+This is deliberate. A flaky GitHub API or a slow model must not swallow the review comments you actually came for.
+
+## Limits
+
+- **Same-repo only.** No cross-repo overlap detection. Coordinating storage-layer refactors that span multiple services is out of scope by design — that's what design docs are for.
+- **Open PRs only.** Recently-merged PRs are not surveyed. If you're rebasing on top of a PR that just landed, the review's diff already reflects it.
+- **Draft PRs.** Included by default. Set the API filter if you want to skip them.
+- **Rate limits.** The client backs off on 429 and stops after the configured retry budget. On heavily-scaled orgs, provide an app token with a higher secondary rate limit.

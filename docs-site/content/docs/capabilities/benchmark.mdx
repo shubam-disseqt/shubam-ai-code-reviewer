@@ -1,0 +1,147 @@
+---
+title: Benchmark plan
+description: Design doc for a rigorous model-tier comparison — recall, precision, cost, and determinism against a fixed seeded-bug corpus.
+---
+
+<Callout type="warn">
+**Status: plan only, not implemented.** Design doc for a rigorous model-tier comparison before we spend real money running it. Numbers below are projections, except where explicitly marked as measured baseline.
+</Callout>
+
+## Baseline we're measuring against
+
+From the Sep 2026 gpt-4o-mini audit on the 10-PR + 1 mega-PR matrix (`sacr-e2e-matrix`):
+
+- **Recall:** 21/21 seeded bugs → 100%
+- **False-positive rate:** ~1 per 10 findings (~10%)
+- **Cost:** ~$0.006 / PR, ~$0.09 total across 22 productive runs
+- **Known gap:** under-produces suggestions on clean files; occasional dupes at very small quality tier
+
+Question this benchmark answers: **is Sonnet 4.6 (or another tier) materially better on precision and suggestion quality, at a cost we're willing to pay?**
+
+## sacr in context
+
+For where this fits against SaaS reviewers:
+
+| | sacr | CodeRabbit | Greptile | Ellipsis |
+|---|---|---|---|---|
+| Deployment model | Single binary | SaaS | SaaS | SaaS |
+| Cost per PR | ~$0.006 | $8-15 (unlimited) | $12/user/mo | $20/user/mo |
+| Deterministic scoring engine | Yes | No | No | No |
+| Auditable effort math | Yes | No | No | No |
+| Depgraph from real imports | Yes | No | No | No |
+| Cross-PR overlap detection | Yes | Partial | No | No |
+| Local-only mode (no cloud) | Yes | No | No | No |
+| Choice of LLM provider | 4 providers | Vendor-locked | Vendor-locked | Vendor-locked |
+| Custom scoring policy | YAML | No | No | No |
+
+## Test corpus
+
+Reuse `sacr-e2e-matrix` unchanged. Rationale: ground truth already exists (21 seeded bugs, known archetypes, closed-loop fixes verified). Swapping the corpus dilutes the comparison.
+
+Augment with **1 real-world PR set** — the last 5 merged PRs from `disseqt-auth-service` (Phase 11 pilot target). No seeded ground truth there; used for precision-only signal ("how many findings survive maintainer triage").
+
+Total: **10 seeded PRs + 1 mega-PR + 5 real PRs = 16 PRs.**
+
+## Models
+
+| Tier | Model | Role |
+|---|---|---|
+| Baseline | gpt-4o-mini | current default, incumbent |
+| Target | claude-sonnet-4-6 | hypothesized upgrade |
+| Cheap alt | claude-haiku-4-5 | quality-vs-cost midpoint |
+| Cost floor | deepseek-chat | is there a cheaper viable tier? |
+| Ceiling | claude-opus-4-7 | only on 3-PR subset (cost cap) |
+
+Cheap-tier (summarizer + labeler) held constant at gpt-4o-mini across all runs — we're isolating the reviewer tier.
+
+## Metrics
+
+Per (model, PR, run) record:
+
+- **Recall** on seeded bugs, broken down by severity
+- **Precision** = confirmed real / total findings (human-triaged)
+- **Cost** ($ per PR, from provider usage response)
+- **Latency** (wall-clock seconds)
+- **Suggestion emission rate** on clean files (the known gpt-4o-mini gap)
+- **Determinism**: run-to-run finding-set Jaccard similarity
+- **FP severity distribution** — cheap noise vs high-severity FPs
+
+## Methodology
+
+- **3 runs per (model, PR)** at temperature 0.1 (fully deterministic isn't guaranteed by providers, and we need N>1 to measure spread)
+- **Independent invocations** — separate process per run, no shared cache warmed by a prior PR (mitigates order/caching effects)
+- **Randomize PR order** per model — kills systematic ordering bias
+- **Prompt caching** disabled/ignored — a benchmark that measures cache-warm cost is measuring the wrong number; we want steady-state per-PR cost from cold
+
+Total invocations: **16 PRs × 5 models × 3 runs = 240** (minus 3-PR cap on Opus = subtract 65 → **175 runs**).
+
+## Cost projection
+
+Using $0.006/PR as the gpt-4o-mini anchor and rough public per-token ratios (Sonnet 4.6 ≈ 25×, Haiku 4.5 ≈ 3×, DeepSeek ≈ 0.5×, Opus 4.7 ≈ 100× of 4o-mini):
+
+| Model | $/PR (est) | Runs | Subtotal |
+|---|---|---|---|
+| gpt-4o-mini | $0.006 | 48 | $0.29 |
+| claude-sonnet-4-6 | $0.15 | 48 | $7.20 |
+| claude-haiku-4-5 | $0.018 | 48 | $0.86 |
+| deepseek-chat | $0.003 | 48 | $0.14 |
+| claude-opus-4-7 | $0.60 | 9 | $5.40 |
+| **Total** | | **201** | **~$14** |
+
+Cap the harness at **$25** with a hard stop. Smallest viable slice if budget is denied: **Sonnet vs 4o-mini on 5 PRs × 2 runs = 20 runs, ≈$1.60** — enough to see a recall/precision delta but not determinism.
+
+## Automation
+
+Shape:
+
+```bash
+scripts/benchmark.sh
+  for model in $MODELS; do
+    for pr in $PRS; do
+      for run in 1..3; do
+        SACR_PROVIDER=$prov SACR_MODEL=$model \
+          ./sacr review --from base --to HEAD --format json \
+          > out/${model}_${pr}_${run}.json
+      done
+    done
+  done
+```
+
+Env-var override already exists (`SACR_PROVIDER` / `SACR_MODEL`). **Zero `sacr` code changes required.** Session log already emits JSONL with cost + latency; aggregate with a Go one-off in `scripts/`.
+
+Output: one Markdown table (`docs/BENCHMARK_RESULTS.md`) with 5×N grid and a short verdict paragraph. No dashboard.
+
+## Blockers
+
+- [ ] `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY` in benchmark env
+- [ ] $25 budget approval
+- [ ] Corpus tag: pin `sacr-e2e-matrix` to a commit so we can re-run
+- [ ] Human triage bandwidth for precision scoring on ~500 findings (~2 hours; only reviewer needed is the person running the benchmark)
+
+## Decision tree
+
+```text
+recall_lift = sonnet_recall - 4o_mini_recall     # already 100%, so measured on real PRs
+precision_lift = sonnet_precision - 4o_mini_precision
+cost_multiplier = sonnet_cost / 4o_mini_cost     # ~25×
+
+                    ┌── precision_lift ≥ +15pp ──► switch default to Sonnet
+                    │                              (worth 25× cost)
+                    │
+precision_lift ≥ 0 ─┼── precision_lift +5..+15pp ► Sonnet as opt-in tier;
+                    │                              default stays 4o-mini
+                    │
+                    └── precision_lift < +5pp ───► ship v1.0 on gpt-4o-mini;
+                                                   model choice not the bottleneck
+                                                   (invest in rules/prompts instead)
+
+recall_lift on real PRs < 0 ► block Sonnet; investigate regression
+```
+
+## Risks & caveats
+
+- **100% baseline recall ceiling.** Seeded-bug recall can't improve on 21/21. The real signal lives in **precision on real PRs** and **suggestion quality**, not recall. Frame the benchmark output accordingly.
+- **Small-N precision.** 5 real PRs × 3 runs = 15 data points per model. Wide CIs. Treat this as directional, not conclusive.
+- **Provider drift.** Sonnet 4.6 gets silently retrained. Pin the benchmark date + record model IDs in every result row.
+- **The mega-PR skews cost totals.** Report median $/PR, not mean.
+- **DeepSeek TOS/data-residency** may disqualify it for disseqt-internal PRs regardless of quality. Flag before running.
