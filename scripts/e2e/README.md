@@ -1,19 +1,42 @@
-# sacr E2E matrix
+# sacr E2E matrix — PR mode
 
-Verifies `sacr` catches the seeded bugs on the `zreview-e2e-matrix` companion repo. Runs nightly (03:00 UTC) + on every `v*` tag push + on demand via `workflow_dispatch`.
+Verifies `sacr` detects seeded bugs by running the **actual production PR-review flow** against 4 persistent PRs on the companion repo `shubam-disseqt/zreview-e2e-matrix`.
 
-## How the matrix repo is organized
+Runs nightly (03:00 UTC) + on every `v*` tag push + on demand via `workflow_dispatch`.
 
-- Each PR archetype lives on a branch named `pr-N-branch` (Nov: `rollup-mega` for the combined stress case).
-- Every enabled branch has `.matrix/expected.json` at repo root — the ground truth of what `sacr` MUST catch.
-- The branch's HEAD commit is what we review (`sacr review --commit HEAD`).
+## What "PR mode" means
+
+Every case is a **persistent open PR** on the matrix repo. Each nightly run:
+
+1. Product-repo workflow triggers the matrix repo's `sacr-review.yml` workflow with the PR number as input
+2. Matrix workflow runs `sacr review --pr N --format github` which **posts inline comments to the PR** (via GitHub's Reviews API)
+3. Matrix workflow ALSO runs `sacr review --commit HEAD --format json --output result.json` — captures the same-run findings for E2E assertion
+4. Matrix workflow uploads `result.json` as an artifact
+5. Product-repo workflow downloads the artifact, runs the `assert` binary against the branch's `.matrix/expected.json`, aggregates + gates on recall threshold
+
+This tests both **bug detection** AND **the GitHub PR-posting flow**. Comments accumulate across runs but sacr's fingerprint markers (`<!-- sacr:fp:HEX -->`) let it identify and delete its own stale comments before each new post.
+
+## Matrix repo layout
+
+- `main` — clean baseline
+- `pr-N-branch` — one branch per case archetype; branch's HEAD carries the seeded bug(s) and `.matrix/expected.json`
+- **4 persistent open PRs** at time of writing (each `pr-N-branch → main`):
+
+  | Case branch | PR # | Seeded bugs |
+  |---|---|---|
+  | `pr-1-branch` | 1 | 0 (docs-only overview) |
+  | `pr-3-branch` | 6 | 5 (secret, dropped err, oob, XSS, ignored err) |
+  | `pr-5-branch` | 3 | 2 (weak entropy, timing attack) |
+  | `pr-10-branch` | 8 | 0 (deps-only bump) |
+
+  PR numbers are **not hardcoded** — the workflow discovers them at runtime via `gh pr list --head <branch>`. Rename branches or recreate PRs freely; workflow adapts.
 
 ## expected.json schema
 
 ```json
 {
   "case": "pr-3-branch",
-  "description": "human-readable summary of the archetype",
+  "description": "human-readable archetype summary",
   "findings": [
     {
       "path": "pricing.go",
@@ -35,38 +58,49 @@ Match rules (see `scripts/e2e/assert/assert.go`):
 3. Actual line range overlaps `[start_line - 3, end_line + 3]` (LineTolerance = 3 for LLM drift)
 4. Actual severity `>=` `min_severity`
 
-Extra findings (no match) are reported as noise but do not fail a case.
+Extra findings (no expected match) are reported as noise but do not fail a case.
 
-## Local run
+## Required secrets
+
+### On the product repo (`shubam-ai-code-reviewer`)
+
+| Secret | Scope | Purpose |
+|---|---|---|
+| `E2E_MATRIX_TOKEN` | fine-grained PAT: `contents: read`, `actions: write`, `pull-requests: read` on `shubam-disseqt/zreview-e2e-matrix` | Trigger the matrix workflow, list PRs, download artifacts |
+
+### On the matrix repo (`zreview-e2e-matrix`)
+
+| Secret | Purpose |
+|---|---|
+| `OPENAI_API_KEY` **or** `ANTHROPIC_API_KEY` | LLM provider for sacr |
+| `PRODUCT_REPO_TOKEN` | fine-grained PAT with `contents: read` on `shubam-ai-code-reviewer` — used to check out product repo and build sacr from source. Remove once v0.2.0 is tagged and the matrix workflow can `uses:` the published Action. |
+
+## Local dry run (without triggering the matrix workflow)
 
 ```bash
-# From product repo root, against a matrix checkout at /tmp/e2e-matrix
+# From product repo root
 export OPENAI_API_KEY=sk-...
 export SACR_MODEL=gpt-4o-mini
 
-# 1) Build sacr + tooling
-go build -o /tmp/sacr ./cmd/sacr
+# 1) Clone matrix + check out one case
+git clone git@github.com:shubam-disseqt/zreview-e2e-matrix.git /tmp/e2e
+cd /tmp/e2e && git checkout pr-3-branch
+
+# 2) Run sacr in JSON mode (no PR posting for local dev)
+sacr review --commit HEAD --format json --min-severity LOW --output /tmp/actual.json --repo .
+
+# 3) Assert
+cd -
 go build -o /tmp/assert ./scripts/e2e/assert
-go build -o /tmp/aggregate ./scripts/e2e/aggregate
-
-# 2) For each case:
-cd /tmp/e2e-matrix
-git checkout pr-3-branch
-/tmp/sacr review --commit HEAD --format json --min-severity LOW --output /tmp/actual.json
-/tmp/assert -expected .matrix/expected.json -actual /tmp/actual.json -json > /tmp/result-pr-3.json
-
-# 3) Aggregate:
-/tmp/aggregate -min-recall 0.8 -markdown /tmp/report.md /tmp/result-pr-*.json
-cat /tmp/report.md
+/tmp/assert -expected /tmp/e2e/.matrix/expected.json -actual /tmp/actual.json -case pr-3-branch
 ```
 
 ## Adding a case
 
-1. On the matrix repo, create a branch with the archetype code (feat commit) + optional fix commit for reference
-2. Add `.matrix/expected.json` describing every seeded bug
-3. In `.github/workflows/e2e-matrix.yml` add the branch name to the `CASES` env var
-4. Trigger the workflow manually (`gh workflow run e2e-matrix.yml`)
-5. Read the report; iterate on `expected.json` if `sacr` catches the bug at a slightly different line/category
+1. On matrix repo, create branch `pr-N-branch` off `main` with the seeded bug and `.matrix/expected.json`
+2. Open a persistent PR `pr-N-branch → main` and keep it open
+3. Add `pr-N-branch` to the `CASES` env in `.github/workflows/e2e-matrix.yml` on the product repo
+4. Trigger a manual run: `gh workflow run e2e-matrix.yml`
 
 ## Gate
 
@@ -75,18 +109,15 @@ cat /tmp/report.md
 
 Below either bar → workflow fails.
 
-## Required secrets on the product repo
-
-| Secret | Purpose |
-|---|---|
-| `OPENAI_API_KEY` **or** `ANTHROPIC_API_KEY` | LLM provider for the review call. Only one is required; the workflow passes both through. |
-| `E2E_MATRIX_TOKEN` | fine-grained PAT with `contents: read` on `shubam-disseqt/zreview-e2e-matrix` (needed because that repo is private and the default `GITHUB_TOKEN` is scoped to the product repo). |
-
 ## Cost expectations
 
-At `gpt-4o-mini`:
+Two `sacr review` calls per case (post + capture-json), 4 cases per run:
 
-- ~5-15k input tokens per case × 4 cases = ~$0.05 per matrix run
-- Nightly + release tags ≈ 400 runs/year ≈ **~$20/year**
+- ~5-15k input tokens × 2 calls × 4 cases = ~$0.10 per matrix run at `gpt-4o-mini`
+- Nightly + release tags ≈ 400 runs/year ≈ **~$40/year**
 
-If a run misprints logs a much higher number in `sacr metrics: cost=…`, investigate — a prompt regression may have exploded token counts.
+## What's deferred to follow-ups
+
+- `pr-2/pr-4/pr-6/pr-7/pr-8/pr-9` — persistent PRs already open on matrix repo but no `.matrix/expected.json` yet. Each takes ~15 min to derive from the branch's feat commit.
+- Swap the matrix workflow from `go build ./cmd/sacr` to `uses: shubam-disseqt/shubam-ai-code-reviewer@v0.2.0` once the Action is published to the Marketplace.
+- Multi-provider matrix (run same 4 cases with Sonnet + gpt-4o-mini side by side).
