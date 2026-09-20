@@ -15,7 +15,10 @@ func Match(pattern, path string) bool {
 	if pattern == "" || path == "" {
 		return false
 	}
-	ok, err := doublestar.PathMatch(pattern, path)
+	// doublestar.Match forces '/' as the path separator on every OS;
+	// PathMatch would use '\' on Windows and break patterns that come
+	// from YAML config expressed with forward slashes.
+	ok, err := doublestar.Match(pattern, path)
 	if err != nil {
 		return false
 	}
