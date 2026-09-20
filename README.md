@@ -41,14 +41,41 @@ Every PR gets inline review, effort score, package-imports diagram, and risk lab
 
 ## Features
 
-**On the PR**
-`Inline comments` · `Summary comment` · `Committable suggestions` · `Structured labels`
+<table>
+<tr>
+<th align="left" width="34%">On the PR</th>
+<th align="left" width="33%">Analysis</th>
+<th align="left" width="33%">State across runs</th>
+</tr>
+<tr>
+<td valign="top">
 
-**Analysis**
-`Effort score 0–10` · `Package-imports diagram` · `Deterministic scanners` (gitleaks · semgrep · govulncheck) · `SARIF 2.1.0` · `Two-tier LLM routing` · `Cross-PR overlap`
+- **Inline comments** on exact lines
+- **Summary comment** as bot
+- **Committable suggestions**
+- **Structured labels**
 
-**State across runs**
-`Fingerprint carryover` · `Persistent index + JIT fallback` · `Org-level rules (YAML)` · `Session log (JSONL)`
+</td>
+<td valign="top">
+
+- **Effort score** 0–10
+- **Package-imports** diagram
+- **Deterministic scanners**<br/><sub>gitleaks · semgrep · govulncheck</sub>
+- **SARIF 2.1.0** output
+- **Two-tier LLM** routing
+- **Cross-PR overlap** detection
+
+</td>
+<td valign="top">
+
+- **Fingerprint carryover**
+- **Persistent index + JIT fallback**
+- **Org-level rules** (YAML)
+- **Session log** (JSONL)
+
+</td>
+</tr>
+</table>
 
 Per-feature detail: [capabilities docs](https://shubam-disseqt.github.io/shubam-ai-code-reviewer/docs/capabilities).
 
