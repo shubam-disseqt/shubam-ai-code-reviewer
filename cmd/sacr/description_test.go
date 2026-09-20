@@ -10,133 +10,204 @@ import (
 	"testing"
 
 	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/effort"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gh"
 	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/scoring"
 )
 
-// fakePRClient records calls and serves canned responses. Kept in the test
-// file so nothing in production code depends on it.
-type fakePRClient struct {
-	body       string
-	getErr     error
-	updateErr  error
-	labelsErr  error
-	updated    string
-	updates    int
-	lastLabels []string
-	labelCalls int
+// fakeSummaryClient records issue-comment API calls.
+type fakeSummaryClient struct {
+	existing   []gh.IssueComment
+	listErr    error
+	postErr    error
+	deleteErr  error
+	posted     []string
+	deleted    []int64
+	postCalls  int
+	nextID     int64
+	deleteCall int
 }
 
-func (f *fakePRClient) GetPRBody(ctx context.Context, owner, repo string, number int) (string, error) {
-	if f.getErr != nil {
-		return "", f.getErr
+func (f *fakeSummaryClient) PostIssueComment(ctx context.Context, owner, repo string, number int, body string) (gh.IssueComment, error) {
+	f.postCalls++
+	if f.postErr != nil {
+		return gh.IssueComment{}, f.postErr
 	}
-	return f.body, nil
+	f.posted = append(f.posted, body)
+	f.nextID++
+	ic := gh.IssueComment{ID: 1000 + f.nextID, Body: body}
+	f.existing = append(f.existing, ic)
+	return ic, nil
 }
 
-func (f *fakePRClient) UpdatePRBody(ctx context.Context, owner, repo string, number int, body string) error {
-	f.updates++
-	if f.updateErr != nil {
-		return f.updateErr
+func (f *fakeSummaryClient) ListIssueComments(ctx context.Context, owner, repo string, number int) ([]gh.IssueComment, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
 	}
-	f.updated = body
+	return append([]gh.IssueComment(nil), f.existing...), nil
+}
+
+func (f *fakeSummaryClient) DeleteIssueComment(ctx context.Context, owner, repo string, commentID int64) error {
+	f.deleteCall++
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	f.deleted = append(f.deleted, commentID)
+	kept := f.existing[:0]
+	for _, c := range f.existing {
+		if c.ID != commentID {
+			kept = append(kept, c)
+		}
+	}
+	f.existing = kept
 	return nil
 }
 
-func (f *fakePRClient) AddLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
-	f.labelCalls++
-	if f.labelsErr != nil {
-		return f.labelsErr
+// fakeLabelClient records label API calls.
+type fakeLabelClient struct {
+	existing   []string
+	listErr    error
+	addErr     error
+	removeErr  error
+	addCalls   int
+	lastLabels []string
+	removed    []string
+}
+
+func (f *fakeLabelClient) AddLabels(ctx context.Context, owner, repo string, number int, labels []string) error {
+	f.addCalls++
+	if f.addErr != nil {
+		return f.addErr
 	}
 	f.lastLabels = append([]string(nil), labels...)
 	return nil
 }
 
-func (f *fakePRClient) ListLabels(ctx context.Context, owner, repo string, number int) ([]string, error) {
-	return nil, nil
+func (f *fakeLabelClient) ListLabels(ctx context.Context, owner, repo string, number int) ([]string, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return append([]string(nil), f.existing...), nil
 }
 
-func (f *fakePRClient) RemoveLabel(ctx context.Context, owner, repo string, number int, label string) error {
+func (f *fakeLabelClient) RemoveLabel(ctx context.Context, owner, repo string, number int, label string) error {
+	if f.removeErr != nil {
+		return f.removeErr
+	}
+	f.removed = append(f.removed, label)
 	return nil
 }
 
-func TestUpdateDescription_AppendsBlockWhenMissing(t *testing.T) {
-	f := &fakePRClient{body: "Original PR description here.\n\nCloses #1."}
-	err := UpdateDescription(context.Background(), f, "o", "r", 7,
+func TestPostSummaryReview_PostsFreshComment(t *testing.T) {
+	f := &fakeSummaryClient{}
+	err := PostSummaryReview(context.Background(), f, "o", "r", 7,
 		model.Summary{Walkthrough: "adds a widget"},
 		model.Labels{},
 		map[scoring.Severity]int{scoring.SeverityHigh: 1}, nil, nil, effort.Score{}, "")
 	if err != nil {
-		t.Fatalf("UpdateDescription: %v", err)
+		t.Fatalf("PostSummaryReview: %v", err)
 	}
-	if !strings.Contains(f.updated, "Original PR description here.") {
-		t.Errorf("original preserved? updated=\n%s", f.updated)
+	if f.postCalls != 1 {
+		t.Fatalf("PostIssueComment called %d, want 1", f.postCalls)
 	}
-	if !strings.Contains(f.updated, sacrBlockBegin) || !strings.Contains(f.updated, sacrBlockEnd) {
-		t.Errorf("markers missing:\n%s", f.updated)
+	body := f.posted[0]
+	if !strings.Contains(body, "adds a widget") {
+		t.Errorf("walkthrough missing:\n%s", body)
 	}
-	if !strings.Contains(f.updated, "adds a widget") {
-		t.Errorf("walkthrough missing:\n%s", f.updated)
+	if !strings.Contains(body, "| HIGH | 1 |") {
+		t.Errorf("severity row missing:\n%s", body)
 	}
-	if !strings.Contains(f.updated, "| HIGH | 1 |") {
-		t.Errorf("severity row missing:\n%s", f.updated)
+	if !strings.HasSuffix(strings.TrimSpace(body), summaryFingerprint) {
+		t.Errorf("fingerprint marker not at end:\n%s", body)
 	}
 }
 
-func TestUpdateDescription_ReplacesExistingBlock(t *testing.T) {
-	// Two runs must not cause the block to accumulate.
-	initial := "Keep me.\n\n" + sacrBlockBegin + "\nOLD CONTENT\n" + sacrBlockEnd + "\n\nAnd keep me too."
-	f := &fakePRClient{body: initial}
-	err := UpdateDescription(context.Background(), f, "o", "r", 7,
-		model.Summary{Walkthrough: "fresh walkthrough"},
-		model.Labels{},
-		map[scoring.Severity]int{}, nil, nil, effort.Score{}, "")
+// TestPostSummaryReview_ReplacesPriorMarkerCycle proves the delete-then-post
+// cycle: first run posts fresh, second run finds the marker-tagged comment,
+// deletes it, and posts again.
+func TestPostSummaryReview_ReplacesPriorMarkerCycle(t *testing.T) {
+	f := &fakeSummaryClient{
+		existing: []gh.IssueComment{
+			{ID: 100, Body: "human comment, keep me"},
+		},
+	}
+	// First run.
+	if err := PostSummaryReview(context.Background(), f, "o", "r", 7,
+		model.Summary{Walkthrough: "first"}, model.Labels{}, nil, nil, nil, effort.Score{}, ""); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if f.postCalls != 1 || len(f.deleted) != 0 {
+		t.Fatalf("first run: posts=%d deletes=%d, want 1/0", f.postCalls, len(f.deleted))
+	}
+	firstID := f.existing[len(f.existing)-1].ID
+
+	// Second run — should delete the first sacr comment but leave the human one.
+	if err := PostSummaryReview(context.Background(), f, "o", "r", 7,
+		model.Summary{Walkthrough: "second"}, model.Labels{}, nil, nil, nil, effort.Score{}, ""); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if f.postCalls != 2 {
+		t.Fatalf("posts=%d, want 2", f.postCalls)
+	}
+	if len(f.deleted) != 1 || f.deleted[0] != firstID {
+		t.Errorf("expected delete of %d, got %v", firstID, f.deleted)
+	}
+	// Human comment survives.
+	sawHuman := false
+	for _, c := range f.existing {
+		if c.ID == 100 {
+			sawHuman = true
+		}
+	}
+	if !sawHuman {
+		t.Error("human comment was deleted; must only touch marker-tagged posts")
+	}
+}
+
+func TestPostSummaryReview_ListErrorContinuesToPost(t *testing.T) {
+	f := &fakeSummaryClient{listErr: errors.New("list boom")}
+	err := PostSummaryReview(context.Background(), f, "o", "r", 7,
+		model.Summary{Walkthrough: "hi"}, model.Labels{}, nil, nil, nil, effort.Score{}, "")
 	if err != nil {
-		t.Fatalf("UpdateDescription: %v", err)
+		t.Fatalf("PostSummaryReview: %v", err)
 	}
-	if strings.Contains(f.updated, "OLD CONTENT") {
-		t.Errorf("old block still present:\n%s", f.updated)
-	}
-	if strings.Count(f.updated, sacrBlockBegin) != 1 || strings.Count(f.updated, sacrBlockEnd) != 1 {
-		t.Errorf("markers not idempotent:\n%s", f.updated)
-	}
-	if !strings.Contains(f.updated, "Keep me.") || !strings.Contains(f.updated, "And keep me too.") {
-		t.Errorf("surrounding content lost:\n%s", f.updated)
-	}
-	if !strings.Contains(f.updated, "fresh walkthrough") {
-		t.Errorf("new content missing:\n%s", f.updated)
+	if f.postCalls != 1 {
+		t.Errorf("post should fire despite list error; posts=%d", f.postCalls)
 	}
 }
 
-func TestUpdateDescription_NoChangeSkipsUpdate(t *testing.T) {
-	// If the block already contains exactly what we would write, no PATCH
-	// should fire — saves an API call per idempotent re-run.
-	block := renderSacrBlock(model.Summary{Walkthrough: "same"}, model.Labels{}, map[scoring.Severity]int{}, nil, nil, effort.Score{}, "")
-	initial := sacrBlockBegin + "\n" + block + "\n" + sacrBlockEnd
-	f := &fakePRClient{body: initial}
-	err := UpdateDescription(context.Background(), f, "o", "r", 7,
-		model.Summary{Walkthrough: "same"},
-		model.Labels{},
-		map[scoring.Severity]int{}, nil, nil, effort.Score{}, "")
-	if err != nil {
-		t.Fatalf("UpdateDescription: %v", err)
-	}
-	if f.updates != 0 {
-		t.Errorf("UpdatePRBody called %d times, want 0", f.updates)
+func TestPostSummaryReview_PostErrorPropagates(t *testing.T) {
+	f := &fakeSummaryClient{postErr: errors.New("nope")}
+	err := PostSummaryReview(context.Background(), f, "o", "r", 7,
+		model.Summary{Walkthrough: "hi"}, model.Labels{}, nil, nil, nil, effort.Score{}, "")
+	if err == nil || !strings.Contains(err.Error(), "nope") {
+		t.Fatalf("want wrapped post error, got %v", err)
 	}
 }
 
-func TestUpdateDescription_AppliesLabels(t *testing.T) {
-	f := &fakePRClient{body: ""}
-	err := UpdateDescription(context.Background(), f, "o", "r", 7,
-		model.Summary{},
+func TestPostSummaryReview_MissingIdentity(t *testing.T) {
+	f := &fakeSummaryClient{}
+	if err := PostSummaryReview(context.Background(), f, "", "r", 7, model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{}, ""); err == nil {
+		t.Errorf("empty owner should error")
+	}
+	if err := PostSummaryReview(context.Background(), f, "o", "r", 0, model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{}, ""); err == nil {
+		t.Errorf("zero pr should error")
+	}
+	if err := PostSummaryReview(context.Background(), nil, "o", "r", 7, model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{}, ""); err == nil {
+		t.Errorf("nil client should error")
+	}
+}
+
+func TestApplyLabels_AppliesLabels(t *testing.T) {
+	f := &fakeLabelClient{}
+	err := ApplyLabels(context.Background(), f, "o", "r", 7,
 		model.Labels{PRType: "feat", RiskTag: "high", Domains: []string{"auth", "billing"}},
-		map[scoring.Severity]int{}, nil, nil, effort.Score{}, "")
+		map[scoring.Severity]int{}, nil)
 	if err != nil {
-		t.Fatalf("UpdateDescription: %v", err)
+		t.Fatalf("ApplyLabels: %v", err)
 	}
-	if f.labelCalls != 1 {
-		t.Fatalf("AddLabels calls = %d, want 1", f.labelCalls)
+	if f.addCalls != 1 {
+		t.Fatalf("AddLabels calls = %d, want 1", f.addCalls)
 	}
 	got := strings.Join(f.lastLabels, ",")
 	for _, want := range []string{"feat", "high", "auth", "billing"} {
@@ -146,62 +217,53 @@ func TestUpdateDescription_AppliesLabels(t *testing.T) {
 	}
 }
 
-func TestUpdateDescription_EmptyBodyGetsBlock(t *testing.T) {
-	f := &fakePRClient{body: ""}
-	err := UpdateDescription(context.Background(), f, "o", "r", 7,
-		model.Summary{Walkthrough: "hello"},
-		model.Labels{},
-		map[scoring.Severity]int{}, nil, nil, effort.Score{}, "")
+func TestApplyLabels_EmptyLabelSetSkipsAdd(t *testing.T) {
+	f := &fakeLabelClient{}
+	if err := ApplyLabels(context.Background(), f, "o", "r", 7, model.Labels{}, nil, nil); err != nil {
+		t.Fatalf("ApplyLabels: %v", err)
+	}
+	if f.addCalls != 0 {
+		t.Errorf("AddLabels called %d, want 0 for empty label set", f.addCalls)
+	}
+}
+
+func TestApplyLabels_RemovesStaleExclusive(t *testing.T) {
+	f := &fakeLabelClient{existing: []string{"risk/critical", "feat"}}
+	err := ApplyLabels(context.Background(), f, "o", "r", 7,
+		model.Labels{PRType: "fix", RiskTag: "risk/high"}, nil, nil)
 	if err != nil {
-		t.Fatalf("UpdateDescription: %v", err)
+		t.Fatalf("ApplyLabels: %v", err)
 	}
-	if !strings.HasPrefix(f.updated, sacrBlockBegin) {
-		t.Errorf("empty body should start with marker:\n%s", f.updated)
+	removedSet := make(map[string]bool)
+	for _, r := range f.removed {
+		removedSet[r] = true
 	}
-}
-
-func TestUpdateDescription_GetErrorPropagates(t *testing.T) {
-	f := &fakePRClient{getErr: errors.New("boom")}
-	err := UpdateDescription(context.Background(), f, "o", "r", 7,
-		model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{}, "")
-	if err == nil {
-		t.Fatalf("want error")
-	}
-	if !strings.Contains(err.Error(), "boom") {
-		t.Errorf("err = %v, want wrapped", err)
+	if !removedSet["risk/critical"] || !removedSet["feat"] {
+		t.Errorf("stale exclusive labels not removed: %v", f.removed)
 	}
 }
 
-func TestUpdateDescription_UpdateErrorPropagates(t *testing.T) {
-	f := &fakePRClient{updateErr: errors.New("nope")}
-	err := UpdateDescription(context.Background(), f, "o", "r", 7,
-		model.Summary{Walkthrough: "hi"}, model.Labels{}, nil, nil, nil, effort.Score{}, "")
-	if err == nil {
-		t.Fatalf("want error")
-	}
-	if !strings.Contains(err.Error(), "nope") {
-		t.Errorf("err = %v, want wrapped", err)
+func TestApplyLabels_AddErrorPropagates(t *testing.T) {
+	f := &fakeLabelClient{addErr: errors.New("nope")}
+	err := ApplyLabels(context.Background(), f, "o", "r", 7,
+		model.Labels{PRType: "feat"}, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "nope") {
+		t.Fatalf("want wrapped add error, got %v", err)
 	}
 }
 
-func TestUpdateDescription_MissingIdentity(t *testing.T) {
-	f := &fakePRClient{}
-	err := UpdateDescription(context.Background(), f, "", "r", 7, model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{}, "")
-	if err == nil {
+func TestApplyLabels_MissingIdentity(t *testing.T) {
+	f := &fakeLabelClient{}
+	if err := ApplyLabels(context.Background(), f, "", "r", 7, model.Labels{}, nil, nil); err == nil {
 		t.Errorf("empty owner should error")
 	}
-	err = UpdateDescription(context.Background(), f, "o", "r", 0, model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{}, "")
-	if err == nil {
-		t.Errorf("zero pr should error")
-	}
-	err = UpdateDescription(context.Background(), nil, "o", "r", 7, model.Summary{}, model.Labels{}, nil, nil, nil, effort.Score{}, "")
-	if err == nil {
+	if err := ApplyLabels(context.Background(), nil, "o", "r", 7, model.Labels{}, nil, nil); err == nil {
 		t.Errorf("nil client should error")
 	}
 }
 
-func TestRenderSacrBlock_ChangeGroups(t *testing.T) {
-	block := renderSacrBlock(
+func TestRenderSummary(t *testing.T) {
+	block := RenderSummary(
 		model.Summary{
 			Walkthrough:  "does two things",
 			ChangeGroups: []model.ChangeGroup{{Title: "Auth", Files: []string{"a.go"}, Summary: "rework"}},
@@ -211,8 +273,12 @@ func TestRenderSacrBlock_ChangeGroups(t *testing.T) {
 		map[scoring.Severity]int{scoring.SeverityCritical: 2, scoring.SeverityLow: 1},
 		nil,
 		nil,
-		effort.Score{}, "")
+		effort.Score{Value: 5, Dot: "🟡", Label: "medium",
+			Contributions: []effort.Contribution{{Signal: "diff-size", Detail: "big", Points: 2.5}}},
+		"")
 	for _, want := range []string{
+		"## Automated review by sacr",
+		"### Reviewer effort",
 		"does two things",
 		"| Severity | Count |",
 		"| CRITICAL | 2 |",

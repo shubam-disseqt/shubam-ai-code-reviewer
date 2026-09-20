@@ -260,6 +260,101 @@ func TestNewClient_InvalidEnterpriseURL(t *testing.T) {
 	}
 }
 
+func TestPostIssueComment(t *testing.T) {
+	var body map[string]any
+	c, _ := newFakeGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		if got, want := r.URL.Path, "/api/v3/repos/o/r/issues/9/comments"; got != want {
+			t.Errorf("path = %q, want %q", got, want)
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":123,"body":"hello"}`))
+	})
+	got, err := c.PostIssueComment(context.Background(), "o", "r", 9, "hello")
+	if err != nil {
+		t.Fatalf("PostIssueComment: %v", err)
+	}
+	if got.ID != 123 || got.Body != "hello" {
+		t.Errorf("got = %+v, want {123 hello}", got)
+	}
+	if body["body"] != "hello" {
+		t.Errorf("request body = %v", body)
+	}
+}
+
+func TestPostIssueComment_WrapsError(t *testing.T) {
+	c, _ := newFakeGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = w.Write([]byte(`{"message":"nope"}`))
+	})
+	_, err := c.PostIssueComment(context.Background(), "o", "r", 9, "x")
+	if err == nil || !strings.Contains(err.Error(), "gh:") {
+		t.Errorf("err = %v, want wrapped", err)
+	}
+}
+
+func TestListIssueComments(t *testing.T) {
+	var calls int32
+	c, _ := newFakeGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		if got, want := r.URL.Path, "/api/v3/repos/o/r/issues/4/comments"; got != want {
+			t.Errorf("path = %q, want %q", got, want)
+		}
+		page := r.URL.Query().Get("page")
+		if page == "" || page == "1" {
+			w.Header().Set("Link", `<http://`+r.Host+r.URL.Path+`?page=2>; rel="next"`)
+			mustJSON(w, []map[string]any{
+				{"id": 1, "body": "one"},
+				{"id": 2, "body": "two"},
+			})
+			return
+		}
+		mustJSON(w, []map[string]any{{"id": 3, "body": "three"}})
+	})
+	out, err := c.ListIssueComments(context.Background(), "o", "r", 4)
+	if err != nil {
+		t.Fatalf("ListIssueComments: %v", err)
+	}
+	if len(out) != 3 || out[0].ID != 1 || out[2].Body != "three" {
+		t.Errorf("out = %+v", out)
+	}
+	if atomic.LoadInt32(&calls) != 2 {
+		t.Errorf("calls = %d, want 2 (paginated)", calls)
+	}
+}
+
+func TestDeleteIssueComment(t *testing.T) {
+	var seen struct {
+		method, path string
+	}
+	c, _ := newFakeGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		seen.method, seen.path = r.Method, r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	})
+	if err := c.DeleteIssueComment(context.Background(), "o", "r", 55); err != nil {
+		t.Fatalf("DeleteIssueComment: %v", err)
+	}
+	if seen.method != http.MethodDelete {
+		t.Errorf("method = %q, want DELETE", seen.method)
+	}
+	if seen.path != "/api/v3/repos/o/r/issues/comments/55" {
+		t.Errorf("path = %q", seen.path)
+	}
+}
+
+func TestDeleteIssueComment_404OK(t *testing.T) {
+	c, _ := newFakeGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+	})
+	if err := c.DeleteIssueComment(context.Background(), "o", "r", 55); err != nil {
+		t.Errorf("want nil err on 404, got %v", err)
+	}
+}
+
 // --- helpers ---
 
 func prJSON(number int, title string) map[string]any {

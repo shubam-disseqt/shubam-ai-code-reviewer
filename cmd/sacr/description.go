@@ -10,43 +10,38 @@ import (
 	"strings"
 
 	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/effort"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gh"
 	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/overlap"
 	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/scoring"
 )
 
-// sacrBlockBegin / sacrBlockEnd wrap the managed PR description block
-// so re-running the reviewer replaces it in place. Anything outside the
-// markers is preserved verbatim — humans and other bots can co-exist.
-const (
-	sacrBlockBegin = "<!-- SACR:BEGIN -->"
-	sacrBlockEnd   = "<!-- SACR:END -->"
-)
+// summaryFingerprint marks sacr-authored summary comments so future runs
+// can find and replace their previous post without touching human comments.
+const summaryFingerprint = "<!-- sacr:fp:summary -->"
 
-// prBodyClient is the narrow interface UpdateDescription needs from the
-// GitHub client. Kept local so description_test.go can supply a fake
-// without touching the real HTTP layer.
-type prBodyClient interface {
-	GetPRBody(ctx context.Context, owner, repo string, number int) (string, error)
-	UpdatePRBody(ctx context.Context, owner, repo string, number int, body string) error
+// summaryClient is the narrow interface PostSummaryReview needs — kept
+// local so tests can supply a fake without touching the real HTTP layer.
+type summaryClient interface {
+	PostIssueComment(ctx context.Context, owner, repo string, number int, body string) (gh.IssueComment, error)
+	ListIssueComments(ctx context.Context, owner, repo string, number int) ([]gh.IssueComment, error)
+	DeleteIssueComment(ctx context.Context, owner, repo string, commentID int64) error
+}
+
+// labelClient is the narrow interface ApplyLabels needs.
+type labelClient interface {
 	AddLabels(ctx context.Context, owner, repo string, number int, labels []string) error
-	// Used to clean up stale exclusive labels (e.g. an old risk/* tag)
-	// before applying the fresh set. Both methods are best-effort.
 	ListLabels(ctx context.Context, owner, repo string, number int) ([]string, error)
 	RemoveLabel(ctx context.Context, owner, repo string, number int, label string) error
 }
 
-// UpdateDescription reads the current PR body, replaces (or appends) the
-// sacr-managed block, and writes it back. Labels derived from the Phase
-// 15 Labels payload are added idempotently. All errors are wrapped with
-// stage prefixes so a failure names the operation that hit it.
-//
-// scoreCounts is the tally of surviving findings by Severity (SUPPRESS
-// excluded) — the caller computes it once from the same emit stream so the
-// PR description matches what the reviewer actually published.
-func UpdateDescription(
+// PostSummaryReview posts the sacr review summary as a PR-level issue
+// comment authored by github-actions[bot]. Previous sacr summary comments
+// (identified by the fingerprint marker) are deleted first — best-effort,
+// non-fatal — so re-runs replace rather than accumulate.
+func PostSummaryReview(
 	ctx context.Context,
-	client prBodyClient,
+	client summaryClient,
 	owner, repo string, pr int,
 	summary model.Summary,
 	labels model.Labels,
@@ -57,41 +52,61 @@ func UpdateDescription(
 	pkgDiagram string,
 ) error {
 	if client == nil {
-		return fmt.Errorf("update description: nil client")
+		return fmt.Errorf("post summary: nil client")
 	}
 	if owner == "" || repo == "" || pr == 0 {
-		return fmt.Errorf("update description: owner/repo/pr required")
+		return fmt.Errorf("post summary: owner/repo/pr required")
 	}
 
-	// Escalate the labeler's risk tag when scanner or scoring evidence
-	// says the real risk is higher. The labeler only reads the diff, so a
-	// PR that adds a hardcoded secret gets tagged risk/low ("just a
-	// config file") even though a HIGH-severity gitleaks finding lives
-	// inside it. This is UX confusion the operator would hit on day one.
-	labels = escalateRiskFromFindings(labels, scoreCounts, scannerFindings)
+	body := RenderSummary(summary, labels, scoreCounts, overlapFindings, scannerFindings, effortScore, pkgDiagram) + "\n\n" + summaryFingerprint
 
-	current, err := client.GetPRBody(ctx, owner, repo, pr)
-	if err != nil {
-		return fmt.Errorf("update description: %w", err)
-	}
-	updated := replaceSacrBlock(current, renderSacrBlock(summary, labels, scoreCounts, overlapFindings, scannerFindings, effortScore, pkgDiagram))
-	if updated != current {
-		if err := client.UpdatePRBody(ctx, owner, repo, pr, updated); err != nil {
-			return fmt.Errorf("update description: %w", err)
-		}
-	}
-	if lbls := labelSet(labels); len(lbls) > 0 {
-		// Clean up stale exclusive labels (risk/*) before applying the
-		// fresh set. Missing labels or a list error is a no-op — we still
-		// try to add.
-		if existing, err := client.ListLabels(ctx, owner, repo, pr); err == nil {
-			for _, drop := range staleExclusiveLabels(existing, lbls) {
-				_ = client.RemoveLabel(ctx, owner, repo, pr, drop)
+	// Best-effort cleanup of prior sacr summary comments; individual delete
+	// failures are logged-ish (swallowed) so a stale comment doesn't block
+	// the fresh post.
+	if existing, err := client.ListIssueComments(ctx, owner, repo, pr); err == nil {
+		for _, c := range existing {
+			if strings.Contains(c.Body, summaryFingerprint) {
+				_ = client.DeleteIssueComment(ctx, owner, repo, c.ID)
 			}
 		}
-		if err := client.AddLabels(ctx, owner, repo, pr, lbls); err != nil {
-			return fmt.Errorf("update description: %w", err)
+	}
+
+	if _, err := client.PostIssueComment(ctx, owner, repo, pr, body); err != nil {
+		return fmt.Errorf("post summary: %w", err)
+	}
+	return nil
+}
+
+// ApplyLabels escalates risk from findings, drops stale exclusive labels,
+// and applies the fresh set. Idempotent and best-effort on the list/remove
+// steps — a missing list API doesn't stop the add.
+func ApplyLabels(
+	ctx context.Context,
+	client labelClient,
+	owner, repo string, pr int,
+	labels model.Labels,
+	scoreCounts map[scoring.Severity]int,
+	scannerFindings []model.LlmComment,
+) error {
+	if client == nil {
+		return fmt.Errorf("apply labels: nil client")
+	}
+	if owner == "" || repo == "" || pr == 0 {
+		return fmt.Errorf("apply labels: owner/repo/pr required")
+	}
+
+	labels = escalateRiskFromFindings(labels, scoreCounts, scannerFindings)
+	lbls := labelSet(labels)
+	if len(lbls) == 0 {
+		return nil
+	}
+	if existing, err := client.ListLabels(ctx, owner, repo, pr); err == nil {
+		for _, drop := range staleExclusiveLabels(existing, lbls) {
+			_ = client.RemoveLabel(ctx, owner, repo, pr, drop)
 		}
+	}
+	if err := client.AddLabels(ctx, owner, repo, pr, lbls); err != nil {
+		return fmt.Errorf("apply labels: %w", err)
 	}
 	return nil
 }
@@ -149,33 +164,17 @@ var prTypeLabels = map[string]struct{}{
 	"security": {},
 }
 
-// replaceSacrBlock swaps the content between the SACR markers with
-// `block`. If markers are absent it appends a fresh block, separated by a
-// blank line when the existing body is non-empty. `block` should NOT
-// include the marker lines — this function adds them.
-func replaceSacrBlock(body, block string) string {
-	wrapped := sacrBlockBegin + "\n" + block + "\n" + sacrBlockEnd
-
-	beginIdx := strings.Index(body, sacrBlockBegin)
-	endIdx := strings.Index(body, sacrBlockEnd)
-	if beginIdx >= 0 && endIdx > beginIdx {
-		before := body[:beginIdx]
-		after := body[endIdx+len(sacrBlockEnd):]
-		return before + wrapped + after
-	}
-	if strings.TrimSpace(body) == "" {
-		return wrapped
-	}
-	// Preserve existing content, append the block after one blank line.
-	trimmed := strings.TrimRight(body, "\n")
-	return trimmed + "\n\n" + wrapped
-}
-
-// renderSacrBlock builds the markdown that goes between the two markers.
-// Kept intentionally small: a walkthrough paragraph, a severity table, the
-// risk tag, and a change-groups list. Every section is optional so a
-// summary that came back mostly-empty still produces a sane block.
-func renderSacrBlock(summary model.Summary, labels model.Labels, counts map[scoring.Severity]int, overlapFindings []overlap.Finding, scannerFindings []model.LlmComment, effortScore effort.Score, pkgDiagram string) string {
+// RenderSummary produces the markdown block sacr publishes with each
+// review. Pure — no IO. Used by PostSummaryReview.
+func RenderSummary(
+	summary model.Summary,
+	labels model.Labels,
+	counts map[scoring.Severity]int,
+	overlapFindings []overlap.Finding,
+	scannerFindings []model.LlmComment,
+	effortScore effort.Score,
+	pkgDiagram string,
+) string {
 	var b strings.Builder
 	b.WriteString("## Automated review by sacr\n\n")
 

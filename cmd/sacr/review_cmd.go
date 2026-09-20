@@ -879,12 +879,15 @@ func readModulePath(repo string) string {
 	return ""
 }
 
-// emitNoReviewableChanges writes a minimal sacr block + label for PRs
-// that have no source changes to review (docs-only, deps-only, config-only,
-// generated files, everything filtered by the selector). Without this, the
-// pipeline silently exits and reviewers can't tell whether sacr ran or
-// crashed. Only fires in github format with a PR number set — stdout / json
-// / sarif callers still get a silent return.
+// emitNoReviewableChanges posts a small PR-level comment (github-actions[bot])
+// for PRs that have no source changes to review (docs-only, deps-only,
+// config-only, generated files, everything filtered by the selector).
+// Without this, the pipeline silently exits and reviewers can't tell whether
+// sacr ran or crashed. Only fires in github format with a PR number set —
+// stdout / json / sarif callers still get a silent return.
+//
+// Shares the summaryFingerprint marker with PostSummaryReview so the next
+// full review's delete-then-post cleans this stub up in one pass.
 func emitNoReviewableChanges(ctx context.Context, opts *reviewOpts, diffs []model.Diff, reason string, logger *slog.Logger) {
 	if opts.Format != formatGithub || opts.PR == 0 {
 		return
@@ -902,26 +905,24 @@ func emitNoReviewableChanges(ctx context.Context, opts *reviewOpts, diffs []mode
 		PRType:  prType,
 		RiskTag: "risk/low",
 	}
-	summary := model.Summary{
-		Walkthrough:  "No reviewable source changes detected. " + reason + ".",
-		Risk:         "low: no code to review",
-		TestingNotes: "No source behavior changed — CI checks are sufficient.",
+	body := fmt.Sprintf("**sacr** — no reviewable changes in this PR (%s).\n\n%s", reason, summaryFingerprint)
+	// TODO: fold into description.go later — owned by Agent B during this refactor.
+	if existing, err := client.ListIssueComments(ctx, owner, repo, opts.PR); err == nil {
+		for _, c := range existing {
+			if strings.Contains(c.Body, summaryFingerprint) {
+				_ = client.DeleteIssueComment(ctx, owner, repo, c.ID)
+			}
+		}
 	}
-	effortScore := effort.Score{
-		Value: 1,
-		Raw:   0.5,
-		Label: "trivial",
-		Dot:   "🟢",
-		Contributions: []effort.Contribution{
-			{Signal: "Base", Points: 0.5, Detail: "no reviewable changes"},
-		},
-	}
-	if err := UpdateDescription(ctx, client, owner, repo, opts.PR,
-		summary, labels, map[scoring.Severity]int{}, nil, nil, effortScore, ""); err != nil {
-		logutil.WithStage(logger, "emit").Warn("no-reviewable-changes block failed", "err", err.Error())
+	if _, err := client.PostIssueComment(ctx, owner, repo, opts.PR, body); err != nil {
+		logutil.WithStage(logger, "emit").Warn("no-reviewable-changes comment failed", "err", err.Error())
 		return
 	}
-	logutil.WithStage(logger, "emit").Info("posted no-reviewable-changes block", "label", prType)
+	// Labels are still worth applying so docs-only PRs get a `docs` tag.
+	if err := ApplyLabels(ctx, client, owner, repo, opts.PR, labels, map[scoring.Severity]int{}, nil); err != nil {
+		logutil.WithStage(logger, "emit").Warn("no-reviewable-changes labels failed", "err", err.Error())
+	}
+	logutil.WithStage(logger, "emit").Info("posted no-reviewable-changes comment", "label", prType)
 	fmt.Fprintf(os.Stderr, "[sacr] metrics: duration=0s files=0 tokens=in:0/out:0 cost=$0.0000 findings=new:0/carried:0/resolved:0 scanner=0 comments=0 no_reviewable_changes=true\n")
 }
 

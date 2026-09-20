@@ -314,6 +314,57 @@ func (c *Client) DeleteReviewComment(ctx context.Context, owner, repo string, co
 	return nil
 }
 
+// IssueComment is a lightweight view of a PR-level (conversation-tab) comment.
+type IssueComment struct {
+	ID   int64
+	Body string
+}
+
+// PostIssueComment posts a PR-level comment via POST /repos/{o}/{r}/issues/{n}/comments.
+func (c *Client) PostIssueComment(ctx context.Context, owner, repo string, number int, body string) (IssueComment, error) {
+	c.warnIfUnauth()
+	in := &github.IssueComment{Body: github.String(body)}
+	out, _, err := c.sdk.Issues.CreateComment(ctx, owner, repo, number, in)
+	if err != nil {
+		return IssueComment{}, fmt.Errorf("gh: post issue comment: %w", err)
+	}
+	return IssueComment{ID: out.GetID(), Body: out.GetBody()}, nil
+}
+
+// ListIssueComments returns every issue comment on the PR, paginating fully.
+func (c *Client) ListIssueComments(ctx context.Context, owner, repo string, number int) ([]IssueComment, error) {
+	c.warnIfUnauth()
+	var out []IssueComment
+	opt := &github.IssueListCommentsOptions{ListOptions: github.ListOptions{PerPage: 100}}
+	for {
+		batch, resp, err := c.sdk.Issues.ListComments(ctx, owner, repo, number, opt)
+		if err != nil {
+			return nil, fmt.Errorf("gh: list issue comments: %w", err)
+		}
+		for _, ic := range batch {
+			out = append(out, IssueComment{ID: ic.GetID(), Body: ic.GetBody()})
+		}
+		if resp == nil || resp.NextPage == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
+	}
+	return out, nil
+}
+
+// DeleteIssueComment removes one PR-level comment. 404 is treated as success.
+func (c *Client) DeleteIssueComment(ctx context.Context, owner, repo string, commentID int64) error {
+	c.warnIfUnauth()
+	resp, err := c.sdk.Issues.DeleteComment(ctx, owner, repo, commentID)
+	if err != nil {
+		if isNotFound(resp, err) {
+			return nil
+		}
+		return fmt.Errorf("gh: delete issue comment %d: %w", commentID, err)
+	}
+	return nil
+}
+
 // prToRef flattens go-github's PullRequest into our lightweight ref.
 // Every getter tolerates nil, so we do too.
 func prToRef(pr *github.PullRequest) OpenPRRef {
