@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 func TestDefaultOptions(t *testing.T) {

@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/scanner/rules"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/scanner/rules"
 )
 
 // semgrepScanner shells out to semgrep and parses the top-level results
@@ -125,18 +125,18 @@ func (s *semgrepScanner) Run(ctx context.Context, repoRoot string, changedPaths 
 
 // resolveSemgrepConfigs decides which --config value(s) to pass to
 // semgrep. Priority:
-//  1. ZREVIEW_SEMGREP_CONFIG (user override, passed through verbatim).
+//  1. SACR_SEMGREP_CONFIG (user override, passed through verbatim).
 //  2. Bundled presets matching the languages in changedPaths, unless
-//     ZREVIEW_DISABLE_SEMGREP_PRESETS=1.
+//     SACR_DISABLE_SEMGREP_PRESETS=1.
 //
 // Returns the list of config args and a cleanup fn that removes any
 // temp files created for embedded rules.
 func resolveSemgrepConfigs(changedPaths []string) ([]string, func(), error) {
 	noop := func() {}
-	if override := strings.TrimSpace(os.Getenv("ZREVIEW_SEMGREP_CONFIG")); override != "" {
+	if override := strings.TrimSpace(os.Getenv("SACR_SEMGREP_CONFIG")); override != "" {
 		return []string{override}, noop, nil
 	}
-	if os.Getenv("ZREVIEW_DISABLE_SEMGREP_PRESETS") == "1" {
+	if os.Getenv("SACR_DISABLE_SEMGREP_PRESETS") == "1" {
 		return nil, noop, nil
 	}
 	presets := selectPresets(changedPaths)
@@ -144,7 +144,7 @@ func resolveSemgrepConfigs(changedPaths []string) ([]string, func(), error) {
 		return nil, noop, nil
 	}
 
-	tmpDir, err := os.MkdirTemp("", "zreview-semgrep-*")
+	tmpDir, err := os.MkdirTemp("", "sacr-semgrep-*")
 	if err != nil {
 		return nil, noop, fmt.Errorf("mkdir temp: %w", err)
 	}

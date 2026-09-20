@@ -6,7 +6,7 @@ package scoring
 import (
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // testPolicy returns a compact policy suitable for table-driven tests.

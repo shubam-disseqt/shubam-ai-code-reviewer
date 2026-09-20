@@ -59,19 +59,19 @@ jobs:
           VERSION="${TAG#v}"
           COMMIT="$(git rev-parse --short HEAD)"
           DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          BIN="zreview"
-          [ "$GOOS" = "windows" ] && BIN="zreview.exe"
+          BIN="sacr"
+          [ "$GOOS" = "windows" ] && BIN="sacr.exe"
 
           STAGE="$(mktemp -d)"
           go build -trimpath \
             -ldflags "-s -w -X main.Version=${VERSION} -X main.GitCommit=${COMMIT} -X main.BuildDate=${DATE}" \
-            -o "${STAGE}/${BIN}" ./cmd/zreview
+            -o "${STAGE}/${BIN}" ./cmd/sacr
 
           # Include LICENSE + NOTICE alongside the binary — mandatory for
           # Apache-2.0 redistribution.
           cp LICENSE NOTICE README.md "${STAGE}/"
 
-          ARCHIVE="zreview_${VERSION}_${GOOS}_${GOARCH}.${MATRIX_EXT}"
+          ARCHIVE="sacr_${VERSION}_${GOOS}_${GOARCH}.${MATRIX_EXT}"
           if [ "$MATRIX_EXT" = "zip" ]; then
             (cd "$STAGE" && zip -qr "${GITHUB_WORKSPACE}/${ARCHIVE}" .)
           else
@@ -83,7 +83,7 @@ jobs:
       - name: Upload archive artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zreview-${{ matrix.os }}-${{ matrix.arch }}
+          name: sacr-${{ matrix.os }}-${{ matrix.arch }}
           path: |
             ${{ env.ARCHIVE }}
             ${{ env.ARCHIVE }}.sha256
@@ -131,7 +131,7 @@ jobs:
         run: |
           set -euo pipefail
           : > sha256sum.txt
-          for f in zreview_*; do
+          for f in sacr_*; do
             case "$f" in
               *.sha256) continue ;;
             esac
@@ -144,16 +144,16 @@ jobs:
           extract_sha() {
             awk -v pat="$1" '$2 == pat { print $1 }' sha256sum.txt
           }
-          echo "darwin_arm64=$(extract_sha "zreview_${VERSION}_darwin_arm64.tar.gz")" >> "$GITHUB_OUTPUT"
-          echo "darwin_amd64=$(extract_sha "zreview_${VERSION}_darwin_amd64.tar.gz")" >> "$GITHUB_OUTPUT"
-          echo "linux_arm64=$(extract_sha "zreview_${VERSION}_linux_arm64.tar.gz")" >> "$GITHUB_OUTPUT"
-          echo "linux_amd64=$(extract_sha "zreview_${VERSION}_linux_amd64.tar.gz")" >> "$GITHUB_OUTPUT"
+          echo "darwin_arm64=$(extract_sha "sacr_${VERSION}_darwin_arm64.tar.gz")" >> "$GITHUB_OUTPUT"
+          echo "darwin_amd64=$(extract_sha "sacr_${VERSION}_darwin_amd64.tar.gz")" >> "$GITHUB_OUTPUT"
+          echo "linux_arm64=$(extract_sha "sacr_${VERSION}_linux_arm64.tar.gz")" >> "$GITHUB_OUTPUT"
+          echo "linux_amd64=$(extract_sha "sacr_${VERSION}_linux_amd64.tar.gz")" >> "$GITHUB_OUTPUT"
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
-            dist/zreview_*
+            dist/sacr_*
             dist/sha256sum.txt
 
       - name: Release notes
@@ -178,8 +178,8 @@ jobs:
             echo "### Install"
             echo
             echo '```sh'
-            echo "brew install shubam-disseqt/tap/zreview"
-            echo "npm i -g zreview"
+            echo "brew install shubam-disseqt/tap/sacr"
+            echo "npm i -g sacr"
             echo '```'
           } > "$notes_file"
           echo "notes_file=${notes_file}" >> "$GITHUB_OUTPUT"
@@ -191,7 +191,7 @@ jobs:
           name: ${{ github.ref_name }}
           body_path: ${{ steps.notes.outputs.notes_file }}
           files: |
-            dist/zreview_*
+            dist/sacr_*
             dist/sha256sum.txt
           fail_on_unmatched_files: true
 
@@ -278,7 +278,7 @@ jobs:
           SHA_LINUX_AMD64: ${{ needs.release.outputs.sha_linux_amd64 }}
         run: |
           set -euo pipefail
-          FORMULA="Formula/zreview.rb"
+          FORMULA="Formula/sacr.rb"
           if [ ! -f "$FORMULA" ]; then
             echo "::error::$FORMULA missing in tap repo — bootstrap it first (see packaging/homebrew/README.md)."
             exit 1
@@ -321,12 +321,12 @@ jobs:
           open(path, "w").write(src)
           PY
 
-          git config user.name "zreview-release-bot"
-          git config user.email "zreview-release-bot@users.noreply.github.com"
-          BRANCH="bump-zreview-${VERSION}"
+          git config user.name "sacr-release-bot"
+          git config user.email "sacr-release-bot@users.noreply.github.com"
+          BRANCH="bump-sacr-${VERSION}"
           git checkout -b "$BRANCH"
           git add "$FORMULA"
-          git commit -m "zreview ${VERSION}"
+          git commit -m "sacr ${VERSION}"
           git push origin "$BRANCH"
 
       - name: Open PR against tap
@@ -337,7 +337,7 @@ jobs:
           VERSION: ${{ needs.release.outputs.version }}
         run: |
           gh pr create \
-            --title "zreview ${VERSION}" \
+            --title "sacr ${VERSION}" \
             --body "Automated bump from https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}" \
-            --head "bump-zreview-${VERSION}" \
+            --head "bump-sacr-${VERSION}" \
             --base main

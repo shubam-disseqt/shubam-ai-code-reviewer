@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 func TestLoadPolicyEmbeddedDefault(t *testing.T) {
-	t.Setenv("ZREVIEW_SCORING_POLICY", "")
+	t.Setenv("SACR_SCORING_POLICY", "")
 	// Point at a repoRoot that has no override; must return embedded.
 	p, err := LoadPolicy(t.TempDir())
 	if err != nil {
@@ -46,9 +46,9 @@ func TestLoadPolicyEmbeddedDefault(t *testing.T) {
 }
 
 func TestLoadPolicyRepoLocalOverride(t *testing.T) {
-	t.Setenv("ZREVIEW_SCORING_POLICY", "")
+	t.Setenv("SACR_SCORING_POLICY", "")
 	repo := t.TempDir()
-	dir := filepath.Join(repo, ".zreview")
+	dir := filepath.Join(repo, ".sacr")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -90,11 +90,11 @@ defaults: {impact: 0.1, confidence_floor: 0.1, severity_map: {default: MEDIUM}}
 	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	t.Setenv("ZREVIEW_SCORING_POLICY", path)
+	t.Setenv("SACR_SCORING_POLICY", path)
 
 	// Even with a repo-local file present, env override must win.
 	repo := t.TempDir()
-	local := filepath.Join(repo, ".zreview")
+	local := filepath.Join(repo, ".sacr")
 	if err := os.MkdirAll(local, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -112,7 +112,7 @@ defaults: {impact: 0.1, confidence_floor: 0.1, severity_map: {default: MEDIUM}}
 }
 
 func TestLoadPolicyEnvPathMissing(t *testing.T) {
-	t.Setenv("ZREVIEW_SCORING_POLICY", filepath.Join(t.TempDir(), "does-not-exist.yaml"))
+	t.Setenv("SACR_SCORING_POLICY", filepath.Join(t.TempDir(), "does-not-exist.yaml"))
 	if _, err := LoadPolicy(""); err == nil {
 		t.Fatal("expected error when env-configured file is absent")
 	}
@@ -124,7 +124,7 @@ func TestLoadPolicyParseError(t *testing.T) {
 	if err := os.WriteFile(path, []byte("::: not yaml :::"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	t.Setenv("ZREVIEW_SCORING_POLICY", path)
+	t.Setenv("SACR_SCORING_POLICY", path)
 	if _, err := LoadPolicy(""); err == nil {
 		t.Fatal("expected parse error")
 	}
@@ -137,7 +137,7 @@ func TestLoadPolicyMissingDefaultsRejects(t *testing.T) {
 	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	t.Setenv("ZREVIEW_SCORING_POLICY", path)
+	t.Setenv("SACR_SCORING_POLICY", path)
 	if _, err := LoadPolicy(""); err == nil {
 		t.Fatal("expected error on missing defaults")
 	}
@@ -155,7 +155,7 @@ defaults:
 	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	t.Setenv("ZREVIEW_SCORING_POLICY", path)
+	t.Setenv("SACR_SCORING_POLICY", path)
 	if _, err := LoadPolicy(""); err == nil {
 		t.Fatal("expected error on missing 'default' key in defaults.severity_map")
 	}
@@ -164,7 +164,7 @@ defaults:
 // Integration: the shipped default policy must score the four PDF
 // examples the way the spec says it does.
 func TestEmbeddedPolicyPDFExamples(t *testing.T) {
-	t.Setenv("ZREVIEW_SCORING_POLICY", "")
+	t.Setenv("SACR_SCORING_POLICY", "")
 	p, err := LoadPolicy("")
 	if err != nil {
 		t.Fatalf("load: %v", err)

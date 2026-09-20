@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gh"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
 )
 
 // mockLLM captures the request and returns a fixed response.

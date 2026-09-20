@@ -14,15 +14,15 @@ import (
 	"sync"
 	"text/template"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/filetype"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/prompts"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/filetype"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/prompts"
 )
 
 // summarizeTemplate is loaded lazily on first use so a corrupt embedded
 // prompt surfaces as a normal error at index time, not a panic at package
-// init that kills every zreview subcommand (including unrelated ones like
-// `zreview docs`).
+// init that kills every sacr subcommand (including unrelated ones like
+// `sacr docs`).
 var (
 	summarizeTemplateOnce sync.Once
 	summarizeTemplateVal  *template.Template

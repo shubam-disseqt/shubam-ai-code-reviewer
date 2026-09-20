@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
 )
 
 // fakeLLM returns a canned summarize response echoing the paths in the

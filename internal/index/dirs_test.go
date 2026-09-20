@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
 )
 
 // dirsFakeLLM answers both prompts IndexRepo issues: the file-summarize

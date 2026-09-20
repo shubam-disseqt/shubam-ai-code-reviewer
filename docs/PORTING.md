@@ -48,7 +48,7 @@ Verdicts:
 | `internal/tool/{file_read,file_find,code_search,filereader,file_read_diff,response_message,stub,definitions}.go` | ~700 | COPY | `internal/tool/*.go` |
 | `internal/config/toolsconfig/tools.json` | 214 | COPY | `internal/tool/tools.json` (embed; drop `plan_task` field) |
 | `internal/session/{persist,manifest,resume}.go` | ~800 | COPY+TRIM | `internal/session/*.go` — keep JSONL writer + resume-by-fingerprint; drop viewer, drop `list.go` / `compare.go` / `raw_writer.go` |
-| `internal/viewer/{hostguard,securityheaders}.go` | ~200 | COPY | `internal/docs/{hostguard,securityheaders}.go` — DNS-rebinding defense for `zreview docs` |
+| `internal/viewer/{hostguard,securityheaders}.go` | ~200 | COPY | `internal/docs/{hostguard,securityheaders}.go` — DNS-rebinding defense for `sacr docs` |
 | `internal/config/template/prompts/main_task_*.md` | — | COPY | `internal/prompts/*.md` |
 | `internal/config/template/prompts/memory_compression_task_*.md` | — | COPY | `internal/prompts/*.md` |
 
@@ -222,7 +222,7 @@ own `cancelPendingCompression` should.
 5. **Grouping rewrite** — `internal/bundle/grouping.go` is a full rewrite because OCR's version drags in `session.RunIdentity`, `telemetry`, `template.LlmConversation`. **Defer to v2** — v1 uses one-file-per-review dispatch.
 6. **Rules layer greenfield** — Mira's per-repo `review_context` table + `learned_rules` table are collapsed into a single YAML-in-git format. Scope filtering (currently dead in Mira — see [PORTING.md](PORTING.md) §Rules gotchas) is wired up here.
 7. **Postgres schema** — Mira's Postgres uses `DOUBLE PRECISION` for timestamps (matches SQLite float epoch). We use `TIMESTAMPTZ` — cleaner for greenfield.
-8. **Error strings** — OCR-branded `[ocr]` prefix in a few user-facing errors (`parser.go:137,147`, `relocation.go:73`, `grouping.go:102,148`). Search-replace to `[zreview]` or route through a logger.
+8. **Error strings** — OCR-branded `[ocr]` prefix in a few user-facing errors (`parser.go:137,147`, `relocation.go:73`, `grouping.go:102,148`). Search-replace to `[sacr]` or route through a logger.
 9. **Third-party dep pins** — `github.com/bmatcuk/doublestar/v4` (MIT, for `**` globs), `github.com/spf13/cobra` (Apache-2.0, CLI), `github.com/jackc/pgx/v5` (MIT), `modernc.org/sqlite` (BSD-3-clause), `github.com/google/go-github/v63` (BSD-3-clause), `github.com/BurntSushi/toml` or `github.com/pelletier/go-toml/v2` (MIT), `golang.org/x/mod` (BSD-3), `sigs.k8s.io/yaml` or `github.com/goccy/go-yaml`.
 
 ---
@@ -287,7 +287,7 @@ Given the dependency graph, the sensible sequence is:
 4. **Phase 5** — `internal/overlap/*` + `internal/gh`. From Mira. 1 day.
 5. **Phase 6** — `internal/select` + `internal/comment/*` (positioning wired to `diff/resolver.go`). From OCR. 2 days.
 6. **Phase 7** — `internal/rules/*`. YAML loader, glob selector, prompt injection. Some new code, some Mira semantics. 1 day.
-7. **Phase 8** — Wire together in `cmd/zreview/review_cmd.go` + `internal/llmloop/loop.go`. Session persistence. `--resume`. 2 days.
+7. **Phase 8** — Wire together in `cmd/sacr/review_cmd.go` + `internal/llmloop/loop.go`. Session persistence. `--resume`. 2 days.
 
 Total: **10–14 days of coding**, then Phase 9 (prod hardening) and
 Phase 10 (docs) — see the full plan in the conversation that authored

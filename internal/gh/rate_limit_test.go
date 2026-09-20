@@ -139,8 +139,8 @@ func TestEnvFloat_And_EnvInt(t *testing.T) {
 }
 
 func TestNewRateLimitedTransport_UsesEnvOverrides(t *testing.T) {
-	t.Setenv("ZREVIEW_GH_RATE_LIMIT_RPS", "50")
-	t.Setenv("ZREVIEW_GH_RATE_LIMIT_BURST", "7")
+	t.Setenv("SACR_GH_RATE_LIMIT_RPS", "50")
+	t.Setenv("SACR_GH_RATE_LIMIT_BURST", "7")
 	rt := newRateLimitedTransport(http.DefaultTransport)
 	rlt, ok := rt.(*rateLimitedTransport)
 	if !ok {
@@ -155,8 +155,8 @@ func TestNewRateLimitedTransport_UsesEnvOverrides(t *testing.T) {
 }
 
 func TestNewRateLimitedTransport_InvalidEnvFallsBackToDefaults(t *testing.T) {
-	t.Setenv("ZREVIEW_GH_RATE_LIMIT_RPS", "0")
-	t.Setenv("ZREVIEW_GH_RATE_LIMIT_BURST", "-1")
+	t.Setenv("SACR_GH_RATE_LIMIT_RPS", "0")
+	t.Setenv("SACR_GH_RATE_LIMIT_BURST", "-1")
 	rt := newRateLimitedTransport(http.DefaultTransport)
 	rlt := rt.(*rateLimitedTransport)
 	if rlt.limiter.Burst() != defaultRateBurst {

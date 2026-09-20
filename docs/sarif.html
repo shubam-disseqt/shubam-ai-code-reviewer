@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>SARIF output &mdash; z-code-reviewer</title>
+  <title>SARIF output &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -50,21 +50,21 @@
 
     <h3><code>--format sarif</code></h3>
     <p>Writes a SARIF 2.1.0 JSON log to <code>--output</code> (file or <code>-</code> for stdout). Suitable for CI jobs that upload SARIF as a workflow artifact, or for piping into other tooling.</p>
-    <pre><code>zreview review --commit HEAD --format sarif --output review.sarif</code></pre>
-    <p>Every unique <code>(Source, RuleID)</code> pair becomes one <code>ReportingDescriptor</code>; every finding becomes one <code>Result</code>. Results carry <code>partialFingerprints.zreview/v1</code>, the same Phase 13 fingerprint the incremental re-review path uses &mdash; so Code Scanning alert state and zreview carry-over stay in sync.</p>
+    <pre><code>sacr review --commit HEAD --format sarif --output review.sarif</code></pre>
+    <p>Every unique <code>(Source, RuleID)</code> pair becomes one <code>ReportingDescriptor</code>; every finding becomes one <code>Result</code>. Results carry <code>partialFingerprints.sacr/v1</code>, the same Phase 13 fingerprint the incremental re-review path uses &mdash; so Code Scanning alert state and sacr carry-over stay in sync.</p>
 
     <h3><code>--format github</code> + Code Scanning upload</h3>
     <p>The default GitHub path posts LLM comments inline and, when opted in, uploads scanner findings as SARIF in the same run:</p>
     <pre><code>env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  ZREVIEW_UPLOAD_SARIF: "1"
-run: zreview review --pr ${{ github.event.number }} --format github</code></pre>
+  SACR_UPLOAD_SARIF: "1"
+run: sacr review --pr ${{ github.event.number }} --format github</code></pre>
     <p>Upload requires the workflow permission <code>security-events: write</code>. Without it GitHub returns 403 and the SARIF step logs the failure without failing the review.</p>
 
     <h2 id="severity">Severity mapping</h2>
     <p>Phase 16 scoring buckets translate to SARIF levels:</p>
     <table>
-      <thead><tr><th>zreview severity</th><th>SARIF level</th></tr></thead>
+      <thead><tr><th>sacr severity</th><th>SARIF level</th></tr></thead>
       <tbody>
         <tr><td><code>CRITICAL</code>, <code>HIGH</code></td><td><code>error</code></td></tr>
         <tr><td><code>MEDIUM</code></td><td><code>warning</code></td></tr>
@@ -76,7 +76,7 @@ run: zreview review --pr ${{ github.event.number }} --format github</code></pre>
     <h2 id="fingerprints">Fingerprints and alert carry-over</h2>
     <p>The <code>partialFingerprints</code> map on every result includes:</p>
     <pre><code>"partialFingerprints": {
-  "zreview/v1": "&lt;sha256 of owner|repo|category|path|symbol|snippet&gt;"
+  "sacr/v1": "&lt;sha256 of owner|repo|category|path|symbol|snippet&gt;"
 }</code></pre>
     <p>Whitespace-collapsed, comment-stripped, extension-lowercased. Two pushes that differ only in formatting produce the same fingerprint &mdash; a Code Scanning alert stays open across those pushes instead of being closed and reopened.</p>
 
@@ -89,9 +89,9 @@ run: zreview review --pr ${{ github.event.number }} --format github</code></pre>
 
     <h2 id="troubleshooting">Troubleshooting</h2>
     <ul>
-      <li><strong>Upload logs &ldquo;422 Unprocessable&rdquo;.</strong> GitHub validated the SARIF and rejected it. Save the file locally with <code>--format sarif --output x.sarif</code> and open it in a JSON viewer &mdash; typical causes are missing <code>commit_sha</code> (set <code>GITHUB_SHA</code>) or empty <code>ref</code>. The <code>zreview review</code> command reads <code>GITHUB_REF</code> automatically inside a GH Actions runner.</li>
+      <li><strong>Upload logs &ldquo;422 Unprocessable&rdquo;.</strong> GitHub validated the SARIF and rejected it. Save the file locally with <code>--format sarif --output x.sarif</code> and open it in a JSON viewer &mdash; typical causes are missing <code>commit_sha</code> (set <code>GITHUB_SHA</code>) or empty <code>ref</code>. The <code>sacr review</code> command reads <code>GITHUB_REF</code> automatically inside a GH Actions runner.</li>
       <li><strong>&ldquo;security-events: write&rdquo; missing.</strong> Add the permission to the job&rsquo;s <code>permissions</code> block. Composite Actions do not grant permissions on your behalf.</li>
-      <li><strong>Alert flapping across pushes.</strong> Confirm the finding&rsquo;s fingerprint is stable &mdash; run <code>zreview review --format json</code> on both pushes and diff the <code>partialFingerprints</code>. Non-stable fingerprints usually mean the snippet includes a moving line number or timestamp; open an issue with the offending scanner rule.</li>
+      <li><strong>Alert flapping across pushes.</strong> Confirm the finding&rsquo;s fingerprint is stable &mdash; run <code>sacr review --format json</code> on both pushes and diff the <code>partialFingerprints</code>. Non-stable fingerprints usually mean the snippet includes a moving line number or timestamp; open an issue with the offending scanner rule.</li>
     </ul>
 
     <footer>

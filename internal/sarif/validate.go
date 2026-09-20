@@ -35,7 +35,7 @@ var allowedLevels = map[string]struct{}{
 // Encode is expected to already satisfy these — Validate is the paranoid
 // second pass before upload.
 //
-// ponytail: hand-rolled invariant list, replace with a schema library only
+// note: hand-rolled invariant list, replace with a schema library only
 // if a real 422 slips through.
 func Validate(blob []byte) error {
 	var log Log

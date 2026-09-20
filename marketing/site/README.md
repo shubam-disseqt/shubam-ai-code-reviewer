@@ -1,4 +1,4 @@
-# zreview marketing site
+# sacr marketing site
 
 Single-file static landing page. No build step, no dependencies.
 

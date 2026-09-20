@@ -2,7 +2,7 @@
 // Copyright 2026 disseqt
 
 // Package docsserver runs a small, defense-in-depth HTTP server for the
-// offline docs shipped with the zreview binary.
+// offline docs shipped with the sacr binary.
 //
 // It is deliberately narrow: read-only, embedded assets, loopback bind,
 // Host-header allowlist, strict CSP. There are no write routes and no
@@ -71,7 +71,7 @@ func Start(ctx context.Context, opts Options) error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	fmt.Fprintf(opts.Stdout, "z-code-reviewer docs listening at %s\n", url)
+	fmt.Fprintf(opts.Stdout, "shubam-ai-code-reviewer docs listening at %s\n", url)
 	fmt.Fprintln(opts.Stdout, "(press Ctrl+C to stop)")
 
 	if shouldOpen(opts.OpenMode, opts.Stdout) {

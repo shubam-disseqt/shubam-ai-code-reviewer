@@ -176,12 +176,12 @@ func TestDefaultScannersHasThree(t *testing.T) {
 }
 
 func TestEnvDisabledReadsEnv(t *testing.T) {
-	t.Setenv("ZREVIEW_DISABLE_SCANNERS", "gitleaks")
+	t.Setenv("SACR_DISABLE_SCANNERS", "gitleaks")
 	got := EnvDisabled()
 	if _, ok := got["gitleaks"]; !ok {
 		t.Errorf("EnvDisabled missed the env value: %v", got)
 	}
-	t.Setenv("ZREVIEW_DISABLE_SCANNERS", "")
+	t.Setenv("SACR_DISABLE_SCANNERS", "")
 	if EnvDisabled() != nil {
 		t.Errorf("empty env should return nil map")
 	}

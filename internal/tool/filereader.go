@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/gitcmd"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/pathutil"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gitcmd"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/pathutil"
 )
 
 // ReviewMode represents the active review mode.

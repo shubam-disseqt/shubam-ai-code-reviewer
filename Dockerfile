@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 disseqt
 #
-# Multi-stage, multi-arch build for the zreview CLI.
-# Build with: docker buildx build --platform linux/amd64,linux/arm64 -t zreview:dev .
+# Multi-stage, multi-arch build for the sacr CLI.
+# Build with: docker buildx build --platform linux/amd64,linux/arm64 -t sacr:dev .
 
-ARG ZREVIEW_VERSION=dev
+ARG SACR_VERSION=dev
 
 # ---- build stage --------------------------------------------------------
 FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
-ARG ZREVIEW_VERSION
+ARG SACR_VERSION
 WORKDIR /src
 RUN apk add --no-cache git ca-certificates
 COPY go.mod go.sum ./
@@ -21,16 +21,16 @@ RUN set -eux; \
     DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
     CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -trimpath \
-      -ldflags "-s -w -X main.Version=${ZREVIEW_VERSION} -X main.GitCommit=${COMMIT} -X main.BuildDate=${DATE}" \
-      -o /out/zreview ./cmd/zreview
+      -ldflags "-s -w -X main.Version=${SACR_VERSION} -X main.GitCommit=${COMMIT} -X main.BuildDate=${DATE}" \
+      -o /out/sacr ./cmd/sacr
 
 # ---- runtime stage ------------------------------------------------------
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates git \
- && addgroup -g 1000 -S zreview \
- && adduser  -u 1000 -S -G zreview -h /home/zreview zreview \
- && mkdir -p /workspace && chown zreview:zreview /workspace
-COPY --from=build /out/zreview /usr/local/bin/zreview
+ && addgroup -g 1000 -S sacr \
+ && adduser  -u 1000 -S -G sacr -h /home/sacr sacr \
+ && mkdir -p /workspace && chown sacr:sacr /workspace
+COPY --from=build /out/sacr /usr/local/bin/sacr
 USER 1000:1000
 WORKDIR /workspace
-ENTRYPOINT ["/usr/local/bin/zreview"]
+ENTRYPOINT ["/usr/local/bin/sacr"]

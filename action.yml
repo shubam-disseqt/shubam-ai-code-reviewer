@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-name: zreview
+name: sacr
 description: AI-powered PR review — inline comments, effort score, depgraph
 author: shubam-disseqt
 branding:
@@ -37,9 +37,9 @@ inputs:
     required: false
     default: github
   image:
-    description: Override the zreview image (tag or full ref)
+    description: Override the sacr image (tag or full ref)
     required: false
-    default: ghcr.io/shubam-disseqt/zreview:latest
+    default: ghcr.io/shubam-disseqt/sacr:latest
 
 runs:
   using: composite
@@ -56,14 +56,14 @@ runs:
           *) echo "::error::unknown provider '${{ inputs.provider }}'"; exit 1 ;;
         esac
 
-    - name: Run zreview via Docker
+    - name: Run sacr via Docker
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         GITHUB_REPOSITORY: ${{ github.repository }}
-        ZREVIEW_PROVIDER: ${{ inputs.provider }}
-        ZREVIEW_MODEL: ${{ inputs.model }}
-        ZREVIEW_CHEAP_MODEL: ${{ inputs.cheap-model }}
+        SACR_PROVIDER: ${{ inputs.provider }}
+        SACR_MODEL: ${{ inputs.model }}
+        SACR_CHEAP_MODEL: ${{ inputs.cheap-model }}
       run: |
         set -euo pipefail
         docker run --rm \
@@ -72,7 +72,7 @@ runs:
           -e OPENAI_API_KEY -e ANTHROPIC_API_KEY -e DEEPSEEK_API_KEY \
           -e AWS_BEARER_TOKEN_BEDROCK -e AWS_REGION \
           -e GITHUB_TOKEN -e GITHUB_REPOSITORY \
-          -e ZREVIEW_PROVIDER -e ZREVIEW_MODEL -e ZREVIEW_CHEAP_MODEL \
+          -e SACR_PROVIDER -e SACR_MODEL -e SACR_CHEAP_MODEL \
           "${{ inputs.image }}" \
           review \
             --pr "${{ inputs.pr-number }}" \

@@ -18,8 +18,8 @@ import (
 	"sync"
 	"text/template"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/prompts"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/prompts"
 	"golang.org/x/sync/errgroup"
 )
 

@@ -12,7 +12,7 @@ import (
 )
 
 // TestParseDir_MixedSources verifies the parser handles all three source
-// shapes: a slog JSON metrics record, a text "[zreview] metrics:" line,
+// shapes: a slog JSON metrics record, a text "[sacr] metrics:" line,
 // and session_start/session_end fallback only.
 func TestParseDir_MixedSources(t *testing.T) {
 	dir := t.TempDir()
@@ -25,7 +25,7 @@ func TestParseDir_MixedSources(t *testing.T) {
 
 	// 2. Text metrics line embedded in a JSONL that also has session boundaries.
 	textSession := `{"type":"session_start","timestamp":"2026-01-16T09:00:00Z","sessionId":"s2"}
-[zreview] metrics: duration=1.5s files=3 tokens=in:500/out:100 cost=$0.05 findings=new:2/carried:1/resolved:0 scanner=1 comments=2
+[sacr] metrics: duration=1.5s files=3 tokens=in:500/out:100 cost=$0.05 findings=new:2/carried:1/resolved:0 scanner=1 comments=2
 {"type":"session_end","files_reviewed":3,"duration_seconds":1.5}
 `
 	writeFile(t, filepath.Join(dir, "session2.jsonl"), textSession)
@@ -104,7 +104,7 @@ func TestRender_ProducesSelfContainedHTML(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 	out := buf.String()
-	for _, want := range []string{"<title>zreview metrics</title>", "chart.umd.min.js", "new Chart(", `"total_cost_usd":0.1`} {
+	for _, want := range []string{"<title>sacr metrics</title>", "chart.umd.min.js", "new Chart(", `"total_cost_usd":0.1`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q", want)
 		}

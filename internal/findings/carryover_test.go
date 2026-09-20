@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // mkFinding builds a Finding with just enough shape for reconcile tests.

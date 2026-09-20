@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 alibaba/open-code-review Contributors
-// Portions Copyright 2026 disseqt
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors
 //
 // Adapted from alibaba/open-code-review internal/viewer/hostguard.go
 // under Apache License 2.0. Modifications: renamed env var to
-// ZREVIEW_DOCS_ALLOWED_HOSTS; unexported names retained.
+// SACR_DOCS_ALLOWED_HOSTS; unexported names retained.
 
 package docsserver
 
@@ -18,7 +18,7 @@ import (
 // envAllowedHosts is the environment variable users can set to extend
 // the default loopback allowlist with additional hostnames
 // (comma-separated).
-const envAllowedHosts = "ZREVIEW_DOCS_ALLOWED_HOSTS"
+const envAllowedHosts = "SACR_DOCS_ALLOWED_HOSTS"
 
 // hostOnly returns the bare host portion of a Host header value with
 // any port stripped and surrounding brackets removed from IPv6
@@ -61,7 +61,7 @@ func isLoopbackHost(host string) bool {
 // included so a user who binds to a specific address can still reach
 // the UI at that address. Wildcard binds (empty, 0.0.0.0, ::) are NOT
 // auto-added — operators who bind on a public interface must
-// explicitly set ZREVIEW_DOCS_ALLOWED_HOSTS.
+// explicitly set SACR_DOCS_ALLOWED_HOSTS.
 func buildAllowedHosts(bindHost, envVal string) map[string]struct{} {
 	allowed := map[string]struct{}{
 		"localhost": {},
@@ -135,7 +135,7 @@ func displayAddr(addr string) string {
 	return addr
 }
 
-// resolveAllowedHostsFromEnv reads ZREVIEW_DOCS_ALLOWED_HOSTS and
+// resolveAllowedHostsFromEnv reads SACR_DOCS_ALLOWED_HOSTS and
 // combines it with the bind host to produce the active allowlist.
 func resolveAllowedHostsFromEnv(bindAddr string) map[string]struct{} {
 	return buildAllowedHosts(splitBindHost(bindAddr), os.Getenv(envAllowedHosts))

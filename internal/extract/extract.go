@@ -5,7 +5,7 @@
 
 package extract
 
-import "github.com/shubam-disseqt/z-code-reviewer/internal/filetype"
+import "github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/filetype"
 
 // Registry maps a Language to its Extractor.
 type Registry map[filetype.Language]Extractor

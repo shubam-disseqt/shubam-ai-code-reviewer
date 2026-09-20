@@ -86,17 +86,17 @@ func (p Policy) Source() string { return p.source }
 
 // LoadPolicy resolves the effort policy in override order:
 //
-//  1. $ZREVIEW_EFFORT_POLICY (absolute or relative to CWD)
-//  2. <repoRoot>/.zreview/effort.yaml
+//  1. $SACR_EFFORT_POLICY (absolute or relative to CWD)
+//  2. <repoRoot>/.sacr/effort.yaml
 //  3. embedded default
 //
 // A parse error on an override is surfaced — silently falling back to the
 // default would mislead operators who thought their override applied.
 func LoadPolicy(repoRoot string) (Policy, error) {
-	if p := os.Getenv("ZREVIEW_EFFORT_POLICY"); p != "" {
+	if p := os.Getenv("SACR_EFFORT_POLICY"); p != "" {
 		return loadFromFile(p, "env("+p+")")
 	}
-	repoPath := filepath.Join(repoRoot, ".zreview", "effort.yaml")
+	repoPath := filepath.Join(repoRoot, ".sacr", "effort.yaml")
 	if _, err := os.Stat(repoPath); err == nil {
 		return loadFromFile(repoPath, "repo("+repoPath+")")
 	}

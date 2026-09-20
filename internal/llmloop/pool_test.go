@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 func TestNewCommentWorkerPool_Default(t *testing.T) {

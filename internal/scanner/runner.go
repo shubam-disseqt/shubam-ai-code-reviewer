@@ -33,7 +33,7 @@ type scannerImpl interface {
 }
 
 // LogFunc receives one-line info logs from the runner. Defaults to
-// log.Printf with the "[zreview] scanner:" prefix.
+// log.Printf with the "[sacr] scanner:" prefix.
 type LogFunc func(format string, args ...any)
 
 // Options configure the top-level Run call. Zero-value is fine for
@@ -43,7 +43,7 @@ type Options struct {
 	// to log.Printf when nil.
 	Log LogFunc
 	// Disabled is the set of adapter names to skip entirely. Filled from
-	// ZREVIEW_DISABLE_SCANNERS when Run is called via the CLI helper.
+	// SACR_DISABLE_SCANNERS when Run is called via the CLI helper.
 	Disabled map[string]struct{}
 	// Scanners overrides the default adapter list. Nil means "the three
 	// production adapters".
@@ -59,7 +59,7 @@ type Options struct {
 func Run(ctx context.Context, repoRoot string, changedPaths []string, opts Options) ([]ScannerFinding, error) {
 	if opts.Log == nil {
 		opts.Log = func(format string, args ...any) {
-			log.Printf("[zreview] scanner: "+format, args...)
+			log.Printf("[sacr] scanner: "+format, args...)
 		}
 	}
 	// Serialise log calls: adapters run in parallel goroutines and the
@@ -84,7 +84,7 @@ func Run(ctx context.Context, repoRoot string, changedPaths []string, opts Optio
 	enabled := make([]scannerImpl, 0, len(scanners))
 	for _, s := range scanners {
 		if _, off := opts.Disabled[s.Name()]; off {
-			safeLog("skipping %s (disabled via ZREVIEW_DISABLE_SCANNERS)", s.Name())
+			safeLog("skipping %s (disabled via SACR_DISABLE_SCANNERS)", s.Name())
 			continue
 		}
 		enabled = append(enabled, s)
@@ -186,8 +186,8 @@ func TallyByTool(findings []ScannerFinding) string {
 	return "{" + strings.Join(parts, ", ") + "}"
 }
 
-// EnvDisabled reads ZREVIEW_DISABLE_SCANNERS from the process environment.
-// A thin helper so cmd/zreview doesn't need to know the env-var name.
+// EnvDisabled reads SACR_DISABLE_SCANNERS from the process environment.
+// A thin helper so cmd/sacr doesn't need to know the env-var name.
 func EnvDisabled() map[string]struct{} {
-	return ParseDisabled(os.Getenv("ZREVIEW_DISABLE_SCANNERS"))
+	return ParseDisabled(os.Getenv("SACR_DISABLE_SCANNERS"))
 }

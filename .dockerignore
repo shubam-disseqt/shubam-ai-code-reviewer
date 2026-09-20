@@ -19,7 +19,7 @@ coverage.out
 
 # Local runtime state
 .claude
-.zreview
+.sacr
 
 # Docs site build artifacts (source .md is still copied for embed.go)
 docs/_site

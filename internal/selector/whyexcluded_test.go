@@ -6,7 +6,7 @@ package selector
 import (
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 func TestEffectivePath(t *testing.T) {

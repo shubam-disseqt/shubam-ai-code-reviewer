@@ -9,7 +9,7 @@ import "testing"
 func base() Input {
 	return Input{
 		Owner:    "disseqt",
-		Repo:     "z-code-reviewer",
+		Repo:     "shubam-ai-code-reviewer",
 		Category: "bug",
 		Path:     "internal/foo/foo.go",
 		Symbol:   "Handle",

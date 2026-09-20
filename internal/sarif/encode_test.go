@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/scoring"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/scoring"
 )
 
 // update rewrites golden files when set. Run `go test -update ./internal/sarif`
@@ -28,7 +28,7 @@ func TestEncode_Golden(t *testing.T) {
 		{
 			name:     "empty",
 			findings: nil,
-			meta:     Meta{Repo: "shubam-disseqt/z-code-reviewer", HeadSHA: "deadbeef", Version: "v0.2.0"},
+			meta:     Meta{Repo: "shubam-disseqt/shubam-ai-code-reviewer", HeadSHA: "deadbeef", Version: "v0.2.0"},
 			golden:   "empty.golden.json",
 		},
 		{
@@ -65,7 +65,7 @@ func TestEncode_Golden(t *testing.T) {
 					HelpURI:     "https://pkg.go.dev/vuln/GO-2024-1234",
 				},
 			},
-			meta:   Meta{Repo: "shubam-disseqt/z-code-reviewer", HeadSHA: "cafef00d", Version: "v0.2.0"},
+			meta:   Meta{Repo: "shubam-disseqt/shubam-ai-code-reviewer", HeadSHA: "cafef00d", Version: "v0.2.0"},
 			golden: "scanner_findings.golden.json",
 		},
 		{
@@ -164,9 +164,9 @@ func TestEncode_PartialFingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
 	}
-	// The zreview/v1 partialFingerprints key is load-bearing for Code
+	// The sacr/v1 partialFingerprints key is load-bearing for Code
 	// Scanning alert carry-over. Guard the key + value shape.
-	if !bytes.Contains(out, []byte("\"zreview/v1\": \"abc123\"")) {
+	if !bytes.Contains(out, []byte("\"sacr/v1\": \"abc123\"")) {
 		t.Errorf("partialFingerprints missing, got:\n%s", out)
 	}
 }

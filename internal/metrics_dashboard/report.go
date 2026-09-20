@@ -71,7 +71,7 @@ func Build(runs []RunMetrics) Report {
 // bucketFor returns 0 (green), 1 (yellow), 2 (red). Prefers effort_score
 // if the log carried it, else falls back to cost tiers picked to match a
 // typical PR review (<$0.20 cheap, <$1 medium, else expensive).
-// ponytail: fixed cost tiers, wire to policy if teams want tuning.
+// note: fixed cost tiers, wire to policy if teams want tuning.
 func bucketFor(r RunMetrics) int {
 	if r.EffortScore > 0 {
 		switch {
@@ -125,7 +125,7 @@ const dashboardTmpl = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>zreview metrics</title>
+<title>sacr metrics</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
@@ -168,12 +168,12 @@ const dashboardTmpl = `<!doctype html>
 </head>
 <body>
 <header>
-  <h1>zreview metrics</h1>
+  <h1>sacr metrics</h1>
   <div class="sub">Generated {{fmtTime .Generated}} — {{.Totals.Runs}} run(s)</div>
 </header>
 <main>
 {{if eq .Totals.Runs 0}}
-  <div class="empty">No sessions found. Run <code>zreview review</code> to populate ~/.zreview/sessions.</div>
+  <div class="empty">No sessions found. Run <code>sacr review</code> to populate ~/.sacr/sessions.</div>
 {{else}}
   <section class="kpis">
     <div class="kpi"><div class="label">Total runs</div><div class="value">{{.Totals.Runs}}</div></div>

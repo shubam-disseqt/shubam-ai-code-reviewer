@@ -11,15 +11,15 @@ import (
 	"log"
 	"sort"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gh"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
 )
 
 // Detect runs the cross-PR overlap pipeline: list open PRs → pre-filter →
 // batched LLM verdict → confidence filter → sort. Any failure returns
 // ([], nil) — overlap detection is best-effort and must never block review.
 //
-// ponytail: add fingerprint cache when overlap is called for many PRs per
+// note: add fingerprint cache when overlap is called for many PRs per
 // session. Right now we re-fetch every candidate's file list on every call,
 // which is fine for the CLI review-one-PR path but wasteful in a
 // long-running batch review.

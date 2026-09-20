@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/manifests"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/manifests"
 )
 
 // IndexManifests walks repo-relative tree paths, delegates each match to the

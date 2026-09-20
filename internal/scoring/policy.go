@@ -48,8 +48,8 @@ var defaultPolicyYAML []byte
 
 // LoadPolicy resolves the effective policy in the documented order:
 //
-//  1. $ZREVIEW_SCORING_POLICY (path to a YAML file, if set and non-empty)
-//  2. <repoRoot>/.zreview/scoring.yaml (if it exists)
+//  1. $SACR_SCORING_POLICY (path to a YAML file, if set and non-empty)
+//  2. <repoRoot>/.sacr/scoring.yaml (if it exists)
 //  3. embedded default (always succeeds)
 //
 // repoRoot may be empty; in that case the repo-local step is skipped.
@@ -57,7 +57,7 @@ var defaultPolicyYAML []byte
 // on an explicitly configured source returns the error rather than
 // silently falling through — the operator asked for that file.
 func LoadPolicy(repoRoot string) (Policy, error) {
-	if p := os.Getenv("ZREVIEW_SCORING_POLICY"); p != "" {
+	if p := os.Getenv("SACR_SCORING_POLICY"); p != "" {
 		pol, err := loadPolicyFile(p)
 		if err != nil {
 			return Policy{}, fmt.Errorf("scoring: load %s: %w", p, err)
@@ -66,7 +66,7 @@ func LoadPolicy(repoRoot string) (Policy, error) {
 		return pol, nil
 	}
 	if repoRoot != "" {
-		local := filepath.Join(repoRoot, ".zreview", "scoring.yaml")
+		local := filepath.Join(repoRoot, ".sacr", "scoring.yaml")
 		if _, err := os.Stat(local); err == nil {
 			pol, err := loadPolicyFile(local)
 			if err != nil {

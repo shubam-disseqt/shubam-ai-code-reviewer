@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Portions Copyright 2026 disseqt
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors
 // Copyright 2026 alibaba/open-code-review Contributors
 //
 // Adapted from alibaba/open-code-review internal/config/toolsconfig/toolsconfig_test.go

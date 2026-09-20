@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/gh"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gh"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
 )
 
 const (

@@ -1,4 +1,4 @@
-## Curated JS/TS security rules bundled with zreview.
+## Curated JS/TS security rules bundled with sacr.
 ## Bandit/Snyk-caliber but intentionally small — only high-signal patterns.
 ## To override, set ZREVIEW_SEMGREP_CONFIG=<path>.
 ## To disable presets entirely, set ZREVIEW_DISABLE_SEMGREP_PRESETS=1.

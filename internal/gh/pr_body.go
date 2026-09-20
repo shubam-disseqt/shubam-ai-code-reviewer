@@ -105,7 +105,7 @@ func (c *Client) UploadSARIF(ctx context.Context, owner, repo, commitSHA, ref st
 		Ref:       github.String(ref),
 		Sarif:     github.String(encoded),
 		StartedAt: &github.Timestamp{Time: time.Now().UTC()},
-		ToolName:  github.String("zreview"),
+		ToolName:  github.String("sacr"),
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -124,7 +124,7 @@ func (c *Client) UploadSARIF(ctx context.Context, owner, repo, commitSHA, ref st
 // the terminal processing_status. Caller decides whether a non-"complete"
 // outcome is fatal.
 //
-// ponytail: fixed 2s poll interval, upgrade to backoff if the endpoint
+// note: fixed 2s poll interval, upgrade to backoff if the endpoint
 // starts rate-limiting.
 func (c *Client) WaitSARIF(ctx context.Context, owner, repo, sarifID string) (string, error) {
 	c.warnIfUnauth()

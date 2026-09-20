@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 disseqt
 
-// Package zconfig loads the user-facing zreview config file at
-// <repo>/.zreview/config.yaml. Unlike scoring/effort policies this file
+// Package zconfig loads the user-facing sacr config file at
+// <repo>/.sacr/config.yaml. Unlike scoring/effort policies this file
 // carries operator toggles (suggestions on/off, blocking or not) rather
 // than tuning weights, so a malformed file falls back to defaults with
 // a wrapped error the caller can log-and-continue on.
@@ -18,7 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config is the parsed .zreview/config.yaml. Add new sections as
+// Config is the parsed .sacr/config.yaml. Add new sections as
 // optional structs so old files keep loading.
 type Config struct {
 	Suggestions SuggestionsConfig `yaml:"suggestions"`
@@ -38,7 +38,7 @@ func Default() Config {
 	}
 }
 
-// Load reads <repo>/.zreview/config.yaml.
+// Load reads <repo>/.sacr/config.yaml.
 //
 // Contract:
 //   - missing file → Default(), nil
@@ -52,7 +52,7 @@ func Load(repo string) (Config, error) {
 	if repo == "" {
 		return def, nil
 	}
-	path := filepath.Join(repo, ".zreview", "config.yaml")
+	path := filepath.Join(repo, ".sacr", "config.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {

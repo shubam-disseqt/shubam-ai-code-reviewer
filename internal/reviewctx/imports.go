@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/filetype"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/filetype"
 )
 
 // maxCandidatesPerImport caps how many files we accept per raw import. Mira

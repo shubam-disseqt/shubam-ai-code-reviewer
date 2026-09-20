@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/filetype"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/filetype"
 
 	_ "modernc.org/sqlite"
 )

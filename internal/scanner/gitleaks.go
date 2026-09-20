@@ -39,7 +39,7 @@ func (s *gitleaksScanner) Run(ctx context.Context, repoRoot string, _ []string) 
 		return nil, fmt.Errorf("skipping gitleaks (not installed)")
 	}
 
-	tmp, err := os.CreateTemp("", "zreview-gitleaks-*.json")
+	tmp, err := os.CreateTemp("", "sacr-gitleaks-*.json")
 	if err != nil {
 		return nil, fmt.Errorf("tempfile: %w", err)
 	}

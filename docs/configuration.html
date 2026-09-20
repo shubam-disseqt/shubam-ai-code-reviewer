@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>Configuration &mdash; z-code-reviewer</title>
+  <title>Configuration &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -36,7 +36,7 @@
 
   <main>
     <h1>Configuration</h1>
-    <p class="lede">Layered: defaults &rarr; org rules repo &rarr; <code>.zreview.yaml</code> in the repo &rarr; env vars &rarr; CLI flags. Right-most wins.</p>
+    <p class="lede">Layered: defaults &rarr; org rules repo &rarr; <code>.sacr.yaml</code> in the repo &rarr; env vars &rarr; CLI flags. Right-most wins.</p>
 
     <h2>Environment variables</h2>
     <table>
@@ -45,18 +45,18 @@
         <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Anthropic provider key</td><td>&mdash;</td></tr>
         <tr><td><code>OPENAI_API_KEY</code></td><td>OpenAI provider key</td><td>&mdash;</td></tr>
         <tr><td><code>AWS_*</code></td><td>Bedrock via AWS credential chain</td><td>&mdash;</td></tr>
-        <tr><td><code>ZREVIEW_DB_URL</code></td><td>Index database DSN (Postgres or SQLite)</td><td>index disabled</td></tr>
-        <tr><td><code>ZREVIEW_ORG_RULES_REPO</code></td><td>Git-hosted org rules repo (<code>owner/repo</code>)</td><td>no org rules</td></tr>
-        <tr><td><code>ZREVIEW_ORG_RULES_REF</code></td><td>Git ref to pin</td><td><code>main</code></td></tr>
-        <tr><td><code>ZREVIEW_DOCS_ALLOWED_HOSTS</code></td><td>Extra Host: values accepted by <code>zreview docs</code></td><td>loopback only</td></tr>
-        <tr><td><code>ZREVIEW_TELEMETRY</code></td><td>Set to <code>1</code> to opt into anonymous usage counters</td><td>disabled</td></tr>
-        <tr><td><code>ZREVIEW_LOG_FORMAT</code></td><td>Log output shape: <code>text</code> or <code>json</code>. See <a href="/troubleshooting.html#structured-logging">Troubleshooting &sect; Structured logging</a>.</td><td><code>text</code></td></tr>
-        <tr><td><code>ZREVIEW_LOG_LEVEL</code></td><td><code>DEBUG</code>, <code>INFO</code>, <code>WARN</code>, or <code>ERROR</code>.</td><td><code>INFO</code></td></tr>
+        <tr><td><code>SACR_DB_URL</code></td><td>Index database DSN (Postgres or SQLite)</td><td>index disabled</td></tr>
+        <tr><td><code>SACR_ORG_RULES_REPO</code></td><td>Git-hosted org rules repo (<code>owner/repo</code>)</td><td>no org rules</td></tr>
+        <tr><td><code>SACR_ORG_RULES_REF</code></td><td>Git ref to pin</td><td><code>main</code></td></tr>
+        <tr><td><code>SACR_DOCS_ALLOWED_HOSTS</code></td><td>Extra Host: values accepted by <code>sacr docs</code></td><td>loopback only</td></tr>
+        <tr><td><code>SACR_TELEMETRY</code></td><td>Set to <code>1</code> to opt into anonymous usage counters</td><td>disabled</td></tr>
+        <tr><td><code>SACR_LOG_FORMAT</code></td><td>Log output shape: <code>text</code> or <code>json</code>. See <a href="/troubleshooting.html#structured-logging">Troubleshooting &sect; Structured logging</a>.</td><td><code>text</code></td></tr>
+        <tr><td><code>SACR_LOG_LEVEL</code></td><td><code>DEBUG</code>, <code>INFO</code>, <code>WARN</code>, or <code>ERROR</code>.</td><td><code>INFO</code></td></tr>
         <tr><td><code>GITHUB_TOKEN</code></td><td>For <code>--format github</code> and cross-PR overlap</td><td>&mdash;</td></tr>
       </tbody>
     </table>
 
-    <h2><code>.zreview.yaml</code> shape (planned, Phase 9)</h2>
+    <h2><code>.sacr.yaml</code> shape (planned, Phase 9)</h2>
     <pre><code>llm:
   provider: anthropic
   model: claude-sonnet-4-6

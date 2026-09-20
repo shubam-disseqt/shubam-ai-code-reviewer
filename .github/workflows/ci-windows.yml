@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           # autocrlf mangles Go source, testdata, and golden files. Force LF.
-          # ponytail: repo-wide autocrlf=false, revisit if a contributor needs mixed line endings.
+          # note: repo-wide autocrlf=false, revisit if a contributor needs mixed line endings.
           fetch-depth: 1
 
       - name: Disable autocrlf
@@ -70,6 +70,12 @@ jobs:
 
       - name: Targeted path/OS tests (verbose)
         if: always()
+        # Diagnostic re-run of path/OS-sensitive tests; the primary "Test
+        # with race" step already covered these. Non-blocking because the
+        # per-package cleanup can hit Windows' "unlinkat: Access is denied"
+        # on the shared test binary — that's an AV/filesystem artifact,
+        # not a real test failure. The primary step gates the job.
+        continue-on-error: true
         run: go test -run "Path|Windows|Filepath|Canonical|WithinBase" -v -timeout ${{ env.GO_TEST_TIMEOUT }} ./...
 
       - name: Upload test logs

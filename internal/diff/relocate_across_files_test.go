@@ -6,7 +6,7 @@ package diff
 import (
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // headerDiff declares the function; sourceDiff implements it. This is the split

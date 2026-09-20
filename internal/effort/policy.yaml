@@ -6,7 +6,7 @@
 #
 # Override precedence:
 #   1. $ZREVIEW_EFFORT_POLICY  (absolute or repo-relative path)
-#   2. <repo>/.zreview/effort.yaml
+#   2. <repo>/.sacr/effort.yaml
 #   3. this embedded default
 #
 # Weights below reflect the "reviewer's brain load" heuristics on a mixed

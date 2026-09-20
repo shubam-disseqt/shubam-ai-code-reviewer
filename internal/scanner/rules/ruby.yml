@@ -1,4 +1,4 @@
-## Curated Ruby / Rails security rules bundled with zreview.
+## Curated Ruby / Rails security rules bundled with sacr.
 ## Brakeman-inspired, kept small for signal density.
 ## Override via ZREVIEW_SEMGREP_CONFIG. Disable via ZREVIEW_DISABLE_SEMGREP_PRESETS=1.
 rules:

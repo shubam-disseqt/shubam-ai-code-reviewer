@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 alibaba/open-code-review Contributors
-// Portions Copyright 2026 disseqt
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors
 // Adapted from alibaba/open-code-review internal/llm/providers.go
 // (trimmed to 5 presets: Anthropic, OpenAI, OpenAI-Responses, Bedrock, DeepSeek).
 
@@ -116,7 +116,7 @@ var registry = []Provider{
 		Models: []string{
 			// Current DeepSeek catalog (2026). The reasoner tier costs a
 			// small premium vs chat but usually isn't needed for review;
-			// keep chat first so ZREVIEW_MODEL-less runs land on it.
+			// keep chat first so SACR_MODEL-less runs land on it.
 			"deepseek-chat",
 			"deepseek-reasoner",
 		},

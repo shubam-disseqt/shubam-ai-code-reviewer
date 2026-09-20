@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>Reliability &mdash; z-code-reviewer</title>
+  <title>Reliability &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -36,10 +36,10 @@
 
   <main>
     <h1>Reliability</h1>
-    <p class="lede">Every GitHub REST call zreview makes goes through two HTTP middlewares: a client-side rate limiter and a transient-failure retry. Local scanner subprocess flakiness is retried too. This page documents which endpoints get which policy and what knobs are exposed.</p>
+    <p class="lede">Every GitHub REST call sacr makes goes through two HTTP middlewares: a client-side rate limiter and a transient-failure retry. Local scanner subprocess flakiness is retried too. This page documents which endpoints get which policy and what knobs are exposed.</p>
 
     <h2 id="why">Why this exists</h2>
-    <p>A single <code>zreview review</code> run can talk to GitHub a dozen times: list overlap candidates, fetch files per candidate, update the PR body, add labels, upload SARIF, poll SARIF status, post inline comments. Two failure modes previously derailed the whole review:</p>
+    <p>A single <code>sacr review</code> run can talk to GitHub a dozen times: list overlap candidates, fetch files per candidate, update the PR body, add labels, upload SARIF, poll SARIF status, post inline comments. Two failure modes previously derailed the whole review:</p>
     <ul>
       <li>Hitting GitHub&rsquo;s hourly rate limit on a busy CI runner &mdash; a single 429 aborted the SARIF upload step.</li>
       <li>A transient GitHub 5xx during PR-body update or SARIF upload failed the whole review with no recovery.</li>
@@ -51,8 +51,8 @@
     <table>
       <thead><tr><th>Env var</th><th>Default</th><th>Type</th></tr></thead>
       <tbody>
-        <tr><td><code>ZREVIEW_GH_RATE_LIMIT_RPS</code></td><td><code>1.39</code></td><td>float</td></tr>
-        <tr><td><code>ZREVIEW_GH_RATE_LIMIT_BURST</code></td><td><code>20</code></td><td>int</td></tr>
+        <tr><td><code>SACR_GH_RATE_LIMIT_RPS</code></td><td><code>1.39</code></td><td>float</td></tr>
+        <tr><td><code>SACR_GH_RATE_LIMIT_BURST</code></td><td><code>20</code></td><td>int</td></tr>
       </tbody>
     </table>
     <p>An <code>rps</code> of <code>0</code> or a negative burst falls back to the defaults &mdash; there is no &ldquo;off&rdquo; switch on purpose. If you need to disable rate limiting for local integration testing, replace <code>Options.HTTPClient</code> when constructing the client from Go.</p>
@@ -85,10 +85,10 @@
       <li><strong>Integer seconds:</strong> <code>Retry-After: 30</code></li>
       <li><strong>HTTP-date:</strong> <code>Retry-After: Wed, 21 Oct 2026 07:28:00 GMT</code></li>
     </ul>
-    <p>Values that would stall zreview beyond <code>32&nbsp;s</code> (retryMaxDelay &times; 4) are clamped. A pathological server can&rsquo;t hang a review indefinitely by requesting an unreasonable pause.</p>
+    <p>Values that would stall sacr beyond <code>32&nbsp;s</code> (retryMaxDelay &times; 4) are clamped. A pathological server can&rsquo;t hang a review indefinitely by requesting an unreasonable pause.</p>
 
     <h2 id="endpoints">Covered endpoints</h2>
-    <p>Because both middlewares sit on the shared HTTP transport, <em>every</em> go-github SDK method zreview calls gets the same policy. In practice the calls that matter are:</p>
+    <p>Because both middlewares sit on the shared HTTP transport, <em>every</em> go-github SDK method sacr calls gets the same policy. In practice the calls that matter are:</p>
     <table>
       <thead><tr><th>Operation</th><th>Method</th><th>Where</th></tr></thead>
       <tbody>
@@ -114,7 +114,7 @@
     <h2 id="observability">Observability</h2>
     <p>Retries are silent by design &mdash; a review that transparently recovered from a 500 should not spam CI logs. If you suspect retry-related latency:</p>
     <ul>
-      <li>Run <code>zreview review -vv</code> to surface the underlying go-github request timing.</li>
+      <li>Run <code>sacr review -vv</code> to surface the underlying go-github request timing.</li>
       <li>The session log (<code>--session-log</code>) captures every LLM turn but does not log successful retries at the HTTP layer &mdash; only the final response.</li>
       <li>Persistent 429s that outlast five attempts land in the review&rsquo;s stderr as a wrapped <code>gh:</code> error. Treat that as a signal to reduce parallelism (<code>--max-overlap-candidates</code>) or lengthen the token TTL.</li>
     </ul>

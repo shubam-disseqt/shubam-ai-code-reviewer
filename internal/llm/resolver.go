@@ -713,9 +713,9 @@ func tryLegacyLlmConfig(cfg configFile, modelOverride string) (ResolvedEndpoint,
 
 // tryProviderEnv walks the provider registry and resolves the first preset
 // whose EnvVar (e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY)
-// is set. Model preference: explicit override → ZREVIEW_MODEL → provider's
+// is set. Model preference: explicit override → SACR_MODEL → provider's
 // first preset model. This is the friendly path documented across the
-// README + docs pages; it lets a user run zreview after `export
+// README + docs pages; it lets a user run sacr after `export
 // ANTHROPIC_API_KEY=sk-ant-...` with no other config.
 func tryProviderEnv(modelOverride string) (ResolvedEndpoint, bool, error) {
 	for _, p := range registry {
@@ -728,14 +728,14 @@ func tryProviderEnv(modelOverride string) (ResolvedEndpoint, bool, error) {
 		}
 		model := modelOverride
 		if model == "" {
-			model = strings.TrimSpace(os.Getenv("ZREVIEW_MODEL"))
+			model = strings.TrimSpace(os.Getenv("SACR_MODEL"))
 		}
 		if model == "" && len(p.Models) > 0 {
 			model = p.Models[0]
 		}
 		if model == "" {
 			return ResolvedEndpoint{}, false, fmt.Errorf(
-				"%s is set but no model is configured; set ZREVIEW_MODEL or pass --model",
+				"%s is set but no model is configured; set SACR_MODEL or pass --model",
 				p.EnvVar)
 		}
 		return ResolvedEndpoint{
@@ -753,19 +753,19 @@ func tryProviderEnv(modelOverride string) (ResolvedEndpoint, bool, error) {
 // resolveAmbientPreset produces an endpoint for a provider that uses
 // ambient credentials (Bedrock's AWS SigV4 chain). No token is required;
 // the underlying SDK signs each request from the process environment.
-// Model preference matches tryProviderEnv: explicit override → ZREVIEW_MODEL
+// Model preference matches tryProviderEnv: explicit override → SACR_MODEL
 // → first preset in the registry.
 func resolveAmbientPreset(p Provider, modelOverride string) (ResolvedEndpoint, error) {
 	model := modelOverride
 	if model == "" {
-		model = strings.TrimSpace(os.Getenv("ZREVIEW_MODEL"))
+		model = strings.TrimSpace(os.Getenv("SACR_MODEL"))
 	}
 	if model == "" && len(p.Models) > 0 {
 		model = p.Models[0]
 	}
 	if model == "" {
 		return ResolvedEndpoint{}, fmt.Errorf(
-			"provider %q uses ambient auth but no model is configured; set ZREVIEW_MODEL or pass --model",
+			"provider %q uses ambient auth but no model is configured; set SACR_MODEL or pass --model",
 			p.Name)
 	}
 	return ResolvedEndpoint{

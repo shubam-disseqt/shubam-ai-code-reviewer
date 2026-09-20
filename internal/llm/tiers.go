@@ -10,14 +10,14 @@ import (
 )
 
 // Env vars that opt in to cheap-tier routing. Both must be set for a fully
-// independent cheap client. Only ZREVIEW_CHEAP_MODEL set (with no provider
+// independent cheap client. Only SACR_CHEAP_MODEL set (with no provider
 // override) shares the main client but overrides the model per call.
 const (
-	envZReviewCheapModel    = "ZREVIEW_CHEAP_MODEL"
-	envZReviewCheapProvider = "ZREVIEW_CHEAP_PROVIDER"
+	envZReviewCheapModel    = "SACR_CHEAP_MODEL"
+	envZReviewCheapProvider = "SACR_CHEAP_PROVIDER"
 )
 
-// Tiers holds the two LLM clients zreview routes calls through. Main serves the
+// Tiers holds the two LLM clients sacr routes calls through. Main serves the
 // reviewer agent loop (Sonnet-class); Cheap serves structured summary and
 // labeling calls (Haiku / Flash / DeepSeek). When cheap-tier env vars are
 // unset, Cheap is Main — same client, same model — so callers can always dial
@@ -35,13 +35,13 @@ type Tiers struct {
 
 // ResolveTiers resolves both LLM tiers in one pass.
 //
-// Main is always resolved from opts (typically ZREVIEW_PROVIDER + ZREVIEW_MODEL).
-// Cheap opts in via ZREVIEW_CHEAP_PROVIDER + ZREVIEW_CHEAP_MODEL:
+// Main is always resolved from opts (typically SACR_PROVIDER + SACR_MODEL).
+// Cheap opts in via SACR_CHEAP_PROVIDER + SACR_CHEAP_MODEL:
 //
 //   - both set: Cheap is resolved independently. New underlying client.
-//   - only ZREVIEW_CHEAP_MODEL: Cheap reuses the Main client and provider, but
+//   - only SACR_CHEAP_MODEL: Cheap reuses the Main client and provider, but
 //     CheapModel is the override — cost win with zero extra HTTP setup.
-//   - only ZREVIEW_CHEAP_PROVIDER (no model), or neither: Cheap == Main.
+//   - only SACR_CHEAP_PROVIDER (no model), or neither: Cheap == Main.
 //
 // The one-client-when-possible rule keeps the hot path a single HTTP pool and
 // a single set of retry middlewares. It also means a broken cheap-provider
@@ -72,7 +72,7 @@ func ResolveTiers(configPath string, opts ResolveOptions) (Tiers, error) {
 			Main: main, Cheap: main,
 			MainModel: mainEp.Model, CheapModel: mainEp.Model,
 			Notes: []string{
-				"ZREVIEW_CHEAP_PROVIDER is set but ZREVIEW_CHEAP_MODEL is not — cheap tier is falling back to the main tier at full price. Set ZREVIEW_CHEAP_MODEL to a smaller model (e.g. claude-haiku-4-5) to activate cost routing.",
+				"SACR_CHEAP_PROVIDER is set but SACR_CHEAP_MODEL is not — cheap tier is falling back to the main tier at full price. Set SACR_CHEAP_MODEL to a smaller model (e.g. claude-haiku-4-5) to activate cost routing.",
 			},
 		}, nil
 	}

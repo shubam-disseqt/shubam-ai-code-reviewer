@@ -1,6 +1,6 @@
 # GitHub Action
 
-Drop-in reusable action that runs `zreview` on every pull request. The action
+Drop-in reusable action that runs `sacr` on every pull request. The action
 wraps the [published Docker image](DOCKER.md) so downstream repos don't need Go
 installed and don't need to think about install scripts.
 
@@ -9,7 +9,7 @@ installed and don't need to think about install scripts.
 Create `.github/workflows/review.yml` in your repo:
 
 ```yaml
-name: zreview
+name: sacr
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -23,8 +23,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0        # zreview needs the base ref
-      - uses: shubam-disseqt/z-code-reviewer@v1
+          fetch-depth: 0        # sacr needs the base ref
+      - uses: shubam-disseqt/shubam-ai-code-reviewer@v1
         with:
           pr-number: ${{ github.event.pull_request.number }}
           api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -45,15 +45,15 @@ That's it. Three lines of `with:` and every PR gets an inline review.
 | `cheap-model`  | *(unset → falls back to `model`)*           | Cheap-tier model for triage passes. |
 | `min-severity` | `MEDIUM`                                    | `LOW` \| `MEDIUM` \| `HIGH` \| `CRITICAL` |
 | `format`       | `github`                                    | `stdout` \| `json` \| `github` \| `sarif` |
-| `image`        | `ghcr.io/shubam-disseqt/zreview:latest`     | Pin to a version tag in production. |
+| `image`        | `ghcr.io/shubam-disseqt/sacr:latest`     | Pin to a version tag in production. |
 
 ## Pinning in production
 
 ```yaml
-- uses: shubam-disseqt/z-code-reviewer@v1
+- uses: shubam-disseqt/shubam-ai-code-reviewer@v1
   with:
     pr-number: ${{ github.event.pull_request.number }}
-    image: ghcr.io/shubam-disseqt/zreview:v1.0.0
+    image: ghcr.io/shubam-disseqt/sacr:v1.0.0
     api-key: ${{ secrets.OPENAI_API_KEY }}
     github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -76,7 +76,7 @@ with:
    `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK`).
 2. Runs `docker run --rm` against the pinned image, mounting `$GITHUB_WORKSPACE`
    at `/workspace`.
-3. Invokes `zreview review --pr <n> --format <fmt> --min-severity <bucket>`.
+3. Invokes `sacr review --pr <n> --format <fmt> --min-severity <bucket>`.
 4. The `github` formatter posts inline review comments via the GitHub API using
    `GITHUB_TOKEN`.
 

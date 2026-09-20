@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>Review rules &mdash; z-code-reviewer</title>
+  <title>Review rules &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -39,7 +39,7 @@
     <p class="lede">Team-specific review policy, expressed as YAML in a git repo, versioned like any other code. Human-authored, human-reviewed via PR &mdash; there is no learning loop.</p>
 
     <h2 id="what">What are rules</h2>
-    <p>Rules are prompt-injected constraints, not enforced code. When <code>zreview review</code> runs, it selects the rules whose scope matches the diff, splices them into the review prompt, and lets the LLM apply them alongside its general review discipline. There is no rules-engine or AST match &mdash; they are policy statements the model reads before it starts commenting.</p>
+    <p>Rules are prompt-injected constraints, not enforced code. When <code>sacr review</code> runs, it selects the rules whose scope matches the diff, splices them into the review prompt, and lets the LLM apply them alongside its general review discipline. There is no rules-engine or AST match &mdash; they are policy statements the model reads before it starts commenting.</p>
 
     <div class="note">
       <strong>This shapes how you write them.</strong> A rule that says <em>&ldquo;flag any call to <code>fmt.Println</code> in production code&rdquo;</em> works &mdash; concrete, verifiable, tied to a string the model can pattern-match. A rule that says <em>&ldquo;code should be maintainable&rdquo;</em> does nothing &mdash; too abstract to survive prompt-length compression. See <a href="#best-practices">Best practices</a>.
@@ -52,7 +52,7 @@
       <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr></thead>
       <tbody>
         <tr><td><code>id</code></td><td>string</td><td>yes</td><td>Stable identifier, kebab-case. Must be globally unique within the rules repo. Never rename &mdash; downstream comments reference the id.</td></tr>
-        <tr><td><code>title</code></td><td>string</td><td>yes</td><td>One-line human summary. Appears in <code>zreview rules list</code> output.</td></tr>
+        <tr><td><code>title</code></td><td>string</td><td>yes</td><td>One-line human summary. Appears in <code>sacr rules list</code> output.</td></tr>
         <tr><td><code>body</code></td><td>string (multi-line)</td><td>yes</td><td>The rule text as injected into the prompt. Concrete, imperative, second person. Under 400 chars per rule keeps the composite prompt lean.</td></tr>
         <tr><td><code>scope</code></td><td>enum</td><td>yes</td><td><code>global</code>, <code>repo</code>, or <code>path</code>. See <a href="#scoping">Scoping</a>.</td></tr>
         <tr><td><code>repos</code></td><td>list&lt;string&gt;</td><td>when <code>scope=repo</code> or <code>scope=path</code></td><td><code>owner/name</code> matchers. Supports <code>*</code> as a suffix (e.g., <code>disseqt/z-*</code>).</td></tr>
@@ -184,7 +184,7 @@ enabled: true</code></pre>
 &#x2514;&#x2500;&#x2500; CODEOWNERS</code></pre>
     </div>
 
-    <p>Point <code>ZREVIEW_ORG_RULES_REPO</code> at <code>owner/name</code> and, if you're pinning, <code>ZREVIEW_ORG_RULES_REF</code> at a tag or commit. Because it's git, every rule change is a PR &mdash; the same review discipline the tool enforces on code applies to the policy authoring itself.</p>
+    <p>Point <code>SACR_ORG_RULES_REPO</code> at <code>owner/name</code> and, if you're pinning, <code>SACR_ORG_RULES_REF</code> at a tag or commit. Because it's git, every rule change is a PR &mdash; the same review discipline the tool enforces on code applies to the policy authoring itself.</p>
 
     <h2 id="selection">How selection works</h2>
     <p>Every step happens deterministically in Go before any LLM call. See <a href="/architecture.html#det-vs-llm">Architecture &sect; Deterministic vs LLM</a>.</p>

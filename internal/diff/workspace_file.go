@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/pathutil"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/pathutil"
 )
 
 func readWorkspaceFileForDiff(repoDir, relPath string) ([]byte, error) {

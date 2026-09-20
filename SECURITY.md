@@ -12,10 +12,10 @@ Do NOT open a public issue for a security bug.
 
 Use GitHub's private vulnerability reporting:
 
-**[Report a vulnerability](https://github.com/shubam-disseqt/z-code-reviewer/security/advisories/new)**
+**[Report a vulnerability](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/security/advisories/new)**
 
 If GitHub advisories are unavailable to you, email
-`security@disseqt.ai` with the subject prefix `[z-code-reviewer]`.
+`security@disseqt.ai` with the subject prefix `[shubam-ai-code-reviewer]`.
 
 Response targets:
 
@@ -27,7 +27,7 @@ Response targets:
 
 ## AI policy for contributions
 
-`z-code-reviewer` is an AI tool authored partly with AI assistance. That
+`shubam-ai-code-reviewer` is an AI tool authored partly with AI assistance. That
 places extra responsibility on human contributors. All rules in
 [AGENTS.md](AGENTS.md) apply, in particular:
 
@@ -48,7 +48,7 @@ as GPG or cosign — the trust root is GitHub's OIDC.
 To verify a downloaded binary:
 
 ```sh
-gh attestation verify --owner shubam-disseqt ./zreview-linux-amd64
+gh attestation verify --owner shubam-disseqt ./sacr-linux-amd64
 ```
 
 The `scripts/install.sh` script performs a SHA-256 checksum check against a
@@ -68,7 +68,7 @@ Top summary:
 | T1 | Command injection via crafted diff content | Only `git` is exec'd, hardcoded subcommands, `--end-of-options`, no shell |
 | T2 | API key leakage | Env-var only; never logged; never written to session files |
 | T3 | Path traversal via LLM-suggested file paths | `pathutil.WithinBase()` on every path, pre- and post-symlink |
-| T4 | DNS rebinding against `zreview docs` server | Host-header allowlist; loopback binds by default |
+| T4 | DNS rebinding against `sacr docs` server | Host-header allowlist; loopback binds by default |
 | T5 | MITM on API communication | TLS 1.2+, full certificate verification, `InsecureSkipVerify` never used |
 | T6 | Malicious LLM response | JSON schema + line-number bounds validation; line-snapping re-derives positions |
 | T7 | Malicious LLM response (over-escaped JSON) | Comment-args-repair refuses partial recovery |
@@ -79,15 +79,15 @@ Top summary:
 
 In scope:
 
-- The `zreview` binary and its Go source.
+- The `sacr` binary and its Go source.
 - The `scripts/install.sh` and `scripts/install.ps1` scripts.
 - The GitHub Action wrapper (`action.yml`).
-- The embedded docs served by `zreview docs`.
+- The embedded docs served by `sacr docs`.
 
 Out of scope:
 
 - Third-party LLM provider APIs — report vulns to the provider directly.
 - User-provided org-rules repositories and their contents.
 - User-provided Postgres / SQLite databases used as the index backend.
-- Documentation site hosted at `https://shubam-disseqt.github.io/z-code-reviewer/`
+- Documentation site hosted at `https://shubam-disseqt.github.io/shubam-ai-code-reviewer/`
   (report to the CI/CD pipeline maintainer instead).

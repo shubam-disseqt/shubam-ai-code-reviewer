@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>CLI reference &mdash; z-code-reviewer</title>
+  <title>CLI reference &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -39,7 +39,7 @@
     <p class="lede">Every subcommand, every flag, every exit code. Order matches roughly the order you'll reach for them.</p>
 
     <div class="note">
-      <strong>Not every command is wired yet.</strong> Only <code>zreview version</code> and <code>zreview docs</code> ship end-to-end today. Every other subcommand below is documented against its target UX &mdash; the flag names and exit codes are locked, the implementations land in later phases. See the phase tag next to each heading and <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/ROADMAP.md">ROADMAP.md</a>.
+      <strong>Not every command is wired yet.</strong> Only <code>sacr version</code> and <code>sacr docs</code> ship end-to-end today. Every other subcommand below is documented against its target UX &mdash; the flag names and exit codes are locked, the implementations land in later phases. See the phase tag next to each heading and <a href="https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/ROADMAP.md">ROADMAP.md</a>.
     </div>
 
     <h2 id="global">Global flags</h2>
@@ -49,11 +49,11 @@
       <tbody>
         <tr><td><code>-v</code>, <code>--verbose</code></td><td>Verbose logs to stderr. Repeat (<code>-vv</code>) for debug-level tool traces.</td></tr>
         <tr><td><code>-h</code>, <code>--help</code></td><td>Print usage for the subcommand and exit 0.</td></tr>
-        <tr><td><code>--version</code></td><td>Print the version string and exit 0. Equivalent to <code>zreview version</code>.</td></tr>
+        <tr><td><code>--version</code></td><td>Print the version string and exit 0. Equivalent to <code>sacr version</code>.</td></tr>
       </tbody>
     </table>
 
-    <h2 id="version"><code>zreview version</code> <span class="badge ok">shipped</span></h2>
+    <h2 id="version"><code>sacr version</code> <span class="badge ok">shipped</span></h2>
     <p>Prints the build identity. Machine-readable with <code>--json</code>.</p>
     <table>
       <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
@@ -64,10 +64,10 @@
 
     <h3>Output shape</h3>
     <div class="diagram">
-<pre><code>$ zreview version
-zreview 0.2.0 (commit deadbeef, go1.23.4, darwin/arm64)
+<pre><code>$ sacr version
+sacr 0.2.0 (commit deadbeef, go1.23.4, darwin/arm64)
 
-$ zreview version --json
+$ sacr version --json
 {
   "version":   "0.2.0",
   "commit":    "deadbeef",
@@ -78,9 +78,9 @@ $ zreview version --json
     </div>
 
     <h3>Exit codes</h3>
-    <p>Always <code>0</code>. If <code>zreview version</code> is failing, the binary itself is broken.</p>
+    <p>Always <code>0</code>. If <code>sacr version</code> is failing, the binary itself is broken.</p>
 
-    <h2 id="docs"><code>zreview docs</code> <span class="badge ok">shipped</span></h2>
+    <h2 id="docs"><code>sacr docs</code> <span class="badge ok">shipped</span></h2>
     <p>Serves this documentation on a local loopback HTTP server. Content is embedded in the binary; no network calls.</p>
 
     <table>
@@ -95,13 +95,13 @@ $ zreview version --json
     <table>
       <thead><tr><th>Variable</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td><code>ZREVIEW_DOCS_ALLOWED_HOSTS</code></td><td>Comma-separated list of <code>Host:</code> header values the server will accept in addition to <code>localhost</code>, <code>127.0.0.1</code>, and <code>[::1]</code>. Required when <code>--addr</code> binds a non-loopback interface.</td></tr>
+        <tr><td><code>SACR_DOCS_ALLOWED_HOSTS</code></td><td>Comma-separated list of <code>Host:</code> header values the server will accept in addition to <code>localhost</code>, <code>127.0.0.1</code>, and <code>[::1]</code>. Required when <code>--addr</code> binds a non-loopback interface.</td></tr>
       </tbody>
     </table>
 
     <h3>Security posture</h3>
     <ul>
-      <li>Loopback-only by default. Non-loopback binds require an explicit <code>ZREVIEW_DOCS_ALLOWED_HOSTS</code> entry &mdash; guards against DNS rebinding (T4 in <a href="/architecture.html#threats">Architecture &sect; Threats</a>).</li>
+      <li>Loopback-only by default. Non-loopback binds require an explicit <code>SACR_DOCS_ALLOWED_HOSTS</code> entry &mdash; guards against DNS rebinding (T4 in <a href="/architecture.html#threats">Architecture &sect; Threats</a>).</li>
       <li>All responses ship a strict CSP: <code>default-src 'self'; script-src 'none'; frame-ancestors 'none'</code>.</li>
       <li>No third-party fonts, scripts, or images. Every asset is under the embedded FS.</li>
     </ul>
@@ -115,11 +115,11 @@ $ zreview version --json
       </tbody>
     </table>
 
-    <h2 id="review"><code>zreview review</code> <span class="badge warn">Phase 8</span></h2>
+    <h2 id="review"><code>sacr review</code> <span class="badge warn">Phase 8</span></h2>
     <p>The main event. Runs the review pipeline over a diff and emits comments in the chosen format.</p>
 
     <div class="note">
-      <strong>Phase 8 deliverable.</strong> Flag names below are the target UX and are considered stable. Implementation lands in Phase 8 &mdash; see <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/ROADMAP.md">ROADMAP.md</a>.
+      <strong>Phase 8 deliverable.</strong> Flag names below are the target UX and are considered stable. Implementation lands in Phase 8 &mdash; see <a href="https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/ROADMAP.md">ROADMAP.md</a>.
     </div>
 
     <h3>Diff selection (pick one)</h3>
@@ -153,36 +153,36 @@ $ zreview version --json
       </tbody>
     </table>
 
-    <h2 id="index"><code>zreview index</code> <span class="badge warn">Phase 4</span></h2>
-    <p>Builds or refreshes the persistent code index used by <code>zreview review</code> and <code>zreview overlap</code>. Without an index, review falls back to just-in-time context loading via the agent's <code>file_read</code> / <code>code_search</code> tools &mdash; smaller signal, higher token cost per run.</p>
+    <h2 id="index"><code>sacr index</code> <span class="badge warn">Phase 4</span></h2>
+    <p>Builds or refreshes the persistent code index used by <code>sacr review</code> and <code>sacr overlap</code>. Without an index, review falls back to just-in-time context loading via the agent's <code>file_read</code> / <code>code_search</code> tools &mdash; smaller signal, higher token cost per run.</p>
 
     <table>
       <thead><tr><th>Flag</th><th>Meaning</th></tr></thead>
       <tbody>
         <tr><td><code>--repo &lt;path&gt;</code></td><td>Path to the git checkout to index. Defaults to CWD.</td></tr>
         <tr><td><code>--full</code></td><td>Force a full re-index. Otherwise the incremental walker only touches files changed since the last run.</td></tr>
-        <tr><td><code>--db &lt;dsn&gt;</code></td><td>Database DSN. Overrides <code>$ZREVIEW_DB_URL</code>. Accepts <code>postgres://...</code> or <code>sqlite:///path/to/file.db</code>.</td></tr>
+        <tr><td><code>--db &lt;dsn&gt;</code></td><td>Database DSN. Overrides <code>$SACR_DB_URL</code>. Accepts <code>postgres://...</code> or <code>sqlite:///path/to/file.db</code>.</td></tr>
       </tbody>
     </table>
 
     <div class="note">
-      <strong>Cost note.</strong> Indexing calls an embedding model per chunk. Point it at a cheap model (e.g., a small embedding endpoint) separately from your review model &mdash; <code>ZREVIEW_INDEX_MODEL</code> controls that. See <a href="/configuration.html">Configuration</a>.
+      <strong>Cost note.</strong> Indexing calls an embedding model per chunk. Point it at a cheap model (e.g., a small embedding endpoint) separately from your review model &mdash; <code>SACR_INDEX_MODEL</code> controls that. See <a href="/configuration.html">Configuration</a>.
     </div>
 
-    <h2 id="rules"><code>zreview rules</code> <span class="badge warn">Phase 7</span></h2>
-    <p>Inspect and refresh the org-level rules pulled from <code>$ZREVIEW_ORG_RULES_REPO</code>.</p>
+    <h2 id="rules"><code>sacr rules</code> <span class="badge warn">Phase 7</span></h2>
+    <p>Inspect and refresh the org-level rules pulled from <code>$SACR_ORG_RULES_REPO</code>.</p>
 
     <table>
       <thead><tr><th>Subcommand</th><th>Meaning</th></tr></thead>
       <tbody>
-        <tr><td><code>zreview rules list</code></td><td>List every loaded rule with id, scope, severity, and whether it would apply to the current repo/path.</td></tr>
-        <tr><td><code>zreview rules sync</code></td><td>Fetch the latest rules commit from <code>$ZREVIEW_ORG_RULES_REPO</code> (respecting <code>$ZREVIEW_ORG_RULES_REF</code>). Idempotent.</td></tr>
+        <tr><td><code>sacr rules list</code></td><td>List every loaded rule with id, scope, severity, and whether it would apply to the current repo/path.</td></tr>
+        <tr><td><code>sacr rules sync</code></td><td>Fetch the latest rules commit from <code>$SACR_ORG_RULES_REPO</code> (respecting <code>$SACR_ORG_RULES_REF</code>). Idempotent.</td></tr>
       </tbody>
     </table>
 
     <p>See <a href="/review-rules.html">Review rules</a> for the YAML schema and authoring guide.</p>
 
-    <h2 id="overlap"><code>zreview overlap</code> <span class="badge warn">Phase 5</span></h2>
+    <h2 id="overlap"><code>sacr overlap</code> <span class="badge warn">Phase 5</span></h2>
     <p>Reports which currently-open pull requests overlap in scope or risk merge conflicts with the target PR. Runs the deterministic prefilter (Jaccard on title, symbol/file intersection) before spending any LLM budget on a batched verdict pass.</p>
 
     <table>
@@ -194,16 +194,16 @@ $ zreview version --json
 
     <p>Requires <code>GITHUB_TOKEN</code> with read access to pull requests. Output is a human-readable table by default; <code>--format json</code> for machine consumption. If the LLM batch call fails, the prefilter results are still printed &mdash; overlap never blocks review.</p>
 
-    <h2 id="doctor"><code>zreview doctor</code> <span class="badge warn">Phase 9</span></h2>
-    <p>Pre-flight checks. Run this in CI before <code>zreview review</code> so misconfigurations fail fast with a readable message.</p>
+    <h2 id="doctor"><code>sacr doctor</code> <span class="badge warn">Phase 9</span></h2>
+    <p>Pre-flight checks. Run this in CI before <code>sacr review</code> so misconfigurations fail fast with a readable message.</p>
 
     <p>Checks performed:</p>
     <ul>
       <li><code>git</code> binary on <code>$PATH</code> and version &ge; 2.30.</li>
       <li>Repository is a git checkout and has fetched the requested refs.</li>
       <li>An LLM provider credential is present: <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, or a resolvable AWS credential chain for Bedrock.</li>
-      <li><code>ZREVIEW_DB_URL</code> (if set) is reachable and the schema matches the binary's expected version.</li>
-      <li><code>ZREVIEW_ORG_RULES_REPO</code> (if set) is reachable and the YAML parses.</li>
+      <li><code>SACR_DB_URL</code> (if set) is reachable and the schema matches the binary's expected version.</li>
+      <li><code>SACR_ORG_RULES_REPO</code> (if set) is reachable and the YAML parses.</li>
       <li><code>GITHUB_TOKEN</code> (if <code>--format github</code> is intended) has PR read+write scope.</li>
     </ul>
 
@@ -224,13 +224,13 @@ $ zreview version --json
         <tr><td><code>0</code></td><td>Success.</td></tr>
         <tr><td><code>1</code></td><td>General runtime error (network, provider, git, IO).</td></tr>
         <tr><td><code>2</code></td><td>Configuration error &mdash; bad flags, missing credentials, unreachable dependency.</td></tr>
-        <tr><td><code>3</code></td><td><code>zreview review</code> only: review completed with at least one <code>blocker</code>-severity finding.</td></tr>
+        <tr><td><code>3</code></td><td><code>sacr review</code> only: review completed with at least one <code>blocker</code>-severity finding.</td></tr>
       </tbody>
     </table>
 
     <footer>
       &copy; 2026 disseqt. Apache-2.0.
-      See <a href="https://github.com/shubam-disseqt/z-code-reviewer/issues">GitHub Issues</a> for missing flags or wrong defaults.
+      See <a href="https://github.com/shubam-disseqt/shubam-ai-code-reviewer/issues">GitHub Issues</a> for missing flags or wrong defaults.
     </footer>
   </main>
 </div>

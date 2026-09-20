@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>Scanners &mdash; z-code-reviewer</title>
+  <title>Scanners &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -82,7 +82,7 @@ pipx install semgrep
 go install golang.org/x/vuln/cmd/govulncheck@latest</code></pre>
 
     <h3>Windows</h3>
-    <p>Scoop or the vendors' release binaries. <code>go install</code> works identically for <code>govulncheck</code>. If a scanner isn't installed, zreview skips it with a one-line info log &mdash; the review still runs.</p>
+    <p>Scoop or the vendors' release binaries. <code>go install</code> works identically for <code>govulncheck</code>. If a scanner isn't installed, sacr skips it with a one-line info log &mdash; the review still runs.</p>
 
     <h3>Convenience target</h3>
     <p>The repository ships a helper for local development:</p>
@@ -91,7 +91,7 @@ go install golang.org/x/vuln/cmd/govulncheck@latest</code></pre>
 
     <h2 id="disable">Disable a scanner</h2>
     <p>Comma-separated env var, matched by tool name (lowercase):</p>
-    <pre><code>ZREVIEW_DISABLE_SCANNERS=gitleaks,semgrep zreview review</code></pre>
+    <pre><code>SACR_DISABLE_SCANNERS=gitleaks,semgrep sacr review</code></pre>
     <p>Setting all three effectively turns the scanner stage off. There is no <code>--no-scanners</code> flag on purpose: this is an operational knob, not a per-invocation choice.</p>
 
     <h2 id="output">Output</h2>
@@ -114,7 +114,7 @@ go install golang.org/x/vuln/cmd/govulncheck@latest</code></pre>
     <ul>
       <li><strong>Gitleaks.</strong> Add narrow allowlists to <code>.gitleaks.toml</code> at the repo root &mdash; paths, regexes, or fingerprints. Never broaden the allowlist to cover real source files without a security review.</li>
       <li><strong>Semgrep.</strong> Add <code>// nosemgrep: rule-id</code> comments at the offending line, or drop custom rule overrides under <code>.semgrep.yml</code>. Rule IDs come straight from the <code>check_id</code> field in the finding.</li>
-      <li><strong>govulncheck.</strong> The <em>reachability</em> check already filters most noise. When it flags an unreachable path the trace will be missing a user-code step &mdash; zreview silently drops those. If a reachable finding is a false positive, upgrade the dependency; there is no per-finding suppression by design.</li>
+      <li><strong>govulncheck.</strong> The <em>reachability</em> check already filters most noise. When it flags an unreachable path the trace will be missing a user-code step &mdash; sacr silently drops those. If a reachable finding is a false positive, upgrade the dependency; there is no per-finding suppression by design.</li>
     </ul>
 
     <h2 id="failure">Failure semantics</h2>
@@ -125,14 +125,14 @@ go install golang.org/x/vuln/cmd/govulncheck@latest</code></pre>
       <li>One scanner failing does not affect the others &mdash; they run concurrently under an <code>errgroup</code>.</li>
       <li>Only <code>ctx</code> cancellation propagates as an error to the review pipeline.</li>
     </ul>
-    <p>This mirrors <code>zreview</code>'s posture on every other optional stage: a flaky external dependency must not swallow the review comments you actually came for.</p>
+    <p>This mirrors <code>sacr</code>'s posture on every other optional stage: a flaky external dependency must not swallow the review comments you actually came for.</p>
 
     <h2 id="limits">Limits</h2>
     <ul>
       <li><strong>Scope is intentional.</strong> Deep SCA, license analysis, and container/IaC scanning are out of scope &mdash; different tools, different failure modes.</li>
       <li><strong>Semgrep scans changed paths only.</strong> Full-repo scans belong in nightly CI; the review pipeline stays targeted.</li>
       <li><strong>govulncheck runs on the whole module.</strong> Reachability is a call-graph property; scanning a subset would produce misleading traces.</li>
-      <li><strong>Rule packs are the tools' defaults.</strong> Customisation lives in the tool's own config (<code>.gitleaks.toml</code>, <code>.semgrep.yml</code>) &mdash; zreview does not wrap those APIs.</li>
+      <li><strong>Rule packs are the tools' defaults.</strong> Customisation lives in the tool's own config (<code>.gitleaks.toml</code>, <code>.semgrep.yml</code>) &mdash; sacr does not wrap those APIs.</li>
     </ul>
 
     <footer>

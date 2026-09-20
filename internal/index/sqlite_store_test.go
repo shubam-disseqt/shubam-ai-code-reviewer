@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/filetype"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/filetype"
 )
 
 // openTestStore creates a fresh SQLite store backed by a temp file so

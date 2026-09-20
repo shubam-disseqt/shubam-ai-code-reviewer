@@ -5,9 +5,9 @@
     {
       "tool": {
         "driver": {
-          "name": "zreview",
+          "name": "sacr",
           "version": "v0.2.0",
-          "informationUri": "https://github.com/shubam-disseqt/z-code-reviewer",
+          "informationUri": "https://github.com/shubam-disseqt/shubam-ai-code-reviewer",
           "rules": [
             {
               "id": "scanner:gitleaks/aws-access-token",
@@ -63,7 +63,7 @@
             }
           ],
           "partialFingerprints": {
-            "zreview/v1": "fp-aws-1"
+            "sacr/v1": "fp-aws-1"
           }
         },
         {
@@ -86,7 +86,7 @@
             }
           ],
           "partialFingerprints": {
-            "zreview/v1": "fp-md5-1"
+            "sacr/v1": "fp-md5-1"
           }
         },
         {
@@ -108,7 +108,7 @@
             }
           ],
           "partialFingerprints": {
-            "zreview/v1": "fp-cve-1"
+            "sacr/v1": "fp-cve-1"
           }
         }
       ]

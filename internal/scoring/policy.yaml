@@ -1,4 +1,4 @@
-# z-code-reviewer default scoring policy.
+# shubam-ai-code-reviewer default scoring policy.
 #
 # Keys under `categories` accept either "category.rule" (specific) or a
 # bare "category" (generic bucket). Lookup order in scoring.go:
@@ -12,7 +12,7 @@
 #
 # Override this file via:
 #   - $ZREVIEW_SCORING_POLICY=/path/to/policy.yaml
-#   - <repo>/.zreview/scoring.yaml
+#   - <repo>/.sacr/scoring.yaml
 
 categories:
   # ---- PDF §6 examples ----

@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llmloop"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llmloop"
 )
 
 func TestNew_InvalidDirReturnsError(t *testing.T) {

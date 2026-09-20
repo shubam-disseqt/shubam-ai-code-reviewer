@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 disseqt
 
-// Package sarif encodes zreview findings as SARIF 2.1.0 JSON for upload to
+// Package sarif encodes sacr findings as SARIF 2.1.0 JSON for upload to
 // GitHub Code Scanning. Only the subset actually written by Encode is
 // modelled — new fields land here as callers need them, not upfront.
 //
@@ -27,7 +27,7 @@ type Tool struct {
 	Driver ToolComponent `json:"driver"`
 }
 
-// ToolComponent describes the analysis tool (zreview) and the rules it can
+// ToolComponent describes the analysis tool (sacr) and the rules it can
 // report on. `Rules` is emitted as an empty array (not null) when the run
 // carries no findings — some Code Scanning validators are picky.
 type ToolComponent struct {

@@ -6,7 +6,7 @@ package comment
 import (
 	"sync"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // CommentCollector is a thread-safe, per-Agent comment store.

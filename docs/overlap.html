@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" />
-  <title>Overlap &mdash; z-code-reviewer</title>
+  <title>Overlap &mdash; shubam-ai-code-reviewer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 <div class="wrap">
   <nav class="sidebar">
-    <h2>z-code-reviewer</h2>
+    <h2>shubam-ai-code-reviewer</h2>
     <span class="tag">local docs</span>
     <ul>
       <li><a href="/">Overview</a></li>
@@ -40,7 +40,7 @@
 
     <h2 id="why">Why this exists</h2>
     <p>Two engineers refactoring the same package in parallel is the most expensive kind of merge conflict: not because the diff is hard to resolve, but because one of the two efforts is usually wasted. Overlap detection surfaces those collisions <em>while</em> the second PR is still in review, when it's still cheap to coordinate.</p>
-    <p>It runs alongside the main review by default. You can also invoke it standalone via <code>zreview overlap</code>.</p>
+    <p>It runs alongside the main review by default. You can also invoke it standalone via <code>sacr overlap</code>.</p>
 
     <h2 id="how">How it works</h2>
     <ol>
@@ -59,10 +59,10 @@
     <h2 id="usage">Usage</h2>
     <p>Automatic during a normal review, when a <code>GITHUB_TOKEN</code> and <code>--pr</code> are both present:</p>
     <pre><code>export GITHUB_TOKEN=...
-zreview review --from origin/main --to HEAD --pr 42 --format github</code></pre>
+sacr review --from origin/main --to HEAD --pr 42 --format github</code></pre>
 
     <p>Standalone, without running a full review:</p>
-    <pre><code>zreview overlap --owner disseqt --repo z-code-reviewer --pr 42</code></pre>
+    <pre><code>sacr overlap --owner disseqt --repo shubam-ai-code-reviewer --pr 42</code></pre>
 
     <h2 id="output">Output shape</h2>
     <p>Standalone output is markdown by default. If no overlap is found, the command prints <code>No overlap detected.</code> and exits 0.</p>
@@ -90,8 +90,8 @@ zreview review --from origin/main --to HEAD --pr 42 --format github</code></pre>
       <thead><tr><th>Env</th><th>Purpose</th><th>Default</th></tr></thead>
       <tbody>
         <tr>
-          <td><code>ZREVIEW_OVERLAP_ENABLED</code></td>
-          <td>Set to <code>0</code> to disable the automatic overlap pass during <code>zreview review</code>.</td>
+          <td><code>SACR_OVERLAP_ENABLED</code></td>
+          <td>Set to <code>0</code> to disable the automatic overlap pass during <code>sacr review</code>.</td>
           <td>enabled</td>
         </tr>
         <tr>
@@ -127,7 +127,7 @@ zreview review --from origin/main --to HEAD --pr 42 --format github</code></pre>
 
     <footer>
       &copy; 2026 disseqt. Apache-2.0.
-      Adapted from Mira's cross-PR analysis &mdash; see <a href="https://github.com/shubam-disseqt/z-code-reviewer/blob/main/PORTING.md">PORTING.md</a> for provenance.
+      Adapted from Mira's cross-PR analysis &mdash; see <a href="https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/PORTING.md">PORTING.md</a> for provenance.
     </footer>
   </main>
 </div>

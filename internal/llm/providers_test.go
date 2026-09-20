@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 alibaba/open-code-review Contributors
-// Portions Copyright 2026 disseqt
+// Portions Copyright 2026 shubam-ai-code-reviewer contributors
 // Adapted from alibaba/open-code-review internal/llm/providers_test.go
 // (trimmed to the 5 remaining presets).
 
@@ -157,7 +157,7 @@ func TestLookupProvider_DeepSeekCatalog(t *testing.T) {
 		t.Fatal("deepseek not found")
 	}
 	// deepseek-chat must be present and first — it's the default when no
-	// ZREVIEW_MODEL is set. deepseek-reasoner is the reasoning-tier variant.
+	// SACR_MODEL is set. deepseek-reasoner is the reasoning-tier variant.
 	// Previous fixtures used aspirational names (deepseek-v4-*, deepseek-flash)
 	// that don't exist on the live platform; keep the test grounded in what
 	// api.deepseek.com actually returns.

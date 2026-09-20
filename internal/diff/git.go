@@ -16,8 +16,8 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/gitcmd"
-	"github.com/shubam-disseqt/z-code-reviewer/internal/model"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gitcmd"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
 
 // DiffContextLines defines the number of context lines around each changed hunk.

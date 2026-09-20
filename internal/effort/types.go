@@ -30,7 +30,7 @@ type Contribution struct {
 }
 
 // Inputs bundles everything Compute needs from the review pipeline. Kept
-// as one struct so the call site (cmd/zreview/review_cmd.go) doesn't grow
+// as one struct so the call site (cmd/sacr/review_cmd.go) doesn't grow
 // a 10-arg function signature.
 type Inputs struct {
 	Files          []FileDelta

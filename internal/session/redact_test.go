@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shubam-disseqt/z-code-reviewer/internal/llm"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/llm"
 )
 
 func TestRedact(t *testing.T) {
