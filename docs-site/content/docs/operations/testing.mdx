@@ -1,0 +1,76 @@
+---
+title: Testing
+description: How sacr is tested — unit coverage per package plus one end-to-end subprocess test that exercises the whole pipeline.
+---
+
+The unit-test tree covers every internal package in isolation. A single end-to-end test, `TestReviewE2E_WorkspaceMode_ProducesJSON`, drives the compiled binary as a subprocess against a fake Anthropic endpoint so the whole pipeline — env resolution, LLM wiring, tool dispatch, JSON emit — is exercised in one place.
+
+## Why an e2e test exists
+
+Unit tests use `httptest` in-process; they don't exercise `sacr review` against a real Anthropic / OpenAI / Bedrock / DeepSeek endpoint. The e2e test closes the practical part of that gap: a real subprocess, a real git diff, a real HTTP round trip through the resolver → SDK → wire → response → tool dispatch → scoring → JSON emit chain. If any link regresses, this test fails on the next PR.
+
+Everything a hosted-provider test would additionally catch (auth quirks, model-specific quirks, throttling behavior) still needs a manual run against a real key. See the manual repro below.
+
+## Running the test
+
+```bash
+go test -run TestReviewE2E_WorkspaceMode_ProducesJSON -v ./cmd/sacr/
+```
+
+Expected runtime: 2-5 s locally, dominated by `go build ./cmd/sacr`. Race detector adds &lt;3 s.
+
+`-short` skips the test:
+
+```bash
+go test -short ./...        # e2e skipped
+go test ./...               # e2e runs
+```
+
+The test skips itself if `go` or `git` is not on `PATH`, so it stays green in a stripped container without special-casing.
+
+## What the test does, step by step
+
+1. Spins up `httptest.NewServer` that returns a hard-coded Anthropic Messages response with two `tool_use` blocks: `code_comment` on `main.go`, then `task_done`.
+2. Creates a fresh git repo under `t.TempDir()`. First commit is `main.go` with an empty `main()`; the second change is staged (not committed) so workspace-mode diff picks it up.
+3. Runs `go build -o <tmp>/sacr ./cmd/sacr`. Clean build every run — slow but reproducible.
+4. Runs the binary as a subprocess with a scrubbed env: a highest-priority direct-endpoint env var points at the httptest URL, `ANTHROPIC_API_KEY` is set alongside to keep the friendly-var path warm, and `HOME` and `SACR_SESSION_DIR` are forced to temp dirs so nothing leaks from the developer's real config.
+5. Asserts: exit 0, stdout is a valid `emitResult` JSON envelope, at least one request reached the fake, one `*.jsonl` session log was written.
+
+## Env priority the test relies on
+
+The resolver walks strategies in order (see `internal/llm/resolver.go`):
+
+1. **Config file** — skipped, `HOME` is a fresh temp dir
+2. **Direct endpoint env vars** — resolve first, forcing the httptest URL through the pipeline
+3. **Provider env vars** — `ANTHROPIC_API_KEY` would resolve here, but the direct-endpoint path wins
+4. Claude Code / shell rc — unreached
+
+`ANTHROPIC_API_KEY` is left set on purpose so a regression that breaks the friendly path (e.g. resolver rejects it) still surfaces in the fake request logs.
+
+## Manual repro against a real API
+
+Everything the e2e test does with `httptest` can be run against the real Anthropic API in a scratch shell — useful when a hosted provider changes response shape or auth headers.
+
+```bash
+tmp=$(mktemp -d)
+cd "$tmp" && git init -q -b main
+git config user.email you@example.com && git config user.name you
+printf 'package main\n\nfunc main() {}\n' > main.go
+git add main.go && git commit -q -m seed
+printf 'package main\n\nfunc main() { println("hi") }\n' > main.go
+git add main.go
+
+export ANTHROPIC_API_KEY=sk-ant-...       # your real key
+export ANTHROPIC_MODEL=claude-sonnet-4-6
+sacr review --repo "$tmp" --format json --output -
+```
+
+Expected: valid JSON envelope on stdout, one `*.jsonl` under `~/.sacr/sessions/`, exit 0. Repeat for `--format github --pr N` (needs `GITHUB_TOKEN`) and `--format sarif` to exercise the remaining emit paths against real GitHub.
+
+The manual runs are what turn the audit finding from "proven in-process" to "proven against real hosted providers". Log the model + provider + exit code in the PR body when you claim it.
+
+## Known gaps
+
+<Callout type="warn">
+The e2e assertion on comment survival is intentionally soft. In the current tree `review_cmd.buildToolRegistry` does not register a `code_comment` stub on the tool registry, so the loop's not-found short-circuit fires and the finding never reaches the collector. The test logs this rather than failing on it, because the scope here is env + wiring + JSON emit; registering the stub is a separate one-line change to production code and is tracked separately.
+</Callout>

@@ -1,0 +1,199 @@
+---
+title: Troubleshooting
+description: Symptoms, causes, and fixes for common sacr issues — docs server, credentials, indexing, comments, overlap, rules, logging.
+---
+
+Symptoms, causes, and fixes. If none of these match, please [open an issue](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/issues) with the exact command line and (redacted) output.
+
+## `sacr docs` prints *listening at...* but the browser can't connect
+
+### Symptom
+`sacr docs` says it's listening, but the browser hangs or refuses the connection.
+
+### Diagnosis
+The server binds to loopback by default (`127.0.0.1`). If you're running `sacr docs` inside a container, remote VM, or SSH session, your browser is on a different host and can't reach loopback.
+
+### Fix
+Bind to a routable address and add the reachable host to the allowlist:
+
+```bash
+SACR_DOCS_ALLOWED_HOSTS=devbox.local,10.0.0.7 \
+  sacr docs --addr 0.0.0.0:7777
+```
+
+If a firewall between your machine and the docs host is dropping traffic, no allowlist change will help — open the port on the firewall first.
+
+## `403 forbidden host` when hitting the docs server
+
+### Symptom
+The docs server returns `403 forbidden host` on every request.
+
+### Diagnosis
+The `Host:` header on the request is not on the allowlist. This is intentional — it defends against DNS rebinding (see [T4](/docs/operations/threat-model#t4-dns-rebinding-against-sacr-docs)).
+
+### Fix
+Add the exact `Host:` value your browser sends (usually the hostname, sometimes with a port) to `SACR_DOCS_ALLOWED_HOSTS`:
+
+```bash
+SACR_DOCS_ALLOWED_HOSTS=devbox.local,devbox.local:7777 \
+  sacr docs --addr 0.0.0.0:7777
+```
+
+Loopback names (`localhost`, `127.0.0.1`, `[::1]`) are always accepted — you never need to list them.
+
+## CI complains about *no provider API key*
+
+### Symptom
+`sacr review` exits early in CI with "no provider API key" or similar.
+
+### Diagnosis
+`sacr review` could not resolve any LLM provider credential. Nothing in the env, no AWS credential chain reachable.
+
+### Fix
+Set exactly one of these in the job:
+
+| Provider | Variable |
+|----------|----------|
+| Anthropic | `ANTHROPIC_API_KEY` |
+| OpenAI | `OPENAI_API_KEY` |
+| AWS Bedrock | Standard AWS credential chain: `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`, or an IAM role attached to the runner. |
+
+Then run `sacr doctor` in your CI pipeline before `sacr review` so misconfigurations fail fast. See [CLI reference](/docs/reference/cli).
+
+## Index build is slow or expensive
+
+### Symptom
+`sacr index` takes a long time or burns unexpected LLM cost.
+
+### Diagnosis
+By default `sacr index` uses the same LLM/embedding model as review. Review-grade models are overkill for chunk embeddings.
+
+### Fix
+Point indexing at a cheaper embedding model separately from the review model. Configure the indexing model via `SACR_INDEX_MODEL` in your `.sacr.yaml` or environment — see [Configuration](/docs/reference/configuration). On very large repos, also prefer incremental over full rebuilds: run `sacr index` without `--full` so only changed files are re-embedded.
+
+## Review comment lands on the wrong line
+
+### Symptom
+A `sacr` review comment appears on a line that doesn't match the diff hunk.
+
+### Diagnosis
+The LLM produced a line number that didn't match any hunk in the diff. Line-snapping tried to relocate the comment to the nearest changed line and either landed off-by-one or too far away to snap safely.
+
+### Fix
+This is a bug on our side, not a config problem. Please file it with:
+
+- the diff (`git diff --unified=3 <from>..<to>`),
+- the produced comment (from `--format json`),
+- the session `.jsonl` if available — it captures the pre-snap position and helps us reproduce.
+
+Redact source content if it's sensitive; the diff structure alone is often enough.
+
+## Overlap section is empty
+
+### Symptom
+The overlap block in the review output is empty even though other PRs touch the same files.
+
+### Diagnosis
+`sacr overlap` could not enumerate open PRs. Most often: `GITHUB_TOKEN` is unset, or the token lacks pull-request read scope on the repo.
+
+### Fix
+
+- Confirm `GITHUB_TOKEN` is exported in the shell / job.
+- For fine-grained tokens, ensure *Pull requests: Read* is granted for the target repo.
+- For classic PATs, `repo` scope is sufficient. For public repos, `public_repo`.
+- Re-run with `-vv` to see the exact GitHub API error.
+
+If the prefilter yields no candidates that is a legitimate empty result — there really are no overlapping PRs. That is different from "the overlap step didn't run": the latter prints a diagnostic to stderr.
+
+## Org rules not injected
+
+### Symptom
+`sacr review` output ignores your team's rules; they don't appear in the prompt block.
+
+### Diagnosis
+Either the rules repo is not configured, unreachable, or the YAML doesn't parse.
+
+### Fix
+
+1. Confirm `SACR_ORG_RULES_REPO` is set: `echo $SACR_ORG_RULES_REPO`.
+2. Run `sacr rules sync`. This fetches the repo and prints load errors up-front.
+3. Run `sacr rules list`. Every rule expected to apply must appear here. If it doesn't:
+    - Check `enabled: true` on the rule file.
+    - Check `repos:` matches the current repo's `owner/name`.
+    - For `scope: path`, verify at least one `paths` glob matches a changed file.
+4. See [Capabilities → review rules](/docs/capabilities) for the full precedence.
+
+## Structured logging
+
+`sacr review` emits progress lines through `log/slog`. Two knobs control the shape:
+
+- `SACR_LOG_FORMAT` — `text` (default) or `json`. Text mode preserves the historical `[sacr] <stage>: ...` prefix so existing grep patterns keep working. JSON mode emits one JSON record per line, ready for a log aggregator.
+- `SACR_LOG_LEVEL` — `DEBUG`, `INFO` (default), `WARN`, or `ERROR`. Per-scanner adapter chatter is `DEBUG`; the stage summaries and the final metrics line are `INFO`.
+
+Sample text line:
+
+```text
+[sacr] scanners: 3 findings from gitleaks:2,semgrep:1 by_tool=gitleaks:2,semgrep:1 count=3
+```
+
+Sample JSON line:
+
+```json
+{"time":"2026-09-14T10:15:00Z","level":"INFO","msg":"3 findings from gitleaks:2,semgrep:1","stage":"scanners","by_tool":"gitleaks:2,semgrep:1","count":3}
+```
+
+## Per-review metrics
+
+Every successful `sacr review` emits one aggregate `metrics` line just before it exits. This replaces the older `--verbose`-only cost printouts — you don't need `--verbose` to see totals any more.
+
+Text mode:
+
+```text
+[sacr] metrics: duration=42.3s files=8 tokens=in:12345/out:2345 cost=$0.42 findings=new:5/carried:3/resolved:1 scanner=2 comments=6
+```
+
+JSON mode (one line, formatted here for clarity):
+
+```json
+{
+  "time": "2026-09-14T10:15:42Z",
+  "level": "INFO",
+  "msg": "duration=42.3s files=8 ...",
+  "stage": "metrics",
+  "duration_ms": 42300,
+  "files_reviewed": 8,
+  "prompt_tokens": 12345,
+  "completion_tokens": 2345,
+  "total_cost_usd": 0.42,
+  "new_findings": 5,
+  "carried_findings": 3,
+  "resolved_findings": 1,
+  "scanner_findings": 2,
+  "comments_posted": 6
+}
+```
+
+`total_cost_usd` is populated from the provider's usage response when available; if the provider does not surface a price, the field stays at `0.00` and consumers can multiply `prompt_tokens` / `completion_tokens` by their own rate card.
+
+## Test coverage on `internal/llm` is 40%
+
+### Symptom
+Coverage reports show `internal/llm` sitting around 40%.
+
+### Diagnosis
+Not a bug. Provider glue in `internal/llm` is only exercised end-to-end — not by unit tests yet.
+
+### Fix
+Coverage rises as Phase 6+ wires more providers into the review path. Track progress on the [roadmap](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/ROADMAP.md).
+
+## How to file a bug
+
+For everything except security issues:
+
+- Open a ticket at [github.com/shubam-disseqt/shubam-ai-code-reviewer/issues](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/issues).
+- Include: `sacr version --json` output, the exact command, and the first ~50 lines of stderr with `-vv`.
+- Redact any real diff content that isn't necessary to reproduce.
+
+<Callout type="error">
+For security-relevant issues (credential leak paths, path traversal, RCE), do **not** use public Issues. See [Security](/docs/operations/security) and the repo's [SECURITY.md](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/SECURITY.md) for private disclosure.
+</Callout>

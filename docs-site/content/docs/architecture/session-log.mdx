@@ -1,0 +1,136 @@
+---
+title: Session Log
+description: The append-only JSONL log at ~/.sacr/sessions — audit trail, resume input, and debug artifact.
+---
+
+Every review run appends a JSONL log to
+`~/.sacr/sessions/<uuid>.jsonl`. It's the audit trail, the resume
+input, and the debug artifact — one file, one run.
+
+## Where the log lives
+
+Default: `$HOME/.sacr/sessions/<session-id>.jsonl`. Override with
+`SACR_SESSION_DIR`.
+
+The session ID is a UUIDv4 minted at run start. It's printed at the
+end of every review so CI logs are searchable back to the JSONL file.
+
+## The JSONL shape
+
+One JSON object per line. Every record shares a base header:
+
+| Field | Meaning |
+|---|---|
+| `uuid` | Unique record ID (UUIDv4). |
+| `parent_uuid` | UUID of the record before it, forming a chain. `session_start` has no parent. |
+| `type` | Record kind. See table below. |
+| `session_id` | The overall run ID — the same for every record in the file. |
+| `timestamp` | UTC RFC-3339 timestamp of when the record was written. |
+
+### Record types
+
+| Type | When emitted | Extra fields |
+|---|---|---|
+| `session_start` | Once at run open. | — |
+| `llm_request` | Each LLM call: main task, memory compression, overlap batch. | task_key, model, request payload, token estimate. |
+| `llm_response` | Each successful response. | content, stop reason, usage tokens. |
+| `llm_failure` | Any LLM call that surfaces an error after retries. | error message, attempt count. |
+| `tool_call` | Each tool invocation (`file_read`, `code_search`, etc.). | tool name, arguments, truncated result. |
+| `comment_produced` | Each finding the LLM emits, before dedup and line-snap. | path, start_line, end_line, severity, category, body. |
+| `session_end` | Once at run close (even on error, if the loop reaches Close). | files_reviewed, duration_seconds, llm_failures. |
+
+## Append-only, flushed per record
+
+The log is append-only. Every record is flushed to disk immediately
+after write. A crash mid-run leaves at most one truncated line at the
+tail — every prior record is intact and parseable. Never edit the file
+in place.
+
+<Callout type="info">
+  **Concurrency.** One `Session` per run, one file per `Session`. The
+  writer is guarded by a mutex — you can run `sacr review` in parallel,
+  but each instance owns its own JSONL file. Never point two processes
+  at the same session ID.
+</Callout>
+
+## Resume semantics
+
+`sacr review --resume <session-id>` re-opens an existing JSONL file
+and appends new records to the tail. What survives across the resume:
+
+- **Comments already produced.** The collector reads every
+  `comment_produced` record from the existing log before doing any
+  new work. Successful comments are not re-generated.
+- **Failed sub-tasks are retried.** Any file whose main-task chain
+  ended in `llm_failure` is re-dispatched.
+- **Tool cache is warm.** Deterministic tool results are effectively
+  free on the second pass because the LLM is unlikely to ask for the
+  exact same thing again after a successful first pass.
+
+Resume is for interrupted runs (CI timed out, network flake), not for
+editing history. It has no effect if the log has a `session_end`
+record — the run already completed and there is nothing to redo.
+
+## Reading the log
+
+The JSONL is designed to be greppable with standard tools.
+
+```bash
+# count LLM calls
+grep -c '"type":"llm_request"' ~/.sacr/sessions/<id>.jsonl
+
+# every comment produced
+jq -c 'select(.type == "comment_produced") | {path, start_line, severity, body}' \
+  ~/.sacr/sessions/<id>.jsonl
+
+# any LLM failures
+jq -c 'select(.type == "llm_failure")' ~/.sacr/sessions/<id>.jsonl
+
+# session-end summary
+jq -c 'select(.type == "session_end")' ~/.sacr/sessions/<id>.jsonl
+```
+
+## Retention
+
+`sacr` does not auto-prune. Old session files sit under
+`~/.sacr/sessions/` until you clean them up. Sensible retention:
+
+- **Local dev.** Prune on a weekly cron. Anything older than 30 days
+  is post-mortem material at best.
+- **CI runners.** Emit the JSONL as a build artifact and expire with
+  the build. Keeps the runner disk clean.
+- **Auditing.** If session logs are part of your compliance story,
+  ship them off-box to your log platform. The file is already JSONL;
+  most ingestion pipelines take it as-is.
+
+## Secrets in logs
+
+The log records tool inputs and outputs, and the writer runs a
+best-effort redactor over every text field before it hits disk. This
+is a defence-in-depth measure, not a substitute for good repo
+hygiene — treat the session dir as sensitive.
+
+### Redaction
+
+The following credential shapes are replaced on the write path.
+Existing session files are not rewritten — redaction only applies to
+records written after the upgrade.
+
+| Pattern | Example (redacted) |
+|---|---|
+| Environment-style assignments: `*_API_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `*_PRIVATE_KEY`, `AWS_*_KEY\|TOKEN\|SECRET`, bare `PASSWORD`, `PRIVATE_KEY` | `AWS_SECRET_ACCESS_KEY=[REDACTED]` |
+| Prefixed tokens: `sk-ant-*` (Anthropic), `sk-*` (OpenAI), `ghp_*`, `github_pat_*`, `xoxb-*` (Slack), `AKIA*` (AWS access key ID) | `[REDACTED]` |
+| PEM blocks between `-----BEGIN…-----` and `-----END…-----` | `[REDACTED-PEM]` |
+| JWTs (three-segment `eyJ….….…`) | `[REDACTED-JWT]` |
+| HTTP(S) URLs with basic-auth: `https://user:pass@host/…` | `https://[REDACTED]@host/…` |
+
+<Callout type="warn">
+  **Best-effort, not exhaustive.** Patterns are bounded to keep false
+  positives out of review comments — a benign identifier or the word
+  "token" in prose is left alone. Novel or unshaped credentials (a
+  bespoke internal token format, a raw hex API key with no prefix)
+  will still land in the log verbatim. Don't rely on redaction to
+  sanitize a repo with committed secrets; rotate the credential and
+  clean the repo.
+</Callout>
+

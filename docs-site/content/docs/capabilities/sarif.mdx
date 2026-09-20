@@ -1,0 +1,87 @@
+---
+title: SARIF output
+description: Ship deterministic scanner findings to GitHub Code Scanning as SARIF 2.1.0 while keeping human review comments on the diff.
+---
+
+Ship deterministic scanner findings to GitHub Code Scanning as SARIF 2.1.0 while keeping human review comments on the diff. Two output surfaces, one review pass.
+
+## Why SARIF
+
+Scanner findings (gitleaks, semgrep, govulncheck) are high-precision, category-limited, and repeat across pushes. Inline review comments for every hardcoded secret and MD5 call would drown a PR. SARIF is the format GitHub Code Scanning expects for these; it deduplicates by fingerprint, tracks alert state across pushes, and renders in the *Security* tab instead of the diff.
+
+The split is deterministic:
+
+- **Scanner-sourced comments** (`Source=scanner:*`) → SARIF only.
+- **LLM comments** → inline PR comments (or JSON / stdout).
+
+## Emitting SARIF
+
+### `--format sarif`
+
+Writes a SARIF 2.1.0 JSON log to `--output` (file or `-` for stdout). Suitable for CI jobs that upload SARIF as a workflow artifact, or for piping into other tooling.
+
+```bash
+sacr review --commit HEAD --format sarif --output review.sarif
+```
+
+Every unique `(Source, RuleID)` pair becomes one `ReportingDescriptor`; every finding becomes one `Result`. Results carry `partialFingerprints.sacr/v1`, the same fingerprint the incremental re-review path uses — so Code Scanning alert state and `sacr` carry-over stay in sync.
+
+### `--format github` + Code Scanning upload
+
+The default GitHub path posts LLM comments inline and, when opted in, uploads scanner findings as SARIF in the same run:
+
+```yaml
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  SACR_UPLOAD_SARIF: "1"
+run: sacr review --pr ${{ github.event.number }} --format github
+```
+
+<Callout type="warn">
+Upload requires the workflow permission `security-events: write`. Without it GitHub returns 403 and the SARIF step logs the failure without failing the review.
+</Callout>
+
+## Severity mapping
+
+Scoring buckets translate to SARIF levels:
+
+| sacr severity | SARIF level |
+|---|---|
+| `CRITICAL`, `HIGH` | `error` |
+| `MEDIUM` | `warning` |
+| `LOW` | `note` |
+| `SUPPRESS` | dropped — never emitted |
+
+## Fingerprints and alert carry-over
+
+The `partialFingerprints` map on every result includes:
+
+```json
+"partialFingerprints": {
+  "sacr/v1": "<sha256 of owner|repo|category|path|symbol|snippet>"
+}
+```
+
+Whitespace-collapsed, comment-stripped, extension-lowercased. Two pushes that differ only in formatting produce the same fingerprint — a Code Scanning alert stays open across those pushes instead of being closed and reopened.
+
+## Required permissions
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write     # inline LLM comments
+  security-events: write   # SARIF upload
+```
+
+## Troubleshooting
+
+- **Upload logs "422 Unprocessable".** GitHub validated the SARIF and rejected it. Save the file locally with `--format sarif --output x.sarif` and open it in a JSON viewer — typical causes are missing `commit_sha` (set `GITHUB_SHA`) or empty `ref`. The `sacr review` command reads `GITHUB_REF` automatically inside a GH Actions runner.
+- **"security-events: write" missing.** Add the permission to the job's `permissions` block. Composite Actions do not grant permissions on your behalf.
+- **Alert flapping across pushes.** Confirm the finding's fingerprint is stable — run `sacr review --format json` on both pushes and diff the `partialFingerprints`. Non-stable fingerprints usually mean the snippet includes a moving line number or timestamp; open an issue with the offending scanner rule.
+
+## See also
+
+<Cards>
+  <Card title="Scanners" href="/docs/capabilities/scanners" />
+  <Card title="Operations" href="/docs/operations" />
+</Cards>

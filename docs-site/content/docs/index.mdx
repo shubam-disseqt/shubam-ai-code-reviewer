@@ -1,0 +1,46 @@
+---
+title: shubam-ai-code-reviewer
+description: AI code review that ships with your PRs. Deterministic engineering wrapped around a thin agent loop — real bugs, not noise.
+---
+
+**`sacr`** is a single-binary AI code reviewer that plugs directly into your PR workflow. Deterministic engineering wrapped around a thin LLM agent loop. Bring your own model. Own the data. Verify every claim.
+
+## At a glance
+
+| | |
+|---|---|
+| **Recall** | 21 / 21 seeded bugs caught on the 10-PR audit (100%) |
+| **Precision** | ~1 false positive per 10 findings |
+| **Cost** | ~$0.006 per PR at `gpt-4o-mini`; $220/year at 100 PRs/day |
+| **Latency** | Median 20–30 s per PR; 150 s on a 40-file mega PR |
+| **Providers** | Anthropic · OpenAI · AWS Bedrock · DeepSeek |
+| **Languages** | Go · TypeScript · Python · Ruby · JavaScript |
+| **Platforms** | Linux · macOS · Windows |
+
+## Start here
+
+<Cards>
+  <Card title="Quickstart" href="/docs/getting-started/quickstart" description="Install sacr and review a diff in under two minutes." />
+  <Card title="Installation" href="/docs/getting-started/installation" description="Homebrew, npm, Docker, or direct binary — pick your channel." />
+  <Card title="GitHub Action" href="/docs/getting-started/github-action" description="Drop-in review on every pull request." />
+  <Card title="CLI Reference" href="/docs/reference/cli" description="Every flag, every command, one page." />
+</Cards>
+
+## Learn by section
+
+<Cards>
+  <Card title="Architecture" href="/docs/architecture" description="The 13-stage review pipeline, deterministic and LLM layers, code index." />
+  <Card title="Capabilities" href="/docs/capabilities" description="Scanners, org rules, cross-PR overlap detection, SARIF output." />
+  <Card title="Reference" href="/docs/reference" description="CLI flags, environment variables, configuration files, provider setup." />
+  <Card title="Operations" href="/docs/operations" description="Security posture, reliability, testing, troubleshooting." />
+</Cards>
+
+## Design principles
+
+| Axis | Choice | Why |
+|---|---|---|
+| **Determinism** | Deterministic engineering wraps a thin LLM loop | Scanners, scoring, math, dedup all in Go — LLM only for judgement |
+| **Auditability** | Every claim in the PR body is verifiable | Effort table rows sum to shown score; depgraph edges = literal imports |
+| **Cost** | Two-tier model routing | Main tier for review; cheap tier for summarizer/labeler; ~30–40% saved |
+| **Idempotency** | Content-hash fingerprints | Fix commit → resolved findings drop cleanly; no re-run noise |
+| **Distribution** | Single Go binary | No Python runtime, no LangChain, no service to deploy |

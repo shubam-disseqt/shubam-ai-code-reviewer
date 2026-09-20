@@ -1,0 +1,112 @@
+---
+title: Configuration
+description: Environment variables, repo-local YAML, org rules schema, and the precedence between all four layers.
+---
+
+Configuration is layered. Each layer overrides the one before it.
+
+## Precedence
+
+Defaults → org rules repo → `.sacr.yaml` in the repo → env vars → CLI flags. **Right-most wins.**
+
+| Layer | Source | Overrides |
+|---|---|---|
+| Defaults | Compiled into the binary | Nothing |
+| Org rules | `$SACR_ORG_RULES_REPO` at `$SACR_ORG_RULES_REF` | Defaults |
+| Repo-local | `.sacr.yaml` at the repo root | Defaults + org rules |
+| Environment | `SACR_*`, provider keys, `GITHUB_TOKEN` | All of the above |
+| CLI flags | Passed on the command line | Everything |
+
+## Environment variables
+
+| Name | Purpose | Default |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Anthropic provider key | — |
+| `OPENAI_API_KEY` | OpenAI provider key | — |
+| `AWS_*` | Bedrock via AWS credential chain | — |
+| `SACR_DB_URL` | Index database DSN (Postgres or SQLite) | index disabled |
+| `SACR_ORG_RULES_REPO` | Git-hosted org rules repo (`owner/repo`) | no org rules |
+| `SACR_ORG_RULES_REF` | Git ref to pin | `main` |
+| `SACR_DOCS_ALLOWED_HOSTS` | Extra `Host:` values accepted by `sacr docs` | loopback only |
+| `SACR_TELEMETRY` | Set to `1` to opt into anonymous usage counters | disabled |
+| `SACR_LOG_FORMAT` | Log output shape: `text` or `json`. See [Troubleshooting § Structured logging](/docs/operations/troubleshooting#structured-logging). | `text` |
+| `SACR_LOG_LEVEL` | `DEBUG`, `INFO`, `WARN`, or `ERROR`. | `INFO` |
+| `GITHUB_TOKEN` | For `--format github` and cross-PR overlap | — |
+
+Provider-specific env vars (models, cheap-tier routing, base URL overrides) live on the [Providers](/docs/reference/providers) page.
+
+## Repo-local YAML
+
+<Callout type="info">
+`.sacr.yaml` is a **Phase 9** deliverable. The shape below is the target schema and is considered stable.
+</Callout>
+
+Place `.sacr.yaml` at the repo root:
+
+```yaml
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-6
+  temperature: 0.0
+
+filter:
+  exclude_patterns:
+    - "**/*.gen.go"
+    - "**/mocks/**"
+  max_files: 50
+
+review:
+  context_lines: 3
+  include_summary: true
+  max_comments: 15
+```
+
+### Key reference
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `llm.provider` | string | resolved from env | Provider preset. One of `anthropic`, `bedrock`, `openai`, `openai-responses`, `deepseek`. |
+| `llm.model` | string | provider default | Model ID to route to. |
+| `llm.temperature` | number | `0.0` | Sampling temperature. `0.0` for deterministic review output. |
+| `filter.exclude_patterns` | string[] | `[]` | Glob patterns of files to skip before any LLM call. Generated code, mocks, snapshots. |
+| `filter.max_files` | number | `50` | Hard cap on files reviewed per run. Diffs above the cap fall back to a summary-only review. |
+| `review.context_lines` | number | `3` | Lines of surrounding context loaded per hunk. |
+| `review.include_summary` | boolean | `true` | Emit an overall PR summary alongside inline comments. |
+| `review.max_comments` | number | `15` | Cap on inline comments per run. |
+
+## Org rules YAML
+
+Rules live in a separate repo pointed at by `$SACR_ORG_RULES_REPO`. Each rule is a YAML file under `rules/`:
+
+```yaml
+# in your org-rules repo: rules/no-console-log.yaml
+id: no-console-log
+title: No console.log in production code
+body: |
+  Flag any console.log/warn/error left in application code.
+  Test fixtures under tests/** are exempt.
+scope: repo                     # global | repo | path
+repos: ["disseqt/z-frontend"]
+paths: ["src/**/*.ts", "src/**/*.tsx"]
+exclude_paths: ["**/*.test.ts"]
+severity: warning               # blocker | warning | suggestion | nitpick
+category: maintainability
+enabled: true
+```
+
+### Key reference
+
+| Key | Type | Meaning |
+|---|---|---|
+| `id` | string | Stable rule identifier. Referenced in comments and CI logs. |
+| `title` | string | Short human name. |
+| `body` | string | Rule description passed to the model. YAML block scalar. |
+| `scope` | enum | `global` (every repo), `repo` (specific repos), or `path` (specific paths). |
+| `repos` | string[] | `owner/repo` list. Only used when `scope: repo`. |
+| `paths` | glob[] | File patterns the rule applies to. |
+| `exclude_paths` | glob[] | Patterns that exempt files from the rule. |
+| `severity` | enum | `blocker`, `warning`, `suggestion`, or `nitpick`. Drives exit code and CI gating. |
+| `category` | string | Free-form category for grouping in reports. |
+| `enabled` | boolean | Toggle without deleting the file. |
+
+See [Review rules](/docs/capabilities/review-rules) for the authoring guide and rule-testing workflow.

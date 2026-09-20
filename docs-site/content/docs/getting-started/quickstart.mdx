@@ -1,0 +1,65 @@
+---
+title: Quickstart
+description: Install sacr, configure a provider, and post an inline review to your first PR.
+---
+
+Once binaries ship (Phase 9), this is the shortest path to your first review.
+
+<Callout type="warn">
+  **Not yet functional.** The full `sacr review` command lands in Phase 8. Today, only `sacr version` and `sacr docs` work end-to-end. See [ROADMAP.md](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/ROADMAP.md) for phase status.
+</Callout>
+
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/shubam-ai-code-reviewer/main/install.sh | sh
+```
+
+## Configure a provider
+
+```bash
+export ANTHROPIC_API_KEY=...        # or OPENAI_API_KEY, or use Bedrock via the AWS credential chain
+```
+
+## Optional: point at an index database
+
+For repo-wide context and cross-PR overlap, provide a Postgres or local SQLite database:
+
+```bash
+export SACR_DB_URL="postgres://user:pass@host:5432/sacr?sslmode=require"
+# or
+export SACR_DB_URL="sqlite:///path/to/index.db"
+```
+
+## Optional: point at an org rules repo
+
+```bash
+export SACR_ORG_RULES_REPO=disseqt/z-review-rules
+```
+
+## Review the current diff
+
+```bash
+cd your-project
+sacr review --from main --to HEAD --format json --output result.json
+```
+
+## Post inline comments to a PR
+
+```bash
+sacr review --from main --to HEAD --format github --pr 42
+```
+
+## See the docs
+
+```bash
+sacr docs
+```
+
+## Next steps
+
+<Cards>
+  <Card title="GitHub Action" href="/docs/getting-started/github-action" description="Automate this on every PR." />
+  <Card title="Providers" href="/docs/reference/providers" description="Anthropic, OpenAI, Bedrock, DeepSeek." />
+  <Card title="Review rules" href="/docs/capabilities/review-rules" description="What sacr looks for." />
+</Cards>

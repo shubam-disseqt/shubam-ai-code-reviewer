@@ -1,0 +1,84 @@
+---
+title: Security
+description: Summarized threat model, data-flow, and hardening posture for sacr.
+---
+
+Summarized threat model, data-flow, and hardening posture. For the full narrative see [Threat model](/docs/operations/threat-model) — that is the source of truth. This page is the short version.
+
+## Reporting a vulnerability
+
+Please do **not** file security issues as public GitHub Issues.
+
+Use GitHub's private vulnerability reporting instead: [open a security advisory](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/security/advisories/new). Include reproduction steps, affected versions, and (if you have one) a suggested fix or mitigation. See [SECURITY.md](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/SECURITY.md) for the disclosure timeline and PGP key.
+
+<Callout type="info">
+**Scope note.** Security-report scope covers the `sacr` CLI and its embedded docs server. Third-party LLM providers, GitHub itself, and your own CI system are out of scope — report to those vendors directly.
+</Callout>
+
+## Threat summary
+
+The same table shipped in the full [threat model](/docs/operations/threat-model), kept concise. Every mitigation is engineered in Go, not delegated to the LLM.
+
+| ID | Threat | Mitigation |
+|----|--------|------------|
+| T1 | Command injection via crafted diff content | Only `git` is exec'd; hardcoded subcommands; `--end-of-options` guard; no shell interpretation |
+| T2 | API key leakage | Env-var only; never logged; scrubbed from session JSONL |
+| T3 | Path traversal via LLM-suggested paths | `pathutil.WithinBase()` check pre- and post-symlink resolution |
+| T4 | DNS rebinding against local docs server | Host-header allowlist; wildcard binds require explicit env var |
+| T5 | MITM on API communication | TLS 1.2+, full certificate verification, `InsecureSkipVerify` never used |
+| T6 | Malicious LLM response (fabricated line numbers) | JSON schema + bounds check; line-snap re-derives positions server-side |
+| T7 | Malicious LLM response (over-escaped JSON) | Comment-args-repair refuses partial recovery on schema drift |
+| T8 | Dependency vulnerabilities | `govulncheck` in CI; Dependabot; `go.sum` integrity |
+
+## Data-flow at a glance
+
+The list is short by design. Every off-machine egress is enumerated below.
+
+| Destination | What leaves | Why | Optional? |
+|-------------|-------------|-----|-----------|
+| LLM provider (Anthropic / OpenAI / AWS Bedrock) | Diff hunks, matched org rules, requested file excerpts, prior tool outputs | The review itself — producing comments | No (required to run `review`). Choice of provider is yours. |
+| Index database (Postgres or SQLite) | Repo file content chunks, embeddings, path metadata | Persistent index for repo-wide context | Yes (unset `SACR_DB_URL` to run JIT-only) |
+| Org rules repo (GitHub HTTPS or SSH) | Nothing outbound — read-only clone | Fetch team rules YAML | Yes (unset `SACR_ORG_RULES_REPO`) |
+| GitHub API | PR number, comment body + position; PR listings for overlap | `--format github` and `sacr overlap` | Yes (unset `GITHUB_TOKEN`) |
+
+Everything else stays on-machine: local git operations, line-snapping, comment reflection, and the docs server all run without network. There is no telemetry beacon — `SACR_TELEMETRY` is off by default and opt-in only.
+
+## Release signature verification
+
+Every published binary carries a SLSA build-provenance attestation signed via GitHub's OIDC-backed sigstore chain. Verify a downloaded binary before running it:
+
+```bash
+gh attestation verify ./sacr-linux-amd64 \
+  --owner shubam-disseqt
+```
+
+The attestation binds the binary to (a) the exact commit that built it, (b) the workflow file used, (c) the runner identity. A tampered binary or one built off-tree will fail verification. See [Installation](/docs/getting-started/installation) once binaries are published.
+
+## Third-party LLM data-handling
+
+When you point `sacr` at a hosted LLM provider, the data flow is straightforward: diff content, matched org rules, and any file content the agent chose to read are sent over HTTPS to that provider's API. Comments come back. What the provider does with the payload — retention, training use, sub-processors — is governed by *their* terms and your enterprise agreement with them, not by `sacr`.
+
+Practical implications:
+
+- If your codebase is under a data-residency regime (HIPAA, GDPR territorial scope, ITAR), pick a provider whose contract covers it. Bedrock in-region, private-tenancy Anthropic, or an on-prem endpoint are common answers.
+- Do not commit real secrets to source. `sacr` is not a DLP tool — if a secret is in the diff, it will be sent to the provider.
+- Review the provider's data-retention policy. `sacr` makes no calls without your credentials; conversely, `sacr` cannot enforce zero-retention on a provider that logs requests.
+
+We document the flow deliberately; we do not restate provider policies because they change without our involvement.
+
+## The docs server's hardening
+
+`sacr docs` is the only long-lived network surface in the tool. It ships hardened by default:
+
+- **Loopback-only default.** Binds to `127.0.0.1` unless you explicitly override `--addr`.
+- **Host-header allowlist.** Non-loopback binds require `SACR_DOCS_ALLOWED_HOSTS`. Defends against DNS rebinding (T4).
+- **Strict CSP** on every response: `default-src 'self'; script-src 'none'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'`. No inline scripts, no iframes, no plugin content.
+- **No third-party assets.** No external fonts, images, or JS — everything is under the Go binary's embedded FS. Docs work fully offline.
+- **Read-only.** No routes accept `POST`, `PUT`, or `DELETE`. There is no state to mutate.
+- **Bounded lifetime.** The server exits on SIGINT and does not daemonize. Nothing survives the invocation.
+
+The trade-off is deliberate: the docs viewer is convenient but must not become a persistent local attack surface. If it feels restrictive when running inside a container, see [Troubleshooting → docs can't connect](/docs/operations/troubleshooting#sacr-docs-prints-listening-at-but-the-browser-cant-connect).
+
+---
+
+Full threat narrative lives in the [Threat model](/docs/operations/threat-model); disclosure process in [SECURITY.md](https://github.com/shubam-disseqt/shubam-ai-code-reviewer/blob/main/SECURITY.md).

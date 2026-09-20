@@ -1,0 +1,122 @@
+---
+title: Scanners
+description: Deterministic security scanners (gitleaks, semgrep, govulncheck) run alongside the LLM reviewer with near-perfect precision and zero token cost.
+---
+
+Deterministic security scanners run alongside the LLM reviewer. They catch what LLMs are worst at — secrets, well-known SAST anti-patterns, Go stdlib CVEs — with near-perfect precision and zero token cost.
+
+## Why this exists
+
+An LLM will happily miss a hardcoded AWS key and, in the same review, invent a race condition that isn't there. Static analysers have the opposite failure mode: high precision on the categories they cover, blind to everything else. Running both is cheaper and more accurate than trying to make either do the other's job.
+
+Scanners run in the review pipeline right after file selection and before the LLM loop. Findings feed the same output stream, pre-tagged `Source=scanner:<tool>` so downstream stages (scoring, SARIF routing) can treat them separately.
+
+## Supported scanners
+
+| Tool | Kind | What it catches |
+|---|---|---|
+| [gitleaks](https://github.com/gitleaks/gitleaks) | `secret` | Hardcoded credentials: AWS/GCP/Azure keys, GitHub tokens, private keys, generic high-entropy strings that match ~250 built-in rules. |
+| [semgrep](https://semgrep.dev/) | `sast` | Language-aware SAST rules from the `--config auto` community pack: injection, weak crypto, dangerous subprocess use, insecure deserialisation. Multi-language. |
+| [govulncheck](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck) | `cve` | Known Go vulnerabilities that are *reachable* from your code — module-version + call-graph, not just `go.sum` comparison. |
+
+## Install
+
+### macOS (Homebrew)
+
+```bash
+brew install gitleaks semgrep
+go install golang.org/x/vuln/cmd/govulncheck@latest
+```
+
+### Linux (apt / native)
+
+```bash
+# gitleaks: pick the latest release binary
+curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz \
+  | sudo tar -xz -C /usr/local/bin gitleaks
+
+# semgrep via pipx (recommended over pip)
+pipx install semgrep
+
+# govulncheck via Go tooling
+go install golang.org/x/vuln/cmd/govulncheck@latest
+```
+
+### Windows
+
+Scoop or the vendors' release binaries. `go install` works identically for `govulncheck`. If a scanner isn't installed, `sacr` skips it with a one-line info log — the review still runs.
+
+### Convenience target
+
+The repository ships a helper for local development:
+
+```bash
+make install-scanners
+```
+
+The target detects the current OS and installs whichever binaries are missing. On Windows it echoes the manual install instructions instead of running installers you didn't ask for.
+
+## Disable a scanner
+
+Comma-separated env var, matched by tool name (lowercase):
+
+```bash
+SACR_DISABLE_SCANNERS=gitleaks,semgrep sacr review
+```
+
+Setting all three effectively turns the scanner stage off. There is no `--no-scanners` flag on purpose: this is an operational knob, not a per-invocation choice.
+
+## Output
+
+Scanner findings appear alongside LLM findings in every output format. In `--format stdout`, they carry a `[scanner:<tool>]` prefix. In `--format json`, the same information lives in the `source` field on each comment.
+
+```json
+{
+  "path": "config/aws.py",
+  "start_line": 5,
+  "end_line": 5,
+  "content": "AWS Access Token\n\nEvidence: `AWS_KEY = ***REDACTED***`",
+  "category": "security",
+  "severity": "high",
+  "source": "scanner:gitleaks"
+}
+```
+
+<Callout type="info">
+Raw secrets are redacted with a `***REDACTED***` marker before the finding is emitted; the raw credential never leaves the tool's memory.
+</Callout>
+
+## Interaction with the LLM
+
+Scanner findings for the file under review are also injected into the reviewer prompt as an optional `## Known Issues (from static analysis)` block. The model is instructed to *not* re-report them, and to add a one-line risk note only if it has additional context. Concretely this cuts duplicate findings on the emitted PR without shrinking the scanner's coverage.
+
+## False-positive triage
+
+- **Gitleaks.** Add narrow allowlists to `.gitleaks.toml` at the repo root — paths, regexes, or fingerprints. Never broaden the allowlist to cover real source files without a security review.
+- **Semgrep.** Add `// nosemgrep: rule-id` comments at the offending line, or drop custom rule overrides under `.semgrep.yml`. Rule IDs come straight from the `check_id` field in the finding.
+- **govulncheck.** The *reachability* check already filters most noise. When it flags an unreachable path the trace will be missing a user-code step — `sacr` silently drops those. If a reachable finding is a false positive, upgrade the dependency; there is no per-finding suppression by design.
+
+## Failure semantics
+
+Best-effort at every level:
+
+- Missing binary → one-line info log, adapter returns zero findings.
+- Non-zero exit or JSON parse error → logged as a warning, adapter returns zero findings.
+- One scanner failing does not affect the others — they run concurrently under an `errgroup`.
+- Only `ctx` cancellation propagates as an error to the review pipeline.
+
+This mirrors `sacr`'s posture on every other optional stage: a flaky external dependency must not swallow the review comments you actually came for.
+
+## Limits
+
+- **Scope is intentional.** Deep SCA, license analysis, and container/IaC scanning are out of scope — different tools, different failure modes.
+- **Semgrep scans changed paths only.** Full-repo scans belong in nightly CI; the review pipeline stays targeted.
+- **govulncheck runs on the whole module.** Reachability is a call-graph property; scanning a subset would produce misleading traces.
+- **Rule packs are the tools' defaults.** Customisation lives in the tool's own config (`.gitleaks.toml`, `.semgrep.yml`) — `sacr` does not wrap those APIs.
+
+## See also
+
+<Cards>
+  <Card title="SARIF output" href="/docs/capabilities/sarif" />
+  <Card title="Review rules" href="/docs/capabilities/review-rules" />
+</Cards>

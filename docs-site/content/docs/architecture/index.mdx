@@ -1,0 +1,61 @@
+---
+title: Architecture Overview
+description: How sacr is built — a Go CLI wrapping a thin LLM loop with deterministic pre- and post-processing.
+---
+
+`sacr` is a Go CLI. It takes a git diff (or a range, or a commit),
+optionally consults a **persistent code index** for repo-wide context,
+optionally consults an **org-level rules repo** for team-specific review
+policy, calls an LLM through a **thin agent loop** with a small set of
+tools (file read, code search, file find, comment), snaps LLM-produced
+comments to real diff lines via a deterministic post-processor, and
+optionally scans other open PRs for overlap or merge-conflict risk. The
+output is a stream of comments — printed to stdout, emitted as JSON, or
+posted to a PR via a `--format github` writer.
+
+There is no long-running server, no dashboard, no webhook receiver, and
+no persistent review history. The index and the rules are the only
+things that live longer than a single invocation.
+
+## Pipeline at a glance
+
+```mermaid
+flowchart TD
+    A[git diff / range / commit] --> B[deterministic<br/>file selection]
+    B --> C[bundle<br/>related files]
+    C --> D[load index context<br/>+ JIT if index empty]
+    D --> E[load matching<br/>org rules]
+
+    E --> S1[cheap tier:<br/>summarizer]
+    E --> S2[cheap tier:<br/>labeler]
+    E --> S3[deterministic scanners:<br/>gitleaks + semgrep + govulncheck]
+    E --> F[main tier: LLM agent loop<br/>tools: file_read, code_search,<br/>file_find, file_read_diff,<br/>code_comment, task_done]
+
+    F --> G[comment collector]
+    S3 --> G
+    G --> H[line-snap<br/>positioning]
+    H --> I[reflection<br/>dedup, low-confidence filter]
+    I --> P[fingerprint<br/>vs previous findings]
+    P --> Q[scoring engine<br/>confidence × impact × category]
+    Q --> J[format<br/>stdout &#124; json &#124; github &#124; sarif]
+    S1 -.-> J
+    S2 -.-> J
+
+    K[open PRs list] -.-> L[fingerprint<br/>prefilter Jaccard]
+    L -.-> M[LLM overlap<br/>verdict]
+    M -.-> J
+```
+
+Dashed edges are best-effort sub-pipelines: cross-PR overlap, PR
+summary, and PR labeling all run in parallel with the main review and
+never block it — every failure returns an empty result rather than
+failing the run.
+
+## Read next
+
+<Cards>
+  <Card title="Pipeline in detail" href="/docs/architecture/pipeline" />
+  <Card title="Index and context" href="/docs/architecture/index-and-context" />
+  <Card title="Session log" href="/docs/architecture/session-log" />
+  <Card title="Porting map" href="/docs/architecture/porting" />
+</Cards>

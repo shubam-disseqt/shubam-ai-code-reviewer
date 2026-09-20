@@ -1,0 +1,63 @@
+---
+title: Capabilities
+description: What sacr can actually find on a pull request, split by tier from deterministic scanners to LLM review.
+---
+
+`sacr` is not a single reviewer. Every PR passes through a pipeline of independent stages, each tuned for the failure mode it is best at. This page is the map: what tier finds what, and where to go for the detail.
+
+## Tiers, from cheapest to most expensive
+
+Each tier runs in the review pipeline before the next. Cheaper stages catch what they are precise at so the LLM never has to.
+
+### Tier 1 — Deterministic scanners
+
+Zero token cost, near-perfect precision on the categories they cover. Run in Go before any LLM call.
+
+- **gitleaks** — hardcoded credentials (AWS/GCP/Azure keys, GitHub tokens, private keys, ~250 built-in rules).
+- **semgrep** — language-aware SAST (injection, weak crypto, dangerous subprocess use).
+- **govulncheck** — Go stdlib and module CVEs, filtered by call-graph reachability.
+
+See [Scanners](/docs/capabilities/scanners).
+
+### Tier 2 — Cross-PR overlap
+
+Detects other open pull requests that touch the same code — scope collision, merge-conflict risk, duplicated work — before you merge. Deterministic prefilter on title Jaccard + file/symbol intersection, LLM verdict only on the survivors.
+
+See [Overlap detection](/docs/capabilities/overlap).
+
+### Tier 3 — Org review rules
+
+Team-specific review policy expressed as YAML in a git repo, versioned like any other code. Rules are prompt-injected constraints, not enforced ASTs — human-authored, human-reviewed via PR. Concrete rules survive the prompt; philosophical ones don't.
+
+See [Review rules](/docs/capabilities/review-rules).
+
+### Tier 4 — LLM review
+
+General code review discipline: bugs, correctness, testing gaps, complexity. Runs on every file the earlier tiers didn't already fully cover, and reads the scanner findings for that file as "known issues" so it doesn't duplicate them.
+
+Provider-agnostic — see [Providers](/docs/reference/providers).
+
+## Output surfaces
+
+The same review pass produces two output streams:
+
+- **Inline PR comments** — LLM review findings. Where humans read them.
+- **SARIF 2.1.0** — deterministic scanner findings, uploaded to GitHub Code Scanning. Deduplicated by fingerprint, alert state tracked across pushes.
+
+See [SARIF output](/docs/capabilities/sarif).
+
+## How well does it actually work
+
+<Callout type="info">
+The [Sonnet 4.6 benchmark](/docs/capabilities/benchmark) is a plan-only design doc, not shipped numbers. The baseline it measures against is real: 21/21 seeded-bug recall on the `sacr-e2e-matrix` corpus at ~$0.006/PR with gpt-4o-mini.
+</Callout>
+
+## Explore
+
+<Cards>
+  <Card title="Scanners" href="/docs/capabilities/scanners" />
+  <Card title="Review rules" href="/docs/capabilities/review-rules" />
+  <Card title="Overlap detection" href="/docs/capabilities/overlap" />
+  <Card title="SARIF output" href="/docs/capabilities/sarif" />
+  <Card title="Benchmark plan" href="/docs/capabilities/benchmark" />
+</Cards>

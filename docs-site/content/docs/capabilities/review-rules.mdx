@@ -1,0 +1,247 @@
+---
+title: Review rules
+description: Team-specific review policy as YAML in a git repo — prompt-injected constraints scoped to global, repo, or path, versioned like code.
+---
+
+Team-specific review policy, expressed as YAML in a git repo, versioned like any other code. Human-authored, human-reviewed via PR — there is no learning loop.
+
+## What are rules
+
+Rules are prompt-injected constraints, not enforced code. When `sacr review` runs, it selects the rules whose scope matches the diff, splices them into the review prompt, and lets the LLM apply them alongside its general review discipline. There is no rules-engine or AST match — they are policy statements the model reads before it starts commenting.
+
+<Callout type="info">
+**This shapes how you write them.** A rule that says *"flag any call to `fmt.Println` in production code"* works — concrete, verifiable, tied to a string the model can pattern-match. A rule that says *"code should be maintainable"* does nothing — too abstract to survive prompt-length compression. See [Best practices](#best-practices).
+</Callout>
+
+## The YAML schema
+
+One rule per file under `rules/`. All fields listed; only the ones marked required must be present.
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `id` | string | yes | Stable identifier, kebab-case. Must be globally unique within the rules repo. Never rename — downstream comments reference the id. |
+| `title` | string | yes | One-line human summary. Appears in `sacr rules list` output. |
+| `body` | string (multi-line) | yes | The rule text as injected into the prompt. Concrete, imperative, second person. Under 400 chars per rule keeps the composite prompt lean. |
+| `scope` | enum | yes | `global`, `repo`, or `path`. See [Scoping](#scoping). |
+| `repos` | list&lt;string&gt; | when `scope=repo` or `scope=path` | `owner/name` matchers. Supports `*` as a suffix (e.g., `disseqt/z-*`). |
+| `paths` | list&lt;glob&gt; | when `scope=path` | Doublestar globs matched against the file path relative to repo root. |
+| `exclude_paths` | list&lt;glob&gt; | no | Applied after `paths`. A file matching any exclude glob is dropped from the rule's file set. |
+| `severity` | enum | yes | `blocker`, `warning`, `suggestion`, or `nitpick`. Only `blocker` affects the review exit code. |
+| `category` | string | no | Free-form tag for grouping in output (`security`, `testing`, `maintainability`...). |
+| `enabled` | bool | no | Default `true`. Set `false` to disable a rule without deleting the file. |
+
+### A valid `global` rule
+
+```yaml
+# rules/no-committed-secrets.yaml
+id: no-committed-secrets
+title: No secrets in source
+body: |
+  If a changed line contains a plausible API key, token, private key,
+  or connection string with an inline password, flag it as a blocker
+  and recommend rotation. Do not quote the secret in your comment.
+scope: global
+severity: blocker
+category: security
+enabled: true
+```
+
+### An invalid `global` rule
+
+```yaml
+# rules/be-nice.yaml         # BAD — too abstract to survive prompt compression
+id: be-nice
+title: Write maintainable code
+body: |
+  Code should be clean, maintainable, and easy to read.
+scope: global
+severity: suggestion
+enabled: true
+```
+
+Nothing here for the model to match against. It will either ignore the rule or produce vague comments that clutter the review.
+
+## Scoping
+
+Every rule declares which files it applies to. Selection is deterministic and runs in Go before the prompt is built — there is no LLM judgment involved in *whether* a rule matches.
+
+### `scope: global`
+
+Applies to every diff, every repo, every file. Reserve for cross-cutting concerns like secret hygiene, PII leaks, or license headers.
+
+### `scope: repo`
+
+Applies to every file inside a matching repo. Use for repo-specific conventions that don't vary by path.
+
+```yaml
+id: apperr-codes-only
+title: Errors go through apperr.New
+body: |
+  In this backend, all returned errors must be constructed via
+  apperr.New(code, ...). Flag any bare fmt.Errorf, errors.New,
+  or errors.Wrap in changed code as a warning.
+scope: repo
+repos:
+  - "disseqt/disseqt-ai-admin-backend"
+  - "disseqt/disseqt-auth-service"
+severity: warning
+category: consistency
+enabled: true
+```
+
+### `scope: path`
+
+Applies only to files whose path matches at least one glob in `paths` and none in `exclude_paths`. The most common scope in practice.
+
+```yaml
+id: phi-in-logs
+title: No PHI in logs
+body: |
+  In files under internal/handlers/**, flag any zap or fmt log call
+  whose argument list plausibly contains a patient identifier,
+  MRN, DOB, or free-text clinical field. Suggest using the
+  redacted-logger helper from internal/log/redact.go.
+scope: path
+repos: ["disseqt/disseqt-dataset-backend-service"]
+paths:
+  - "internal/handlers/**/*.go"
+  - "internal/services/**/*.go"
+exclude_paths:
+  - "**/*_test.go"
+severity: blocker
+category: compliance
+enabled: true
+```
+
+## Best practices
+
+Rules travel through a lossy channel: they are compressed into a prompt alongside diff, context, and general review guidance. Concrete rules survive. Philosophical ones don't.
+
+### Cite what to do, not what to be
+
+| Weak | Strong |
+|---|---|
+| "Tests should have good coverage." | "Any changed function in `internal/handlers/` must have a matching test in `_test.go` in the same package. If the diff adds a handler without a test, flag as a warning." |
+| "Avoid tight coupling." | "Files under `internal/domain/` must not import from `internal/handlers/`. Flag any such import as a blocker." |
+| "Errors should be handled properly." | "A return value of type `error` must not be assigned to `_`. Flag any `_, _ := f()` or `_ = f()` as a warning." |
+
+### Keep bodies short
+
+Every character in `body` costs shared prompt budget. Aim for one paragraph, one behaviour. If you need three sentences of nuance, you probably need three rules.
+
+### One concern per file
+
+File-per-rule keeps `git blame` and code review honest. When a rule needs to change, the PR touches exactly one file and the reason is legible from the filename.
+
+### Use `enabled: false` before deleting
+
+If a rule turns out to be noisy, disable it and observe the next few reviews. Deleting loses history; disabling keeps the file so the next author sees why it was tried and shelved.
+
+## Layout of an org rules repo
+
+A rules repo is an ordinary git repo. Recommended layout:
+
+```text
+z-review-rules/
+├── README.md
+├── rules/
+│   ├── no-committed-secrets.yaml     # scope: global
+│   ├── apperr-codes-only.yaml         # scope: repo
+│   ├── phi-in-logs.yaml               # scope: path
+│   ├── missing-tests-handlers.yaml    # scope: path
+│   └── no-todo-in-blocker-paths.yaml  # scope: path
+└── CODEOWNERS
+```
+
+Point `SACR_ORG_RULES_REPO` at `owner/name` and, if you're pinning, `SACR_ORG_RULES_REF` at a tag or commit. Because it's git, every rule change is a PR — the same review discipline the tool enforces on code applies to the policy authoring itself.
+
+## How selection works
+
+Every step happens deterministically in Go before any LLM call. See [Architecture](/docs/architecture) for the full pipeline.
+
+1. **Load.** Read every `*.yaml` under `rules/` in the org rules repo. Skip files with `enabled: false`. Fail the run if any file fails schema validation — better than silently ignoring a typo.
+2. **Repo filter.** Discard rules whose `repos` list is present and does not match the current repo's `owner/name`. `scope: global` rules skip this step.
+3. **For each changed file, path filter.** A rule applies to a file if: (a) `scope` is `global` or `repo`, or (b) `scope: path` and any `paths` glob matches and no `exclude_paths` glob matches.
+4. **Dedupe by id.** If two files somehow ship the same `id`, the loader errors — ids must be unique.
+5. **Inject.** The surviving rules for a file become a section in that file's review prompt, alongside the diff and any index context.
+
+## Sample rules gallery
+
+Concrete rules, borrowed shapes across categories. Use as starting points.
+
+### PHI in logs (compliance, blocker)
+
+```yaml
+id: phi-in-logs
+title: No PHI in logs
+body: |
+  Under internal/handlers/** and internal/services/**, flag any log
+  call whose argument list plausibly contains a patient identifier,
+  MRN, DOB, or free-text clinical field. Suggest the redacted-logger
+  helper.
+scope: path
+repos: ["disseqt/disseqt-dataset-backend-service"]
+paths:
+  - "internal/handlers/**/*.go"
+  - "internal/services/**/*.go"
+exclude_paths: ["**/*_test.go"]
+severity: blocker
+category: compliance
+enabled: true
+```
+
+### Missing tests for handlers (testing, warning)
+
+```yaml
+id: missing-tests-handlers
+title: New handler needs a test
+body: |
+  If the diff adds a new exported function in internal/handlers/,
+  a corresponding _test.go file in the same package must also be
+  present in the diff. Flag as warning otherwise.
+scope: path
+paths: ["internal/handlers/**/*.go"]
+exclude_paths: ["**/*_test.go"]
+severity: warning
+category: testing
+enabled: true
+```
+
+### apperr codes only (consistency, warning)
+
+```yaml
+id: apperr-codes-only
+title: Errors go through apperr.New
+body: |
+  All returned errors must be constructed via apperr.New(code, ...).
+  Flag any bare fmt.Errorf, errors.New, or errors.Wrap in changed
+  code.
+scope: repo
+repos:
+  - "disseqt/disseqt-ai-admin-backend"
+  - "disseqt/disseqt-auth-service"
+  - "disseqt/disseqt-dataset-backend-service"
+severity: warning
+category: consistency
+enabled: true
+```
+
+### No TODO in blocker paths (hygiene, warning)
+
+```yaml
+id: no-todo-in-blocker-paths
+title: No TODO in production paths
+body: |
+  Under internal/billing/** and internal/auth/**, flag any newly
+  added TODO, FIXME, or XXX comment. These paths must ship with the
+  work done, not deferred.
+scope: path
+paths:
+  - "internal/billing/**/*.go"
+  - "internal/auth/**/*.go"
+severity: warning
+category: hygiene
+enabled: true
+```
+
+Sample rules are illustrative — adapt to your codebase.
