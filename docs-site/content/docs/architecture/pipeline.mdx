@@ -11,6 +11,58 @@ boundaries, and the non-goals.
 The same content is embedded in the binary — run `sacr docs` to view
 it offline.
 
+## The 13 stages
+
+Every `runReview()` call executes these stages in order. Each one wraps
+its error with a `stage:` prefix so a failure names the phase. The dashed
+edges are best-effort — a failure logs a warning and returns an empty
+result; the run continues.
+
+```mermaid
+flowchart TD
+    P0["0 · scoring +<br/>policy load"]
+    P1["1 · resolve diff"]
+    P15["1.5 · early return<br/>if docs-only"]
+    P2["2 · selector<br/>drop binary/large"]
+    P25["2.5 · early return<br/>if all filtered"]
+    P3["3 · index store<br/>SQLite optional"]
+    P32{{"3.2 · scanners<br/>gitleaks · semgrep · govulncheck"}}
+    P33{{"3.3 · cheap-tier<br/>summariser + labeler"}}
+    P4["4 · org rules"]
+    P5["5 · repo context<br/>indexed OR JIT"]
+    P6["6 · session start"]
+    P7["7 · LLM tier resolve"]
+    P8["8 · prompts + tools"]
+    P9["9 · tool registry"]
+    P10["10 · main LLM loop<br/>per file"]
+    P11["11 · post-process<br/>score · dedup · filter"]
+    P115["11.5 · carryover<br/>new / carried / resolved"]
+    P12{{"12 · overlap detect"}}
+    P125{{"12.5 · effort 0–10"}}
+    P126{{"12.6 · depgraph render"}}
+    P13["13 · emit<br/>stdout · json · github · sarif"]
+
+    P0 --> P1 --> P15 --> P2 --> P25 --> P3
+    P3 -.-> P32
+    P3 -.-> P33
+    P3 --> P4 --> P5 --> P6 --> P7 --> P8 --> P9 --> P10 --> P11 --> P115
+    P115 -.-> P12
+    P115 -.-> P125
+    P115 -.-> P126
+    P115 --> P13
+    P32 -.-> P13
+    P33 -.-> P13
+    P12 -.-> P13
+    P125 -.-> P13
+    P126 -.-> P13
+```
+
+**Fatal stages** (abort with wrapped error): diff, scoring, session, LLM,
+prompts, tools, emit.
+
+**Fault-tolerant stages** (log warning, continue with empty result):
+scanners, cheap-tier agents, index, overlap, effort, depgraph.
+
 ## Cost shape
 
 The main tier (Sonnet-class) runs the reviewer loop only. Summary +
