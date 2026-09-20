@@ -1,10 +1,10 @@
-name: Deploy docs-site to GitHub Pages
+name: Deploy docs to GitHub Pages
 
 on:
   push:
     branches: [main]
     paths:
-      - "docs-site/**"
+      - "docs/**"
       - ".github/workflows/docs-deploy.yml"
   workflow_dispatch:
 
@@ -14,49 +14,26 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages-docs-site
+  group: pages-docs
   cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: docs-site
     steps:
       - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: docs-site/pnpm-lock.yaml
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-
-      - name: Prepare static export
+      - name: Package static docs tree
         run: |
-          # Fumadocs on Next.js: `next build` produces the .next dir.
-          # For GitHub Pages we need a static export. If Next config
-          # already sets `output: 'export'`, the `out/` dir is emitted
-          # by `next build` directly. Otherwise fall back to serving
-          # the .next standalone bundle via a static host (Vercel).
-          if [ -d out ]; then
-            echo "static export detected"
-          else
-            echo "::warning::No static export. Configure Next.js output:'export' for GitHub Pages, or deploy to Vercel."
-            mkdir -p out
-            echo "See docs-site/README.md for deployment options." > out/index.html
+          mkdir -p out
+          cp -r docs/*.html docs/style.css out/ 2>/dev/null || true
+          # ensure there's an index
+          if [ ! -f out/index.html ]; then
+            echo "docs/index.html missing" >&2
+            exit 1
           fi
-
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs-site/out
+          path: out
 
   deploy:
     needs: build
