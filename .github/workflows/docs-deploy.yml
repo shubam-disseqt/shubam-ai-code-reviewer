@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "docs/**"
+      - "docs-site/**"
       - ".github/workflows/docs-deploy.yml"
   workflow_dispatch:
 
@@ -20,20 +20,38 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs-site
     steps:
       - uses: actions/checkout@v4
-      - name: Package static docs tree
-        run: |
-          mkdir -p out
-          cp -r docs/*.html docs/style.css out/ 2>/dev/null || true
-          # ensure there's an index
-          if [ ! -f out/index.html ]; then
-            echo "docs/index.html missing" >&2
-            exit 1
-          fi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: docs-site/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build Fumadocs static export
+        env:
+          # Pages serves the site under /shubam-ai-code-reviewer/. basePath
+          # in next.config.mjs reads this at build time so internal links
+          # and assets resolve under the repo path.
+          NEXT_PUBLIC_BASE_PATH: /shubam-ai-code-reviewer
+        run: pnpm build
+
+      - name: Add .nojekyll marker
+        run: touch out/.nojekyll
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: out
+          path: docs-site/out
 
   deploy:
     needs: build
@@ -42,12 +60,5 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # Non-blocking until Pages is enabled in repo Settings → Pages →
-      # Source: "GitHub Actions". Before that flag is flipped,
-      # deploy-pages@v4 returns 404 "Ensure GitHub Pages has been enabled".
-      # continue-on-error on the STEP (not the job) keeps the check green
-      # in the PR UI; job-level continue-on-error would still render red.
-      # Once Pages is enabled the step succeeds normally.
       - id: deployment
         uses: actions/deploy-pages@v4
-        continue-on-error: true
