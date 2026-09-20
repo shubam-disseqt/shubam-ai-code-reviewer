@@ -19,11 +19,13 @@ things that live longer than a single invocation.
 
 ## Pipeline at a glance
 
-```mermaid
-flowchart TD
+<Mermaid chart={`flowchart TD
+    IX0["sacr index (offline)<br/>walk + parse repo"] --> IX1[(SQLite / Postgres<br/>index store)]
+
     A[git diff / range / commit] --> B[deterministic<br/>file selection]
     B --> C[bundle<br/>related files]
-    C --> D[load index context<br/>+ JIT if index empty]
+    C --> D["reviewctx<br/>indexed lookup OR<br/>JIT extract fallback"]
+    IX1 -. read at review time .-> D
     D --> E[load matching<br/>org rules]
 
     E --> S1[cheap tier:<br/>summarizer]
@@ -37,14 +39,13 @@ flowchart TD
     H --> I[reflection<br/>dedup, low-confidence filter]
     I --> P[fingerprint<br/>vs previous findings]
     P --> Q[scoring engine<br/>confidence × impact × category]
-    Q --> J[format<br/>stdout &#124; json &#124; github &#124; sarif]
+    Q --> J[format<br/>stdout | json | github | sarif]
     S1 -.-> J
     S2 -.-> J
 
     K[open PRs list] -.-> L[fingerprint<br/>prefilter Jaccard]
     L -.-> M[LLM overlap<br/>verdict]
-    M -.-> J
-```
+    M -.-> J`} />
 
 Dashed edges are best-effort sub-pipelines: cross-PR overlap, PR
 summary, and PR labeling all run in parallel with the main review and
