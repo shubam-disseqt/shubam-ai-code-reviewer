@@ -18,7 +18,7 @@ import (
 
 // FileSession is the per-taskKey append surface. RequestNo is scoped to this
 // FileSession + taskType pair so records within one task stay numbered
-// sequentially, matching OCR's shape.
+// sequentially, matching sacr's shape.
 type FileSession struct {
 	mu          sync.Mutex
 	session     *Session
@@ -60,7 +60,7 @@ func (fs *FileSession) AppendTaskRecord(taskType llmloop.TaskType, msgs []llm.Me
 // copyMessages returns a deep-ish copy of msgs so a caller mutating the slice
 // later does not corrupt the persisted record. Only fields the log serializes
 // need copying; Native is opaque provider state and is intentionally omitted
-// from the JSONL (matches OCR — llm.Message has Native tagged json:"-").
+// from the JSONL (matches sacr — llm.Message has Native tagged json:"-").
 //
 // Text content is passed through Redact so credential-shaped strings never hit
 // the JSONL. Applies to both plain-string Content and structured content

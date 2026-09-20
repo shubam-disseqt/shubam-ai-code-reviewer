@@ -124,22 +124,22 @@ func TestReviewE2E_WorkspaceMode_ProducesJSON(t *testing.T) {
 
 	// 4) Run the subprocess.
 	//
-	// Env strategy: use OCR_LLM_* to force the httptest URL through the
-	// highest-priority resolver strategy (tryOCREnv), then set
+	// Env strategy: use SACR_LLM_* to force the httptest URL through the
+	// highest-priority resolver strategy (trysacrEnv), then set
 	// ANTHROPIC_API_KEY alongside so tryProviderEnv is reachable as a
 	// fallback. This proves the friendly-var fix at 155004e didn't
 	// regress — the resolver accepts it without erroring — while keeping
-	// the actual network hermetic on the OCR path (tryProviderEnv would
+	// the actual network hermetic on the sacr path (tryProviderEnv would
 	// hardcode api.anthropic.com and we can't override that). HOME is
-	// scrubbed so ~/.opencodereview/config.json can't leak in.
+	// scrubbed so ~/.sacr/config.json can't leak in.
 	sessionDir := filepath.Join(t.TempDir(), "sessions")
 	fakeHome := t.TempDir()
 	env := []string{
 		"HOME=" + fakeHome,
 		"PATH=" + os.Getenv("PATH"), // git still needs to run inside the subprocess
-		"OCR_LLM_URL=" + srv.URL,
-		"OCR_LLM_TOKEN=sk-ant-test",
-		"OCR_LLM_MODEL=claude-sonnet-4-6",
+		"SACR_LLM_URL=" + srv.URL,
+		"SACR_LLM_TOKEN=sk-ant-test",
+		"SACR_LLM_MODEL=claude-sonnet-4-6",
 		"ANTHROPIC_API_KEY=sk-ant-test",
 		"ANTHROPIC_MODEL=claude-sonnet-4-6",
 		"SACR_SESSION_DIR=" + sessionDir,

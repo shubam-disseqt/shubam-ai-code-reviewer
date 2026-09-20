@@ -118,7 +118,7 @@
     <p><code>sacr</code> resolves the endpoint from, in order:</p>
     <ol>
       <li><code>SACR_PROVIDER</code> + <code>SACR_MODEL</code> if set.</li>
-      <li><code>~/.opencodereview/config.json</code> if present (inherited from the upstream OCR project).</li>
+      <li><code>~/.sacr/config.json</code> if present (legacy path).</li>
       <li>The first provider whose API key env var is set. Anthropic wins on ties.</li>
     </ol>
     <p>Bedrock is treated specially: it has no api_key, so its readiness comes from the AWS credential chain. If <code>AWS_REGION</code> and any AWS credential source are present, Bedrock will resolve without an explicit <code>SACR_PROVIDER=bedrock</code>.</p>

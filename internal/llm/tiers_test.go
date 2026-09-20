@@ -14,8 +14,8 @@ import (
 func resetTierEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
-		envOCRLLMURL, envOCRLLMToken, envOCRLLMModel,
-		envOCRLLMProtocol, envOCRUseAnthropic,
+		envsacrLLMURL, envsacrLLMToken, envsacrLLMModel,
+		envsacrLLMProtocol, envsacrUseAnthropic,
 		envCCBaseURL, envCCToken, envCCModel,
 		envZReviewCheapModel, envZReviewCheapProvider,
 	} {
@@ -24,15 +24,15 @@ func resetTierEnv(t *testing.T) {
 	setTestHome(t, t.TempDir())
 }
 
-// mainOnlyEnv points the OCR env resolver at a valid anthropic-protocol
+// mainOnlyEnv points the sacr env resolver at a valid anthropic-protocol
 // endpoint so Main resolves without touching any config file. The values are
 // fake but complete — no network calls happen, we only need NewLLMClient to
 // pick a protocol and return a non-nil client.
 func mainOnlyEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv(envOCRLLMURL, "https://main.example")
-	t.Setenv(envOCRLLMToken, "main-tok")
-	t.Setenv(envOCRLLMModel, "claude-sonnet-5")
+	t.Setenv(envsacrLLMURL, "https://main.example")
+	t.Setenv(envsacrLLMToken, "main-tok")
+	t.Setenv(envsacrLLMModel, "claude-sonnet-5")
 }
 
 func TestResolveTiers(t *testing.T) {

@@ -1,10 +1,7 @@
 # Architecture
 
 This document is the source of truth for how `shubam-ai-code-reviewer` is built.
-It is authored to match the shape of `alibaba/open-code-review`'s
-[architecture doc](https://github.com/alibaba/open-code-review) and
-[`ASSURANCE_CASE.md`](https://github.com/alibaba/open-code-review/blob/main/ASSURANCE_CASE.md):
-Mermaid for the data-flow pipeline, ASCII for trust boundaries.
+It uses Mermaid for the data-flow pipeline and ASCII for trust boundaries.
 
 The same content is embedded in the binary — run `sacr docs` to view
 it offline.
@@ -76,39 +73,36 @@ already resolved; the reviewer skips them entirely.
 Not yet all built. Each row lists the target package, its job, and the
 source of the approach.
 
-| Package | Job | Source |
-|---|---|---|
-| `cmd/sacr` | Cobra CLI: `review`, `scan`, `docs`, `version`, `config`, `llm`, `rules` | OCR shape |
-| `internal/diff` | Unified-diff parser, hunk resolution, gitignore, workspace file guard | OCR — copy verbatim |
-| `internal/gitcmd` | Bounded-concurrency git subprocess runner, `--end-of-options` safe | OCR — copy verbatim |
-| `internal/pathutil` | `CanonicalPath`, `WithinBase` (symlink + escape guards) | OCR — copy verbatim |
-| `internal/select` | Deterministic file selection (binary/ext/size gates, no silent skips) | OCR `internal/agent/selection.go` |
-| `internal/bundle` | Related-file bundling into isolated review units | OCR `internal/agent/grouping.go` (v2 — v1 is one-file-per-review) |
-| `internal/comment` | Comment parsing, `existing_code` line snapping, arg repair, reflection/dedup | OCR `tool/{code_comment,comment_args_repair,comment_collector}` + `diff/resolver.go` |
-| `internal/llm` | Provider abstraction — Anthropic / OpenAI / Bedrock / Gemini / DeepSeek | OCR `internal/llm/*` — copy, trim providers |
-| `internal/llmloop` | Thin agent loop, compression, comment worker pool | OCR `internal/llmloop/*` — copy, drop retry-report ledger |
-| `internal/tool` | Tool schema + `file_read`, `code_search`, `file_find`, `code_comment`, `task_done` | OCR `internal/tool/*` — copy verbatim |
-| `internal/index` | Repo index writer: file summaries + symbols + imports + external refs | Mira `src/mira/index/*` — port Python → Go |
-| `internal/index/store` | Store interface + SQLite (`modernc.org/sqlite`) + Postgres (`pgx/v5`) backends | Mira `store.py` + `pg_store.py` — port + trim to indexing tables |
-| `internal/context` | JIT context (index-miss path) + review-time context join (index-hit path) | Mira `jit_context.py` + `core/context.py` — port |
-| `internal/manifests` | Deterministic package-manifest parsers: `go.mod`, `package.json`, `pyproject.toml`, `Dockerfile`, `composer.json`, lockfiles | Mira `manifests.py` — port, use Go-native libs where they exist (`x/mod/modfile`) |
-| `internal/extract` | Language-aware symbol/import extractors (regex + brace/indent walkers) | Mira `extract.py` — port |
-| `internal/conventions` | Pull `AGENTS.md` / `CONTRIBUTING.md` etc., strip boilerplate, cap 8K chars | Mira `conventions.py` — port |
-| `internal/rules` | Git-cloned org rules repo → YAML load → glob-scoped filter → prompt injection | Adapted from Mira `learned_rules` + `review_context`; **YAML-in-git replaces DB** |
-| `internal/overlap` | Cross-PR fingerprinting, Jaccard prefilter, batched LLM verdict, tolerant JSON parse | Mira `core/overlap.py` — port |
-| `internal/gh` | GitHub REST via `google/go-github`: list open PRs, get PR files, post review comments | Mira `providers/github.py` — port shape |
-| `internal/session` | JSONL append log for `--resume`, chained by `parentUuid` | OCR `internal/session/*` — copy, drop viewer, drop manifest coverage sets (v2) |
-| `internal/docs` | Embedded static docs + local HTTP server for `sacr docs` | New — modeled on OCR `internal/viewer/{server,hostguard,securityheaders}.go` |
-| `internal/prompts` | Embedded prompt templates (`main_task_system.md`, `main_task_user.md`, `memory_compression_task.md`, `summarize.md`, `overlap.md`, `summarizer.md`, `labeler.md`) | OCR + Mira + New |
-| `internal/fingerprint` | Stable finding hash: `owner\|repo\|category\|normalized_path\|symbol\|normalized_snippet`. Whitespace-collapsed and comment-stripped so pure formatting diffs don't reset findings. | New — semantics from PDF §5 |
-| `internal/findings` | Per-PR JSON persistence keyed by `(owner, repo, pr, fingerprint)`; drives the `fixed / unchanged / affected` re-review split. Atomic write via tmp+rename. | New |
-| `internal/scanner` | Deterministic security scanner adapters: Gitleaks (secrets), Semgrep (SAST), govulncheck (Go stdlib CVE). Concurrent runner with best-effort skip when a binary is missing. | New |
-| `internal/scoring` | Deterministic severity policy: `confidence × impact × category → CRITICAL / HIGH / MEDIUM / LOW / SUPPRESS`. Table-driven YAML, embeddable defaults, overridable via `SACR_SCORING_POLICY`. | New — from PDF §6 |
-| `internal/sarif` | SARIF 2.1.0 encoder for GitHub Code Scanning uploads. Golden-file tested against schema. | New |
-| `internal/llm` (tiers) | `Tiers{Main, Cheap}` client + model resolution. `SACR_CHEAP_MODEL` and `SACR_CHEAP_PROVIDER` env vars; cheap falls back to Main when unset. | New addition to existing package |
-
-The per-file map, LOC estimates, and modifications needed live in
-[PORTING.md](PORTING.md).
+| Package | Job |
+|---|---|
+| `cmd/sacr` | Cobra CLI: `review`, `scan`, `docs`, `version`, `config`, `llm`, `rules` |
+| `internal/diff` | Unified-diff parser, hunk resolution, gitignore, workspace file guard |
+| `internal/gitcmd` | Bounded-concurrency git subprocess runner, `--end-of-options` safe |
+| `internal/pathutil` | `CanonicalPath`, `WithinBase` (symlink + escape guards) |
+| `internal/select` | Deterministic file selection (binary/ext/size gates, no silent skips) |
+| `internal/bundle` | Related-file bundling into isolated review units (v2 — v1 is one-file-per-review) |
+| `internal/comment` | Comment parsing, `existing_code` line snapping, arg repair, reflection/dedup |
+| `internal/llm` | Provider abstraction — Anthropic / OpenAI / Bedrock / Gemini / DeepSeek |
+| `internal/llmloop` | Thin agent loop, compression, comment worker pool |
+| `internal/tool` | Tool schema + `file_read`, `code_search`, `file_find`, `code_comment`, `task_done` |
+| `internal/index` | Repo index writer: file summaries + symbols + imports + external refs |
+| `internal/index/store` | Store interface + SQLite (`modernc.org/sqlite`) + Postgres (`pgx/v5`) backends |
+| `internal/context` | JIT context (index-miss path) + review-time context join (index-hit path) |
+| `internal/manifests` | Deterministic package-manifest parsers: `go.mod`, `package.json`, `pyproject.toml`, `Dockerfile`, `composer.json`, lockfiles. Uses Go-native libs where they exist (`x/mod/modfile`) |
+| `internal/extract` | Language-aware symbol/import extractors (regex + brace/indent walkers) |
+| `internal/conventions` | Pull `AGENTS.md` / `CONTRIBUTING.md` etc., strip boilerplate, cap 8K chars |
+| `internal/rules` | Git-cloned org rules repo → YAML load → glob-scoped filter → prompt injection. YAML-in-git is the storage contract |
+| `internal/overlap` | Cross-PR fingerprinting, Jaccard prefilter, batched LLM verdict, tolerant JSON parse |
+| `internal/gh` | GitHub REST via `google/go-github`: list open PRs, get PR files, post review comments |
+| `internal/session` | JSONL append log for `--resume`, chained by `parentUuid` |
+| `internal/docs` | Embedded static docs + local HTTP server for `sacr docs` |
+| `internal/prompts` | Embedded prompt templates (`main_task_system.md`, `main_task_user.md`, `memory_compression_task.md`, `summarize.md`, `overlap.md`, `summarizer.md`, `labeler.md`) |
+| `internal/fingerprint` | Stable finding hash: `owner\|repo\|category\|normalized_path\|symbol\|normalized_snippet`. Whitespace-collapsed and comment-stripped so pure formatting diffs don't reset findings |
+| `internal/findings` | Per-PR JSON persistence keyed by `(owner, repo, pr, fingerprint)`; drives the `fixed / unchanged / affected` re-review split. Atomic write via tmp+rename |
+| `internal/scanner` | Deterministic security scanner adapters: Gitleaks (secrets), Semgrep (SAST), govulncheck (Go stdlib CVE). Concurrent runner with best-effort skip when a binary is missing |
+| `internal/scoring` | Deterministic severity policy: `confidence × impact × category → CRITICAL / HIGH / MEDIUM / LOW / SUPPRESS`. Table-driven YAML, embeddable defaults, overridable via `SACR_SCORING_POLICY` |
+| `internal/sarif` | SARIF 2.1.0 encoder for GitHub Code Scanning uploads. Golden-file tested against schema |
+| `internal/llm` (tiers) | `Tiers{Main, Cheap}` client + model resolution. `SACR_CHEAP_MODEL` and `SACR_CHEAP_PROVIDER` env vars; cheap falls back to Main when unset |
 
 ---
 
@@ -188,10 +182,10 @@ except when the user explicitly runs `sacr docs`.
 
 | ID | Threat | Mitigation |
 |---|---|---|
-| T1 | Command injection via crafted diff content | External process execution restricted to `git`, hardcoded subcommands, `--end-of-options`, no shell interpolation (ported from OCR `internal/gitcmd`) |
+| T1 | Command injection via crafted diff content | External process execution restricted to `git`, hardcoded subcommands, `--end-of-options`, no shell interpolation (ported from sacr `internal/gitcmd`) |
 | T2 | API key leakage | Keys read from environment variables only; never logged, never written to session JSONL, never transmitted beyond the configured endpoint |
-| T3 | Path traversal via LLM-suggested file paths | `internal/pathutil.WithinBase()` validates all file paths against the repository root, pre- and post-symlink resolution (ported from OCR) |
-| T4 | DNS rebinding against local `sacr docs` server | Host-header allowlist rejects requests from non-loopback origins; wildcard binds require explicit `SACR_DOCS_ALLOWED_HOSTS` (ported from OCR `internal/viewer/hostguard.go`) |
+| T3 | Path traversal via LLM-suggested file paths | `internal/pathutil.WithinBase()` validates all file paths against the repository root, pre- and post-symlink resolution (ported from sacr) |
+| T4 | DNS rebinding against local `sacr docs` server | Host-header allowlist rejects requests from non-loopback origins; wildcard binds require explicit `SACR_DOCS_ALLOWED_HOSTS` (ported from sacr `internal/viewer/hostguard.go`) |
 | T5 | MITM on API communication | Go's `net/http` enforces TLS 1.2+ with certificate verification by default; `InsecureSkipVerify` is never set anywhere in the codebase |
 | T6 | Malicious LLM response (fabricated line numbers, off-diff comments) | JSON schema validation on response structure; line-number bounds checking against actual diff ranges; line-snap positioning fixes off-by-N |
 | T7 | Malicious LLM response (over-escaped JSON, prose read as structure) | `internal/comment.CommentArgsRepair` refuses partial recovery; rejects on odd double-quote count and unknown schema fields |
@@ -312,8 +306,6 @@ and uses `TIMESTAMPTZ` instead of the SQLite epoch-float `REAL`
 column. The `Store` interface hides the split; callers pass
 `(owner, repo)` to `Open` for both backends.
 
-Adapted from Mira's `src/mira/index/store.py`. See [PORTING.md](PORTING.md) §Index.
-
 ### Org rules YAML shape
 
 ```yaml
@@ -335,7 +327,7 @@ enabled: true
 Loaded at review time via shallow `git clone` of
 `$SACR_ORG_RULES_REPO`, filtered by `scope` and glob against the
 current diff's file list, then rendered into the review prompt under a
-`## Custom Review Rules` block. See [PORTING.md](PORTING.md) §Rules.
+`## Custom Review Rules` block.
 
 ---
 
@@ -380,8 +372,7 @@ Called out explicitly so scope creep is loud:
   (Gitleaks), lightweight SAST (Semgrep), and Go stdlib CVE
   (govulncheck). Deep SCA / dependency-tree / license analysis remain
   out of scope — different tools, different failure modes.
-- **No cross-repo dependency graph.** Mira's `relationships.py`
-  intentionally not ported.
+- **No cross-repo dependency graph.** Out of scope.
 - **No fine-tuning or custom models.** Wrong tool for the job.
 - **No plugin marketplace, delegation mode, MCP server, or agent skill
   packaging.** These may return later as opt-in adapters, not first-class

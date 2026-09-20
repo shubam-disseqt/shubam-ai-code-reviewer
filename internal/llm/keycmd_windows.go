@@ -27,7 +27,7 @@ import (
 // api_key_cmd is a command line its author asked us to run, so they already have
 // arbitrary execution by design (`api_key_cmd = "whoami"` is a supported config,
 // and the Unix arm hands the same string to `sh -c`), and it is read only from
-// the user-level ~/.opencodereview/config.json -- never from the repository
+// the user-level ~/.sacr/config.json -- never from the repository
 // under review. Escaping the inner quotes would defeat the single case CmdLine
 // exists for. See keycmd_windows_test.go for which quote shapes /S does and does
 // not keep as one command.

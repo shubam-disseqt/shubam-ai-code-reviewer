@@ -55,16 +55,16 @@ go test ./...                # e2e runs</code></pre>
       <li>Spins up <code>httptest.NewServer</code> that returns a hard-coded Anthropic Messages response with two <code>tool_use</code> blocks: <code>code_comment</code> on <code>main.go</code>, then <code>task_done</code>.</li>
       <li>Creates a fresh git repo under <code>t.TempDir()</code>. First commit is <code>main.go</code> with an empty <code>main()</code>; the second change is staged (not committed) so workspace-mode diff picks it up.</li>
       <li>Runs <code>go build -o &lt;tmp&gt;/sacr ./cmd/sacr</code>. Clean build every run &mdash; slow but reproducible.</li>
-      <li>Runs the binary as a subprocess with a scrubbed env: <code>OCR_LLM_URL</code> pointed at the httptest URL (highest-priority resolver strategy wins here), <code>ANTHROPIC_API_KEY</code> set alongside to keep the friendly-var path warm, <code>HOME</code> and <code>SACR_SESSION_DIR</code> forced to temp dirs so nothing leaks from the developer&rsquo;s real config.</li>
+      <li>Runs the binary as a subprocess with a scrubbed env: <code>SACR_LLM_URL</code> pointed at the httptest URL (highest-priority resolver strategy wins here), <code>ANTHROPIC_API_KEY</code> set alongside to keep the friendly-var path warm, <code>HOME</code> and <code>SACR_SESSION_DIR</code> forced to temp dirs so nothing leaks from the developer&rsquo;s real config.</li>
       <li>Asserts: exit 0, stdout is a valid <code>emitResult</code> JSON envelope, at least one request reached the fake, one <code>*.jsonl</code> session log was written.</li>
     </ol>
 
     <h2 id="env">Env priority the test relies on</h2>
     <p>The resolver walks strategies in order (see <code>internal/llm/resolver.go</code>):</p>
     <ol>
-      <li><strong>OCR config file</strong> &mdash; skipped, <code>HOME</code> is a fresh temp dir</li>
-      <li><strong>OCR environment</strong> &mdash; <code>OCR_LLM_URL</code>/<code>OCR_LLM_TOKEN</code>/<code>OCR_LLM_MODEL</code> resolve first, forcing the httptest URL through the pipeline</li>
-      <li><strong>provider environment</strong> &mdash; <code>ANTHROPIC_API_KEY</code> would resolve here (validating the fix from <code>fix(llm): accept ANTHROPIC_API_KEY&hellip;</code>), but the OCR path wins</li>
+      <li><strong>sacr config file</strong> &mdash; skipped, <code>HOME</code> is a fresh temp dir</li>
+      <li><strong>sacr environment</strong> &mdash; <code>SACR_LLM_URL</code>/<code>SACR_LLM_TOKEN</code>/<code>SACR_LLM_MODEL</code> resolve first, forcing the httptest URL through the pipeline</li>
+      <li><strong>provider environment</strong> &mdash; <code>ANTHROPIC_API_KEY</code> would resolve here (validating the fix from <code>fix(llm): accept ANTHROPIC_API_KEY&hellip;</code>), but the sacr path wins</li>
       <li>Claude Code / shell rc &mdash; unreached</li>
     </ol>
     <p>The friendly <code>ANTHROPIC_API_KEY</code> variable is left set on purpose so a regression that breaks the friendly path (e.g. resolver rejects it) still surfaces in the fake request logs.</p>

@@ -182,7 +182,7 @@ func TestOverlapCmdRequiresFlags(t *testing.T) {
 
 func TestNewLLMTiersReturnsErrWithoutConfig(t *testing.T) {
 	for _, k := range []string{
-		"OCR_LLM_URL", "OCR_LLM_TOKEN", "OCR_LLM_MODEL",
+		"SACR_LLM_URL", "SACR_LLM_TOKEN", "SACR_LLM_MODEL",
 		"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL",
 		"SACR_PROVIDER", "SACR_MODEL",
 		"SACR_CHEAP_PROVIDER", "SACR_CHEAP_MODEL",

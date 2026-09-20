@@ -80,7 +80,7 @@ func buildReviewMessages(sys, userTmpl, systemRule, reviewCtx, knownIssues, chan
 }
 
 // renderDiffsForFile produces the <file>...</file> block for one diff, the
-// shape the OCR system prompt expects. Renamed files gain a renamed_from
+// shape the sacr system prompt expects. Renamed files gain a renamed_from
 // attribute so the reviewer treats the change as a move and does not re-flag
 // issues that already existed pre-rename. Pure renames (no line changes)
 // collapse to a single note line in place of the (empty) diff body.

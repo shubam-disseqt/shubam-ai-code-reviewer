@@ -554,15 +554,15 @@ func newSession(resumeID string) (*session.Session, error) {
 	return session.New(dir, resumeID)
 }
 
-// newLLMTiers resolves the two-tier LLM clients. Main is resolved from the OCR
-// resolver (env / ~/.opencodereview/config.json / shell rc, with SACR_MODEL
+// newLLMTiers resolves the two-tier LLM clients. Main is resolved from the sacr
+// resolver (env / ~/.sacr/config.json / shell rc, with SACR_MODEL
 // / SACR_PROVIDER overrides). Cheap opts in via SACR_CHEAP_MODEL /
 // SACR_CHEAP_PROVIDER; when unset, Cheap == Main so callers never need a
 // nil check.
 func newLLMTiers() (llm.Tiers, error) {
 	configPath := ""
 	if home, err := os.UserHomeDir(); err == nil {
-		configPath = filepath.Join(home, ".opencodereview", "config.json")
+		configPath = filepath.Join(home, ".sacr", "config.json")
 	}
 	return llm.ResolveTiers(configPath, llm.ResolveOptions{
 		Provider: os.Getenv("SACR_PROVIDER"),

@@ -512,7 +512,6 @@ go test -race ./...
 cmd/sacr/              CLI entry + pipeline glue
 internal/              34 focused packages
 docs/                  Offline HTML docs (embedded)
-  PORTING.md           Per-file attribution to upstream projects
   THREAT_MODEL.md      Attack surface + mitigations
   ARCHITECTURE.md      Long-form architectural walkthrough
   BENCHMARK_PLAN.md    Sonnet 4.6 evaluation plan

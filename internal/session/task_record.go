@@ -106,7 +106,7 @@ func (r *TaskRecord) AddToolFailure(name, args, errMsg string, dur time.Duration
 
 func (r *TaskRecord) writeToolCall(name, args, result, errMsg string, ok bool, dur time.Duration) {
 	// Failed calls put the error message in Result so a single field carries
-	// both outcomes — matches OCR's shape and avoids a second column that
+	// both outcomes — matches sacr's shape and avoids a second column that
 	// would be empty on success.
 	body := result
 	if !ok {

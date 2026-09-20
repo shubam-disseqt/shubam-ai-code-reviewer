@@ -73,7 +73,7 @@ func checkProvider() doctorCheck {
 	c := doctorCheck{Name: "llm provider"}
 	configPath := ""
 	if home, err := os.UserHomeDir(); err == nil {
-		configPath = filepath.Join(home, ".opencodereview", "config.json")
+		configPath = filepath.Join(home, ".sacr", "config.json")
 	}
 	ep, err := llm.ResolveEndpointWithOptions(configPath, llm.ResolveOptions{
 		Provider: os.Getenv("SACR_PROVIDER"),
@@ -82,7 +82,7 @@ func checkProvider() doctorCheck {
 	if err != nil {
 		c.Status = "fail"
 		c.Detail = err.Error()
-		c.Suggestion = "set ANTHROPIC_API_KEY / OPENAI_API_KEY or configure ~/.opencodereview/config.json"
+		c.Suggestion = "set ANTHROPIC_API_KEY / OPENAI_API_KEY or configure ~/.sacr/config.json"
 		return c
 	}
 	c.Status = "ok"
