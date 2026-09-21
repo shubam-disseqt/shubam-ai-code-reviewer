@@ -18,11 +18,6 @@
 
 <br>
 
-|  |  |  |  |
-|:-:|:-:|:-:|:-:|
-| **21 / 21** | **~$0.006** | **4 providers** | **5 install channels** |
-| bugs caught on the 10-PR audit | per PR at `gpt-4o-mini` | Anthropic · OpenAI · Bedrock · DeepSeek | brew · npm · docker · action · binary |
-
 </div>
 
 ---
