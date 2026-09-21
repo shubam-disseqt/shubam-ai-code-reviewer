@@ -176,17 +176,26 @@ func RenderSummary(
 	pkgDiagram string,
 ) string {
 	var b strings.Builder
-	b.WriteString("## Automated review by sacr\n\n")
+	b.WriteString("## sacr review\n\n")
 
-	// Reviewer effort — top of the block. It's the single-number "how
-	// much work is this to review?" summary the author sees before any
-	// wall of finding text.
-	if md := renderEffort(effortScore); md != "" {
+	// Conversational hook — reader sees the verdict in one line before
+	// the structured tables.
+	b.WriteString(renderHook(counts))
+	b.WriteString("\n\n")
+
+	// Snapshot — inline effort + severity counts so the reader gets both
+	// numbers without scrolling. The audit collapse below carries the math.
+	if md := renderSnapshot(effortScore, counts); md != "" {
+		b.WriteString(md)
+		b.WriteString("\n")
+	}
+	if md := renderEffortDetails(effortScore); md != "" {
 		b.WriteString(md)
 		b.WriteString("\n")
 	}
 
 	if summary.Walkthrough != "" {
+		b.WriteString("**Changes in this PR**\n\n")
 		b.WriteString(strings.TrimSpace(summary.Walkthrough))
 		b.WriteString("\n\n")
 	}
@@ -224,7 +233,9 @@ func RenderSummary(
 		b.WriteString("\n")
 	}
 
-	b.WriteString(renderSeverityTable(counts))
+	// Standalone severity table is redundant with the Snapshot line; drop
+	// it. If a reader wants the full table, it lives in the effort-details
+	// collapse and in the SARIF artefact.
 
 	if labels.RiskTag != "" {
 		fmt.Fprintf(&b, "\n**Risk:** `%s`", labels.RiskTag)
@@ -263,17 +274,59 @@ func RenderSummary(
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// renderEffort renders the reviewer-effort section: headline value + dot,
-// then a compact table of every input contribution (audit trail). Empty
-// Score returns "" so trivial or unpopulated runs omit the section.
-func renderEffort(s effort.Score) string {
+// renderHook produces the one-line conversational opener based on the
+// severity breakdown. Three cases: nothing to flag, blockers present, or
+// non-blocker findings only.
+func renderHook(counts map[scoring.Severity]int) string {
+	total := 0
+	for _, n := range counts {
+		total += n
+	}
+	blockers := counts[scoring.SeverityCritical]
+	switch {
+	case total == 0:
+		return "Nothing to flag on the changed lines — clean review."
+	case blockers > 0:
+		return fmt.Sprintf(
+			"Found **%s** worth a look before this ships. **%s** — please resolve before merging.",
+			pluralThings(total), pluralBlockers(blockers),
+		)
+	default:
+		return fmt.Sprintf("Found **%s** worth a look before this ships.", pluralThings(total))
+	}
+}
+
+// renderSnapshot builds the two-bullet metadata block: effort dot + inline
+// severity counts. Both bullets are optional; when there is no effort score
+// and no findings the block collapses to nothing.
+func renderSnapshot(s effort.Score, counts map[scoring.Severity]int) string {
+	total := 0
+	for _, n := range counts {
+		total += n
+	}
+	hasEffort := s.Value != 0 || len(s.Contributions) > 0
+	if !hasEffort && total == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("**Snapshot**\n\n")
+	if hasEffort {
+		fmt.Fprintf(&b, "- Effort: %s **%d / 10** (%s)\n", s.Dot, s.Value, s.Label)
+	}
+	if total > 0 {
+		fmt.Fprintf(&b, "- Findings: %s\n", severityInline(counts))
+	}
+	return b.String()
+}
+
+// renderEffortDetails wraps the audit-trail table in a <details> block.
+// Empty Score returns "" so trivial or unpopulated runs omit the section.
+func renderEffortDetails(s effort.Score) string {
 	if s.Value == 0 && len(s.Contributions) == 0 {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("### Reviewer effort\n\n")
-	fmt.Fprintf(&b, "**%s %d / 10 — %s**\n\n", s.Dot, s.Value, s.Label)
-	b.WriteString("<details><summary>How this was calculated</summary>\n\n")
+	b.WriteString("<details><summary>How the effort score was calculated</summary>\n\n")
 	b.WriteString("| Signal | Detail | Contribution |\n| --- | --- | --- |\n")
 	for _, c := range s.Contributions {
 		note := ""
@@ -285,6 +338,29 @@ func renderEffort(s effort.Score) string {
 	b.WriteString("\n_Reproducible: same diff → same score. Weights configurable via `.sacr/effort.yaml` or `$SACR_EFFORT_POLICY`._\n")
 	b.WriteString("</details>\n")
 	return b.String()
+}
+
+// severityInline renders "2 critical · 7 high · 0 medium · 0 low".
+func severityInline(counts map[scoring.Severity]int) string {
+	parts := make([]string, 0, len(severityOrder))
+	for _, s := range severityOrder {
+		parts = append(parts, fmt.Sprintf("%d %s", counts[s], strings.ToLower(string(s))))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func pluralThings(n int) string {
+	if n == 1 {
+		return "1 thing"
+	}
+	return fmt.Sprintf("%d things", n)
+}
+
+func pluralBlockers(n int) string {
+	if n == 1 {
+		return "1 is a blocker"
+	}
+	return fmt.Sprintf("%d are blockers", n)
 }
 
 // escapePipes keeps a `|` inside a Markdown table cell from being read as

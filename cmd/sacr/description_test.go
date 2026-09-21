@@ -114,8 +114,8 @@ func TestPostSummaryReview_PostsFreshComment(t *testing.T) {
 	if !strings.Contains(body, "adds a widget") {
 		t.Errorf("walkthrough missing:\n%s", body)
 	}
-	if !strings.Contains(body, "| HIGH | 1 |") {
-		t.Errorf("severity row missing:\n%s", body)
+	if !strings.Contains(body, "0 critical · 1 high · 0 medium · 0 low") {
+		t.Errorf("findings snapshot missing:\n%s", body)
 	}
 	if !strings.HasSuffix(strings.TrimSpace(body), summaryFingerprint) {
 		t.Errorf("fingerprint marker not at end:\n%s", body)
@@ -277,12 +277,14 @@ func TestRenderSummary(t *testing.T) {
 			Contributions: []effort.Contribution{{Signal: "diff-size", Detail: "big", Points: 2.5}}},
 		"")
 	for _, want := range []string{
-		"## Automated review by sacr",
-		"### Reviewer effort",
+		"## sacr review",
+		"Found **3 things** worth a look before this ships. **2 are blockers** — please resolve before merging.",
+		"**Snapshot**",
+		"Effort: 🟡 **5 / 10** (medium)",
+		"Findings: 2 critical · 0 high · 0 medium · 1 low",
+		"<details><summary>How the effort score was calculated</summary>",
+		"**Changes in this PR**",
 		"does two things",
-		"| Severity | Count |",
-		"| CRITICAL | 2 |",
-		"| LOW | 1 |",
 		"**Risk:** `high`",
 		"### Change groups",
 		"**Auth**",
@@ -293,6 +295,43 @@ func TestRenderSummary(t *testing.T) {
 		if !strings.Contains(block, want) {
 			t.Errorf("block missing %q\n---\n%s", want, block)
 		}
+	}
+	for _, forbidden := range []string{
+		"## Automated review by sacr",
+		"### Reviewer effort",
+		"| Severity | Count |",
+	} {
+		if strings.Contains(block, forbidden) {
+			t.Errorf("block still contains old wording %q\n---\n%s", forbidden, block)
+		}
+	}
+}
+
+func TestRenderHook_CleanReview(t *testing.T) {
+	got := renderHook(map[scoring.Severity]int{})
+	if !strings.Contains(got, "clean review") {
+		t.Errorf("expected clean-review hook, got: %s", got)
+	}
+}
+
+func TestRenderHook_NonBlockersOnly(t *testing.T) {
+	got := renderHook(map[scoring.Severity]int{scoring.SeverityHigh: 1, scoring.SeverityLow: 2})
+	if !strings.Contains(got, "3 things") || strings.Contains(got, "blocker") {
+		t.Errorf("expected 3-things no-blocker hook, got: %s", got)
+	}
+}
+
+func TestRenderHook_SingleBlocker(t *testing.T) {
+	got := renderHook(map[scoring.Severity]int{scoring.SeverityCritical: 1})
+	if !strings.Contains(got, "1 thing") || !strings.Contains(got, "1 is a blocker") {
+		t.Errorf("expected singular-blocker phrasing, got: %s", got)
+	}
+}
+
+func TestRenderSnapshot_EmptyCollapses(t *testing.T) {
+	got := renderSnapshot(effort.Score{}, map[scoring.Severity]int{})
+	if got != "" {
+		t.Errorf("expected empty snapshot on empty inputs, got: %q", got)
 	}
 }
 
