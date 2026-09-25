@@ -45,7 +45,7 @@
         <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Anthropic provider key</td><td>&mdash;</td></tr>
         <tr><td><code>OPENAI_API_KEY</code></td><td>OpenAI provider key</td><td>&mdash;</td></tr>
         <tr><td><code>AWS_*</code></td><td>Bedrock via AWS credential chain</td><td>&mdash;</td></tr>
-        <tr><td><code>SACR_DB_URL</code></td><td>Index database DSN (Postgres or SQLite)</td><td>index disabled</td></tr>
+        <tr><td><code>SACR_DB_URL</code></td><td>Index database DSN; overrides the per-repo default</td><td><code>~/.sacr/index/&lt;repo-hash&gt;.db</code></td></tr>
         <tr><td><code>SACR_ORG_RULES_REPO</code></td><td>Git-hosted org rules repo (<code>owner/repo</code>)</td><td>no org rules</td></tr>
         <tr><td><code>SACR_ORG_RULES_REF</code></td><td>Git ref to pin</td><td><code>main</code></td></tr>
         <tr><td><code>SACR_DOCS_ALLOWED_HOSTS</code></td><td>Extra Host: values accepted by <code>sacr docs</code></td><td>loopback only</td></tr>

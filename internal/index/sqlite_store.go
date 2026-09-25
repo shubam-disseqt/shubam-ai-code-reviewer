@@ -10,6 +10,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -33,14 +35,13 @@ type sqliteStore struct {
 // newSQLiteStore opens (or creates) a SQLite database at path and applies
 // the schema. Pass ":memory:" for an in-memory store.
 func newSQLiteStore(ctx context.Context, path string) (*sqliteStore, error) {
-	dsn := path
 	if path != ":memory:" {
-		// WAL + shared cache would need &cache=shared; we don't set it —
-		// the mu above serializes writes and reads through the same *sql.DB
-		// which handles connection pooling.
-		dsn = path
+		// SQLite creates the file but not its parent directories.
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return nil, fmt.Errorf("index: create dir for %q: %w", path, err)
+		}
 	}
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("index: open sqlite %q: %w", path, err)
 	}

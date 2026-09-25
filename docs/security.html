@@ -79,7 +79,7 @@
           <td>Index database (Postgres or SQLite)</td>
           <td>Repo file content chunks, embeddings, path metadata</td>
           <td>Persistent index for repo-wide context</td>
-          <td>Yes (unset <code>SACR_DB_URL</code> to run JIT-only)</td>
+          <td>No network by default &mdash; a local SQLite file under <code>~/.sacr/index/</code>. Only leaves the machine if you point <code>SACR_DB_URL</code> at a remote DSN.</td>
         </tr>
         <tr>
           <td>Org rules repo (GitHub HTTPS or SSH)</td>

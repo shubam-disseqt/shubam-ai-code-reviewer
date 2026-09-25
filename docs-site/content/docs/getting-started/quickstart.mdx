@@ -21,13 +21,13 @@ curl -fsSL https://raw.githubusercontent.com/shubam-disseqt/shubam-ai-code-revie
 export ANTHROPIC_API_KEY=...        # or OPENAI_API_KEY, or use Bedrock via the AWS credential chain
 ```
 
-## Optional: point at an index database
+## Index database
 
-For repo-wide context and cross-PR overlap, provide a Postgres or local SQLite database:
+The code index is always on. `sacr` keeps one SQLite file per repo under
+`~/.sacr/index/` and fills it as it reviews — no setup step. To put it
+somewhere else (a persistent CI volume, for example):
 
 ```bash
-export SACR_DB_URL="postgres://user:pass@host:5432/sacr?sslmode=require"
-# or
 export SACR_DB_URL="sqlite:///path/to/index.db"
 ```
 

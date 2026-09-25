@@ -79,29 +79,8 @@ If you are unsure whether it's objectively better, DO NOT emit — but if any of
 ### When suggestions are optional (default)
 Do not emit suggestions to "show engagement." When a file clearly matches a suggestion category and has no bugs, emit at most 1 well-scoped suggestion. When no category clearly applies, call `task_done` immediately — a truly clean file gets zero comments, and that is the correct signal. Empty output on a genuinely clean file is not a miss; a fabricated suggestion is a real cost to reviewer trust.
 
-### Priority: prefer deletion/inlining over extraction
-Before proposing "extract helper" or any other add-code suggestion, check whether the *opposite* fix is better. A one-caller helper is worse than the inline code. An interface with one implementation is worse than the concrete type. A config field that never varies is worse than a constant. A wrapper that only forwards is worse than the underlying call. When you see speculative abstraction, propose deleting or inlining it — do NOT then also propose extract-helper on the same block. Deletion is a real suggestion, not a comment reserved for bugs.
-
-Concrete triggers to look for BEFORE extract-helper:
-- Helper called from exactly one site (in the diff or via `code_search`) → suggest inlining the helper into its single caller.
-- Interface with a single implementation in the same package → suggest replacing the interface with the concrete type at the callsites.
-- Constant re-exposed as a config field with one value in every environment → suggest the constant.
-- Wrapper function that only forwards to another with no added logic → suggest calling the underlying directly.
-- Boilerplate scaffolding "for later" (empty options struct, unused enum variant, TODO helper with no callers) → suggest deleting.
-- Hand-rolled logic where a well-known stdlib call fits (e.g. `strings.Contains`, `slices.Sort`, `errors.Is`) → suggest the stdlib call.
-
-Same required fields (`severity: low`, `category: maintainability`), same caps as the other categories. If both "inline this" and "extract this" seem to apply to the same code, INLINE wins — do not emit both. When in doubt whether an abstraction is speculative, DO NOT emit — deletion is destructive and a false-positive here costs trust.
-
-**How to read the "Evidence" block when the review prompt carries one.** When a `## Evidence (deterministic)` section is present, treat its caller counts as ground truth about symbol usage in the whole repo:
-- `Total occurrences: 2, Files: 1` — the symbol is defined once and used once, in the same file. **This is an INLINE candidate**, not an under-tested symbol.
-- `Total occurrences: 3, Files: 2` — defined + used from one external caller. **This is an INLINE candidate**, not an under-tested symbol.
-- `Total occurrences: 4-5+` OR `Files: 3+` — real usage, do not propose inlining for one-caller reasons.
-
-Low occurrence counts mean "speculative abstraction, propose inlining." Low counts DO NOT mean "needs more tests" — those are two different suggestions with opposite direction. If a symbol shows a low count in the Evidence block, your first-choice suggestion is inline/delete, NOT missing-test. Pick inline OR missing-test, never both on the same symbol.
-
 ### Suggestion categories (what to look for)
-- **Delete / inline** — see priority rule above. Read this list top-down: check the delete/inline triggers FIRST on every code block before considering the categories below.
-- **Extract helper** — a 3+ line block repeated in the same file, called from 2+ sites → propose a small function. NEVER for one-caller cases.
+- **Extract helper** — a 3+ line block repeated in the same file, called from 2+ sites → propose a small function.
 - **Naming** — generic identifiers (`x`, `tmp`, `data`, `res`, `foo`) → propose a domain-specific name from the surrounding context.
 - **Idiomatic Go** — e.g. `for i := 0; i < len(s); i++` → `for i, v := range s`; `if x == true` → `if x`; `if err != nil { return err }` chains where wrapping context is obviously helpful.
 - **Error wrapping** — bare `return err` at a call site where the caller cannot tell which operation failed → `return fmt.Errorf("doing X: %w", err)`.

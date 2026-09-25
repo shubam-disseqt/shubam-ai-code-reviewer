@@ -152,22 +152,6 @@ func TestMaybeDetectOverlapDisabledPaths(t *testing.T) {
 	}
 }
 
-func TestIndexCmdRequiresDSN(t *testing.T) {
-	t.Setenv("SACR_DB_URL", "")
-	cmd := newIndexCmd()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"--repo", "."})
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("expected err without SACR_DB_URL")
-	}
-	if !strings.Contains(err.Error(), "SACR_DB_URL") {
-		t.Errorf("wrong err: %v", err)
-	}
-}
-
 func TestOverlapCmdRequiresFlags(t *testing.T) {
 	cmd := newOverlapCmd()
 	var out bytes.Buffer

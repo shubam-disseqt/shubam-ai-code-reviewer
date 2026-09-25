@@ -7,7 +7,11 @@ package index
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -38,6 +42,31 @@ type Store interface {
 
 // ErrNotFound is returned by GetSummary when the requested path is unknown.
 var ErrNotFound = fmt.Errorf("index: summary not found")
+
+// DefaultDSN returns the per-repo SQLite DSN used when SACR_DB_URL is unset:
+// ~/.sacr/index/<sha256(abs repo path)[:16]>.db. Rows are keyed by
+// repo-relative path with no repo column, so every repo needs its own file.
+func DefaultDSN(repoRoot string) (string, error) {
+	abs, err := filepath.Abs(repoRoot)
+	if err != nil {
+		return "", fmt.Errorf("index: resolve repo root: %w", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("index: resolve home dir: %w", err)
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(abs)))
+	name := hex.EncodeToString(sum[:])[:16] + ".db"
+	return "sqlite:///" + filepath.ToSlash(filepath.Join(home, ".sacr", "index", name)), nil
+}
+
+// ResolveDSN returns SACR_DB_URL when set, else DefaultDSN(repoRoot).
+func ResolveDSN(repoRoot string) (string, error) {
+	if dsn := strings.TrimSpace(os.Getenv("SACR_DB_URL")); dsn != "" {
+		return dsn, nil
+	}
+	return DefaultDSN(repoRoot)
+}
 
 // NewStore opens a Store for the given DSN. Supported schemes:
 //

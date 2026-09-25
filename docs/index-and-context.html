@@ -36,15 +36,12 @@
 
   <main>
     <h1>Index and context</h1>
-    <p class="lede">How <code>sacr</code> assembles the &ldquo;codebase context&rdquo; block that goes into every review prompt. Two modes: indexed (fast, cross-file signal) and JIT (no dependency).</p>
+    <p class="lede">How <code>sacr</code> assembles the &ldquo;codebase context&rdquo; block that goes into every review prompt. One always-on per-repo index, filled as you review.</p>
 
-    <h2 id="two-modes">Two modes, one output</h2>
-    <p>The reviewer needs to know more than the diff: what does the changed function call, who calls it, what conventions does the repo enforce. That signal comes from one of two paths:</p>
-    <ul>
-      <li><strong>Indexed mode.</strong> <code>SACR_DB_URL</code> is set. A persistent database holds per-file summaries, symbol maps, and conventions extracted from a previous <code>sacr index</code> run. The reviewer pulls the relevant rows and stitches them into the prompt in milliseconds.</li>
-      <li><strong>JIT (just-in-time) mode.</strong> No <code>SACR_DB_URL</code>. The reviewer's tool loop uses <code>file_read</code>, <code>file_find</code>, and <code>code_search</code> to fetch context on demand while the LLM is running. Fewer moving parts, higher token cost per run, weaker cross-file signal.</li>
-    </ul>
-    <p>The prompt shape is identical in both modes &mdash; the review loop cannot tell them apart. Indexed mode is preferred for anything ongoing; JIT is fine for one-shot local runs.</p>
+    <h2 id="two-modes">One index, always on</h2>
+    <p>Every repo gets its own SQLite index at <code>~/.sacr/index/&lt;sha256(abs repo path)[:16]&gt;.db</code>. <code>sacr review</code> opens it on every run &mdash; there is no flag to turn it off and no setup step.</p>
+    <p>During a review, stage 3 checks which changed files have no summary row yet and summarizes them right there on the cheap tier, before the reviewer sees the diff. The reviewer then pulls per-file summaries, symbol maps, and blast-radius rows from the index and stitches them into the prompt. Where the index is still thin (files the PR doesn't touch, fresh clone), the tool loop's <code>file_read</code>, <code>file_find</code>, and <code>code_search</code> fill the gaps on demand.</p>
+    <p><code>sacr index --repo .</code> pre-warms the whole repo so cross-file context is complete from the first review. It is a speed-up, not a prerequisite.</p>
 
     <h2 id="what-goes-in">What gets indexed</h2>
     <p>Not every file. The indexer walks the repo with the same filter used by the review selector, so generated files, vendor dirs, lockfiles, and binary blobs are skipped.</p>
@@ -56,7 +53,7 @@
     </ul>
 
     <h2 id="storage">SQLite vs Postgres</h2>
-    <p><code>SACR_DB_URL</code> accepts two DSN shapes:</p>
+    <p><code>SACR_DB_URL</code> overrides the default location and accepts two DSN shapes:</p>
     <table>
       <thead><tr><th>DSN</th><th>Backend</th><th>When to use</th></tr></thead>
       <tbody>
@@ -79,8 +76,7 @@
     </div>
 
     <h2 id="indexing">Running the indexer</h2>
-    <pre><code># first time — index everything
-export SACR_DB_URL="sqlite:///$HOME/.sacr/index.db"
+    <pre><code># pre-warm the whole repo (uses the per-repo default DB; set SACR_DB_URL to relocate)
 sacr index --repo .
 
 # subsequent runs — incremental (only re-summarizes changed files)
@@ -91,14 +87,8 @@ sacr index --repo . --full</code></pre>
 
     <p>Incremental indexing keys off the content hash of each file. If the file bytes haven't changed since the last successful summary, the row is reused. This is what makes a scheduled indexer cheap after the first run.</p>
 
-    <h2 id="jit-mode">JIT context in practice</h2>
-    <p>When <code>SACR_DB_URL</code> is unset, <code>sacr review</code> still works. The reviewer's tool loop:</p>
-    <ol>
-      <li>Sees the diff first &mdash; nothing else.</li>
-      <li>Calls <code>file_read</code> to inspect files the diff references, or <code>code_search</code> to find callers.</li>
-      <li>Iterates until it has enough context to comment, or hits the tool-call budget (<code>MaxToolRequestTimes</code>, default 100).</li>
-    </ol>
-    <p>JIT mode is genuinely useful for exploratory runs and for repos too small to justify a database. On large repos, expect noticeably higher token cost per review and less consistent cross-file findings &mdash; the reviewer only sees what it thought to fetch.</p>
+    <h2 id="jit-mode">CI containers</h2>
+    <p>The GitHub Action runs <code>sacr</code> in a fresh container, so the default index lives and dies with the job. Only the PR's changed files are summarized each run &mdash; a few cheap-tier calls. To carry the index across runs, mount a cache volume and point <code>SACR_DB_URL</code> at a file on it.</p>
 
     <h2 id="cost">Cost model</h2>
     <p>Two distinct model roles, priced separately:</p>
@@ -122,7 +112,7 @@ sacr index --repo . --full</code></pre>
     <ul>
       <li><strong>Index looks empty after a run.</strong> Check that the walker's filters didn't skip everything. <code>sacr index -v</code> logs per-file decisions.</li>
       <li><strong>Cross-file suggestions still weak.</strong> The symbol map is heuristic and language-specific. If a repo uses non-standard extensions, extend the file-type detector.</li>
-      <li><strong>Review is slow without an index.</strong> Expected &mdash; JIT mode does more tool calls. Set up an index and re-run.</li>
+      <li><strong>First review of a repo is slower.</strong> Expected &mdash; every changed file is summarized once. Run <code>sacr index --repo .</code> to pre-warm.</li>
       <li><strong>Postgres connection errors.</strong> Verify <code>sslmode</code> matches what your Postgres server expects. Most managed Postgres accepts <code>sslmode=require</code>.</li>
     </ul>
 

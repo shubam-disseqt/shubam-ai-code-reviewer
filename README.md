@@ -64,7 +64,7 @@ Every PR gets inline review, effort score, package-imports diagram, and risk lab
 <td valign="top">
 
 - **Fingerprint carryover**
-- **Persistent index + JIT fallback**
+- **Always-on code index** (per-repo SQLite)
 - **Org-level rules** (YAML)
 - **Session log** (JSONL)
 
@@ -80,7 +80,7 @@ Per-feature detail: [capabilities docs](https://shubam-disseqt.github.io/shubam-
 
 ```mermaid
 flowchart LR
-  subgraph Offline["Offline (optional)"]
+  subgraph Offline["Index (always on)"]
     IX0["sacr index"] --> IX1[(SQLite / Postgres)]
   end
 
@@ -165,8 +165,8 @@ flowchart TD
     P126 -.-> P13
 ```
 
-**Fatal** (abort with wrapped error): diff, scoring, session, LLM, prompts, tools, emit.
-**Fault-tolerant** (warn + continue): scanners, cheap-tier agents, index, overlap, effort, depgraph.
+**Fatal** (abort with wrapped error): diff, scoring, index store, session, LLM, prompts, tools, emit.
+**Fault-tolerant** (warn + continue): scanners, cheap-tier agents, index summaries, overlap, effort, depgraph.
 
 </details>
 

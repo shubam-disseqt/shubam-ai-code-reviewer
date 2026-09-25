@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -23,13 +22,13 @@ func newIndexCmd() *cobra.Command {
 		Use:   "index",
 		Short: "Build (or refresh) the SQLite code index",
 		Long: `Walk the repository, summarize each eligible file via the configured LLM,
-and persist the results in the SQLite index named by SACR_DB_URL.
+and persist the results in the repo's SQLite index (~/.sacr/index/<hash>.db,
+or the DSN in SACR_DB_URL).
 
 Existing rows whose content hash is unchanged are skipped unless --full is set.
 
-Pass --paths to re-summarize only the listed files. The review command uses
-this internally as an async cache warmer when indexed mode is configured but
-summary rows are missing for changed files.`,
+Pass --paths to re-summarize only the listed files. The review command indexes
+changed files it has not seen on its own; run this to pre-warm a whole repo.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runIndex(cmd.Context(), cmd, repo, full, paths)
 		},
@@ -41,11 +40,7 @@ summary rows are missing for changed files.`,
 }
 
 func runIndex(ctx context.Context, cmd *cobra.Command, repo string, full bool, paths []string) error {
-	dsn := os.Getenv("SACR_DB_URL")
-	if dsn == "" {
-		return fmt.Errorf("SACR_DB_URL is required for `sacr index`")
-	}
-	store, err := index.NewStore(ctx, dsn)
+	store, err := openStore(ctx, repo)
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)
 	}
@@ -55,10 +50,10 @@ func runIndex(ctx context.Context, cmd *cobra.Command, repo string, full bool, p
 	if err != nil {
 		return fmt.Errorf("llm: %w", err)
 	}
-	llmClient := tiers.Main
 
 	status := &index.Status{}
-	indexer := index.NewIndexer(store, llmClient, index.IndexerOptions{
+	indexer := index.NewIndexer(store, tiers.Cheap, index.IndexerOptions{
+		Model:  tiers.CheapModel,
 		Full:   full,
 		Status: status,
 	})

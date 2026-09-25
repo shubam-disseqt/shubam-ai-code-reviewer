@@ -235,7 +235,7 @@ Four durable stores. Only the first is required.
 | Store | Required? | What it holds | Rebuildable? |
 |---|---|---|---|
 | Filesystem session log | Yes (always local) | Append-only JSONL per invocation for `--resume` | Rebuildable — session is rerun-safe |
-| Index DB (Postgres or SQLite) | Optional (features degrade to JIT context if absent) | Per-file summaries, symbols, imports, external refs, package manifests | Rebuildable — `sacr index --full` recomputes |
+| Index DB (Postgres or SQLite) | Always on (per-repo SQLite under `~/.sacr/index/`, or `SACR_DB_URL`) | Per-file summaries, symbols, imports, external refs, package manifests | Rebuildable — `sacr index --full` recomputes |
 | Org rules repo (git) | Optional (features degrade to no-rules if absent) | YAML files describing review rules with scope + severity + category | Source of truth in git |
 | Per-PR findings JSON | Optional (drives incremental re-review) | Fingerprinted findings from prior review runs of the same `(owner, repo, pr)` at `~/.sacr/findings/<owner>_<repo>_<pr>.json`. Atomic write (`tmp → rename`). | Rebuildable — deletion just means the next review is a full pass |
 

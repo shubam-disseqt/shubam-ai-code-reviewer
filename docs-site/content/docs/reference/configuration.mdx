@@ -24,7 +24,7 @@ Defaults → org rules repo → `.sacr.yaml` in the repo → env vars → CLI fl
 | `ANTHROPIC_API_KEY` | Anthropic provider key | — |
 | `OPENAI_API_KEY` | OpenAI provider key | — |
 | `AWS_*` | Bedrock via AWS credential chain | — |
-| `SACR_DB_URL` | Index database DSN (Postgres or SQLite) | index disabled |
+| `SACR_DB_URL` | Index database DSN; overrides the per-repo default | `~/.sacr/index/<repo-hash>.db` |
 | `SACR_ORG_RULES_REPO` | Git-hosted org rules repo (`owner/repo`) | no org rules |
 | `SACR_ORG_RULES_REF` | Git ref to pin | `main` |
 | `SACR_DOCS_ALLOWED_HOSTS` | Extra `Host:` values accepted by `sacr docs` | loopback only |

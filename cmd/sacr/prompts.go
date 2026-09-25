@@ -6,7 +6,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -52,17 +51,6 @@ func buildReviewMessages(sys, userTmpl, systemRule, reviewCtx, knownIssues, chan
 	if knownIssues != "" {
 		systemContent = systemContent + "\n\n" + knownIssues
 	}
-	// SACR_EVIDENCE injects a deterministic evidence block (e.g. caller
-	// counts, symbol-usage facts) into the system prompt so the reviewer
-	// stops guessing structural facts. Same append shape as the codebase-
-	// context and known-issues blocks. Empty env var is a no-op. Dogfood
-	// results in reports/delete-first-suggestion-experiment.md show this hook
-	// alone did not produce delete-first suggestions on OpenAI models — kept as
-	// scaffolding for future iterations (Sonnet trial, dedicated lens pass).
-	if evidence := strings.TrimSpace(os.Getenv("SACR_EVIDENCE")); evidence != "" {
-		systemContent = systemContent + "\n\n## Evidence (deterministic)\n\n" + evidence
-	}
-
 	user := renderUserPrompt(userTmpl, map[string]string{
 		"change_files":             changeFiles,
 		"diffs":                    diffs,

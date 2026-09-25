@@ -30,11 +30,19 @@ func TestCheckDBURLBadDSN(t *testing.T) {
 	}
 }
 
-func TestCheckDBURLSkip(t *testing.T) {
+// Unset SACR_DB_URL is not a skip any more: doctor opens the per-repo
+// default under $HOME/.sacr/index/ and pings it.
+func TestCheckDBURLDefault(t *testing.T) {
 	t.Setenv("SACR_DB_URL", "")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	got := checkDBURL(context.Background())
-	if got.Status != "skip" {
-		t.Fatalf("want skip, got %q", got.Status)
+	if got.Status != "ok" {
+		t.Fatalf("want ok, got %q (%s)", got.Status, got.Detail)
+	}
+	if !strings.Contains(got.Detail, ".sacr") {
+		t.Errorf("detail should name the default path, got %q", got.Detail)
 	}
 }
 
