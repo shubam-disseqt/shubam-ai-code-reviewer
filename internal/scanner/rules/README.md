@@ -12,6 +12,7 @@ at build time via `go:embed`.
 | `javascript.yml`  | JavaScript, TypeScript | 12    | RCE, XSS, SQLi, weak crypto, CORS, JWT, path traversal |
 | `python.yml`      | Python               | 13    | RCE, SQLi, pickle/yaml unsafe load, weak crypto, CSRF  |
 | `ruby.yml`        | Ruby / Rails         | 11    | eval, command injection, mass assignment, weak crypto  |
+| `golang.yml`      | Go                   | 7     | weak hashes, TLS bypass, SQL formatting, shell exec, path traversal, math/rand secrets, AWS keys |
 
 Rules are intentionally scoped to high-signal, low-false-positive
 patterns — think Snyk / Bandit / Brakeman defaults, not the full
@@ -25,9 +26,11 @@ whose language actually appears in the diff:
 - `.js` / `.jsx` / `.ts` / `.tsx` / `.mjs` / `.cjs` → `javascript.yml`
 - `.py` / `.pyi` → `python.yml`
 - `.rb` / `.rake` / `Gemfile` → `ruby.yml`
+- `.go` → `golang.yml`
 
-If no supported language is touched, semgrep is skipped — we already
-run govulncheck for Go.
+If no supported language is touched, semgrep is skipped. govulncheck
+covers dependency and stdlib CVEs for Go; `golang.yml` covers source
+patterns, so the two do not overlap.
 
 ## Overriding
 

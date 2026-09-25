@@ -61,6 +61,7 @@ var (
 	presetJS     = preset{name: "javascript", yaml: rules.JavaScript}
 	presetPython = preset{name: "python", yaml: rules.Python}
 	presetRuby   = preset{name: "ruby", yaml: rules.Ruby}
+	presetGo     = preset{name: "golang", yaml: rules.Go}
 )
 
 func (s *semgrepScanner) Run(ctx context.Context, repoRoot string, changedPaths []string) ([]ScannerFinding, error) {
@@ -163,13 +164,15 @@ func resolveSemgrepConfigs(changedPaths []string) ([]string, func(), error) {
 }
 
 // selectPresets returns the bundled rulesets whose language actually
-// appears in the changed paths. Go files intentionally do not select a
-// preset — govulncheck covers Go and semgrep on it would be duplicate
-// noise.
+// appears in the changed paths. The Go preset covers source patterns
+// (weak hashes, TLS bypass, SQL formatting); govulncheck covers CVEs, so
+// the two do not overlap.
 func selectPresets(changedPaths []string) []preset {
-	var js, py, rb bool
+	var js, py, rb, golang bool
 	for _, p := range changedPaths {
 		switch {
+		case matchesLang(p, ".go"):
+			golang = true
 		case matchesLang(p, ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"):
 			js = true
 		case matchesLang(p, ".py", ".pyi"):
@@ -189,6 +192,9 @@ func selectPresets(changedPaths []string) []preset {
 	}
 	if rb {
 		out = append(out, presetRuby)
+	}
+	if golang {
+		out = append(out, presetGo)
 	}
 	return out
 }
