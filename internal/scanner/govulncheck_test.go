@@ -125,3 +125,18 @@ func TestReadModulePath(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// Several traces of one vuln reaching the same call site collapse to one finding.
+func TestParseGovulncheckDedupesSameSite(t *testing.T) {
+	rec := `{"finding":{"osv":"GO-9","trace":[{"module":"stdlib","function":"A","position":{"filename":"src/a.go","line":1}},{"module":"m","package":"p","function":"f","position":{"filename":"x.go","line":10}}]}}`
+	input := []byte(rec + "\n" + rec + "\n")
+	repo := t.TempDir()
+	_ = os.WriteFile(filepath.Join(repo, "go.mod"), []byte("module m\n"), 0o644)
+	findings, err := parseGovulncheck(input, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("want 1 deduped finding, got %d", len(findings))
+	}
+}

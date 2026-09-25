@@ -4,15 +4,16 @@
 package scanner
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -102,23 +103,31 @@ func (s *govulncheckScanner) Run(ctx context.Context, repoRoot string, _ []strin
 // fatal — govulncheck's streaming shape means a partial capture (e.g.
 // process killed) can still yield useful data.
 func parseGovulncheck(data []byte, repoRoot string) ([]ScannerFinding, error) {
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	// govulncheck emits object-per-line; a couple of lines can be tens of
-	// KB when the OSV details block is fat. Give the scanner room.
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-
+	// govulncheck -json pretty-prints every object across many lines, so a
+	// line scanner never sees a complete document. Stream-decode instead;
+	// this also accepts the compact one-object-per-line shape.
 	osvByID := make(map[string]*govulnOSV)
 	var findings []*govulnFinding
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
-		}
+	// Stream-decode; on a malformed object skip to the next line and resume
+	// so one bad record (or a truncated capture) does not discard the rest.
+	pos := 0
+	for pos < len(data) {
+		dec := json.NewDecoder(bytes.NewReader(data[pos:]))
 		var msg govulncheckMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			// A single malformed line is skipped, not fatal.
+		err := dec.Decode(&msg)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			pos += int(dec.InputOffset())
+			if nl := bytes.IndexByte(data[pos:], '\n'); nl >= 0 {
+				pos += nl + 1
+			} else {
+				break
+			}
 			continue
 		}
+		pos += int(dec.InputOffset())
 		if msg.OSV != nil {
 			osvByID[msg.OSV.ID] = msg.OSV
 		}
@@ -126,11 +135,9 @@ func parseGovulncheck(data []byte, repoRoot string) ([]ScannerFinding, error) {
 			findings = append(findings, msg.Finding)
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scan output: %w", err)
-	}
 
 	mainModule := readModulePath(repoRoot)
+	seen := make(map[string]struct{}, len(findings))
 	out := make([]ScannerFinding, 0, len(findings))
 	for _, f := range findings {
 		step, ok := userCodeStep(f.Trace, repoRoot, mainModule)
@@ -143,6 +150,11 @@ func parseGovulncheck(data []byte, repoRoot string) ([]ScannerFinding, error) {
 		if meta := osvByID[f.OSV]; meta != nil {
 			desc = firstNonEmpty(meta.Summary, meta.ID)
 		}
+		key := f.OSV + "|" + step.Position.Filename + "|" + strconv.Itoa(step.Position.Line)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
 		out = append(out, ScannerFinding{
 			Tool:        "govulncheck",
 			RuleID:      f.OSV,
