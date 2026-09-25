@@ -44,28 +44,17 @@ and binary blobs are skipped.
   dependency files, so the reviewer knows what's in scope without
   re-parsing them.
 
-## SQLite vs Postgres
+## Storage
 
-`SACR_DB_URL` overrides the default location and accepts two DSN shapes:
+One SQLite file per repo, `~/.sacr/index/<sha256(abs repo path)[:16]>.db`.
+`SACR_DB_URL` relocates it:
 
-| DSN | Backend | When to use |
-|---|---|---|
-| `sqlite:///path/to/index.db` | Local SQLite file | Single-machine, one-repo case. CI runners that keep a persistent cache volume. The default choice. |
-| `postgres://user:pass@host:5432/db?sslmode=require` | Postgres | Shared index across many reviewers — team CI where every runner should reuse the same summaries. Higher operational cost. |
+```bash
+export SACR_DB_URL="sqlite:///path/to/index.db"
+```
 
-The schema is identical either way. Migration paths from SQLite to
-Postgres are one-shot dumps and imports; there is no built-in
-migration tool because most teams settle on one or the other and stay
-there.
-
-<Callout type="info">
-  **Postgres note.** Point every reviewer at the same database.
-  Concurrent `sacr index` runs are safe — the indexer uses row-level
-  insert-or-update, not table locks — but you'll pay the LLM cost
-  multiple times if two reviewers race on the same fresh file. In
-  practice, run `sacr index --repo .` from one scheduled job and let
-  reviews only read from the shared DB.
-</Callout>
+Only the `sqlite:///` scheme is implemented. A `postgres://` DSN is rejected
+with a clear error; a shared backend is not planned until a team needs one.
 
 ## Running the indexer
 
@@ -110,6 +99,3 @@ Two distinct model roles, priced separately:
   extend the file-type detector.
 - **First review of a repo is slower.** Expected — every changed file
   is summarized once. Run `sacr index --repo .` to pre-warm.
-- **Postgres connection errors.** Verify `sslmode` matches what your
-  Postgres server expects. Most managed Postgres accepts
-  `sslmode=require`.

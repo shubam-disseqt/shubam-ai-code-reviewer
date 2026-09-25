@@ -20,7 +20,7 @@ things that live longer than a single invocation.
 ## Pipeline at a glance
 
 <Mermaid chart={`flowchart TD
-    IX0["sacr index (offline)<br/>walk + parse repo"] --> IX1[(SQLite / Postgres<br/>index store)]
+    IX0["sacr index (offline)<br/>walk + parse repo"] --> IX1[(SQLite<br/>index store)]
 
     A[git diff / range / commit] --> B[deterministic<br/>file selection]
     B --> C[bundle<br/>related files]

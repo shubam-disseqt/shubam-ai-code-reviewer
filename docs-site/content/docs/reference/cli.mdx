@@ -116,7 +116,6 @@ Builds or refreshes the persistent code index used by `sacr review` and `sacr ov
 |---|---|
 | `--repo <path>` | Path to the git checkout to index. Defaults to CWD. |
 | `--full` | Force a full re-index. Otherwise the incremental walker only touches files changed since the last run. |
-| `--db <dsn>` | Database DSN. Overrides `$SACR_DB_URL`. Accepts `postgres://...` or `sqlite:///path/to/file.db`. |
 
 <Callout type="info">
 **Cost note.** Indexing calls an embedding model per chunk. Point it at a cheap model (e.g., a small embedding endpoint) separately from your review model — `SACR_INDEX_MODEL` controls that. See [Configuration](/docs/reference/configuration).

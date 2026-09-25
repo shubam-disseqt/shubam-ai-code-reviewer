@@ -26,7 +26,7 @@ What an attacker would want to reach through this tool.
 | Session JSONL log | `.sacr/session-*.jsonl` (already gitignored — see `.gitignore` line `.sacr/`) | Medium. Contains prompts + responses, i.e. diff content and LLM output, but no API keys. |
 | Org rules repository credentials | `$SACR_ORG_RULES_REPO` (URL) plus whatever git credential helper the user has configured | Medium. Read-only clone in normal use, but the underlying git remote can be write-capable. |
 | GitHub PR-write token | `$GITHUB_TOKEN` (used by `--format github` in `internal/gh`) | High. Write access to review comments on the target repo. |
-| Index database (Postgres or SQLite) | `$SACR_DB_URL` or `~/.sacr/index/<repo-hash>.db`; both user-owned | Medium. Contains LLM-generated summaries of the codebase — leakage discloses derived analysis, not raw source. |
+| Index database (SQLite) | `$SACR_DB_URL` or `~/.sacr/index/<repo-hash>.db`; both user-owned | Medium. Contains LLM-generated summaries of the codebase — leakage discloses derived analysis, not raw source. |
 | Docs server binding | Loopback by default; `$SACR_DOCS_ALLOWED_HOSTS` extends the allowlist | Low, but exploitable — see T4. |
 
 ---
@@ -42,8 +42,7 @@ Trusted zone: user machine / CI runner
   └── ─── HTTPS ──► LLM provider API              (semi-trusted response)
       ─── HTTPS ──► GitHub API                    (semi-trusted response)
       ─── HTTPS/SSH ──► Org rules git remote      (trust = same as source)
-      ─── TCP ────► Postgres (if configured)      (user-owned)
-      ─── file  ──► SQLite (if configured)        (user-owned)
+      ─── file  ──► SQLite index (always on)       (user-owned)
       ─── HTTP  ──► docs server (opt-in, loopback allowlist)
 ```
 
@@ -78,7 +77,7 @@ Content that returns: the LLM's structured comment output, validated by
 
 ```
 sacr index →  internal/index/extract  →  LLM summarization
-             →  internal/index/store    →  SQLite | Postgres
+             →  internal/index/store    →  SQLite
 ```
 
 Same egress surface as 3.1 (source files to the summarization model),
