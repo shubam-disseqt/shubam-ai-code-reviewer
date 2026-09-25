@@ -10,7 +10,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -128,9 +130,10 @@ func parseGovulncheck(data []byte, repoRoot string) ([]ScannerFinding, error) {
 		return nil, fmt.Errorf("scan output: %w", err)
 	}
 
+	mainModule := readModulePath(repoRoot)
 	out := make([]ScannerFinding, 0, len(findings))
 	for _, f := range findings {
-		step, ok := userCodeStep(f.Trace, repoRoot)
+		step, ok := userCodeStep(f.Trace, repoRoot, mainModule)
 		if !ok {
 			// Not reachable from user code — govulncheck emits these
 			// too, but they're low-signal in a code-review context.
@@ -154,18 +157,43 @@ func parseGovulncheck(data []byte, repoRoot string) ([]ScannerFinding, error) {
 	return out, nil
 }
 
-// userCodeStep returns the first trace step whose position filename sits
-// under repoRoot. govulncheck traces start at the user's call site and
-// descend into the vulnerable stdlib/module function; we want the top
-// entry so the finding attaches to code the reviewer actually owns.
-func userCodeStep(trace []govulnStep, repoRoot string) (govulnStep, bool) {
+// userCodeStep returns the trace step that belongs to the reviewed module.
+// govulncheck reports user frames with repo-relative filenames and stdlib
+// frames as "src/...", so a path-prefix test against repoRoot never
+// matches; match on the module path from go.mod instead. Without a go.mod
+// fall back to "relative and not stdlib", then to the prefix test.
+func userCodeStep(trace []govulnStep, repoRoot, mainModule string) (govulnStep, bool) {
 	for _, s := range trace {
 		if s.Position == nil || s.Position.Filename == "" {
 			continue
 		}
-		if repoRoot == "" || strings.HasPrefix(s.Position.Filename, repoRoot) {
+		fn := s.Position.Filename
+		if mainModule != "" {
+			if s.Module == mainModule {
+				return s, true
+			}
+			continue
+		}
+		// A leading slash counts as absolute on Windows too, so unix
+		// module-cache paths in fixtures never look "relative" there.
+		isAbs := filepath.IsAbs(fn) || strings.HasPrefix(fn, "/")
+		if (!isAbs && !strings.HasPrefix(fn, "src/")) || strings.HasPrefix(fn, repoRoot) {
 			return s, true
 		}
 	}
 	return govulnStep{}, false
+}
+
+// readModulePath returns the `module` line of <repoRoot>/go.mod, or "".
+func readModulePath(repoRoot string) string {
+	data, err := os.ReadFile(filepath.Join(repoRoot, "go.mod"))
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "module "); ok {
+			return strings.TrimSpace(rest)
+		}
+	}
+	return ""
 }
