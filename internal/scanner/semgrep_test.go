@@ -83,14 +83,14 @@ func TestSelectPresets(t *testing.T) {
 		want  []string // preset names, in stable order
 	}{
 		{"empty", nil, nil},
-		{"go only skips presets", []string{"cmd/foo/main.go", "internal/bar/x.go"}, nil},
+		{"go diff", []string{"cmd/foo/main.go", "internal/bar/x.go"}, []string{"golang"}},
 		{"js diff", []string{"src/app.js", "README.md"}, []string{"javascript"}},
 		{"tsx diff", []string{"web/Button.tsx"}, []string{"javascript"}},
 		{"py diff", []string{"scripts/deploy.py"}, []string{"python"}},
 		{"rb diff", []string{"app/models/user.rb"}, []string{"ruby"}},
 		{"gemfile diff", []string{"Gemfile"}, []string{"ruby"}},
-		{"mixed diff", []string{"src/app.ts", "scripts/deploy.py", "app/x.rb"},
-			[]string{"javascript", "python", "ruby"}},
+		{"mixed diff", []string{"src/app.ts", "scripts/deploy.py", "app/x.rb", "main.go"},
+			[]string{"javascript", "python", "ruby", "golang"}},
 		{"unknown ext skips", []string{"docs/spec.md", "config.toml"}, nil},
 	}
 	for _, tt := range tests {
@@ -164,16 +164,16 @@ func TestResolveSemgrepConfigs(t *testing.T) {
 		}
 	})
 
-	t.Run("go-only diff produces no configs", func(t *testing.T) {
+	t.Run("go-only diff selects the Go preset", func(t *testing.T) {
 		t.Setenv("SACR_SEMGREP_CONFIG", "")
 		t.Setenv("SACR_DISABLE_SEMGREP_PRESETS", "")
-		cfgs, cleanup, err := resolveSemgrepConfigs([]string{"main.go", "internal/x/y.go"})
+		cfgs, cleanup, err := resolveSemgrepConfigs([]string{"main.go"})
 		defer cleanup()
 		if err != nil {
-			t.Fatalf("resolve: %v", err)
+			t.Fatalf("err: %v", err)
 		}
-		if len(cfgs) != 0 {
-			t.Errorf("expected no configs for Go-only diff, got %v", cfgs)
+		if len(cfgs) != 1 || !strings.HasSuffix(cfgs[0], "golang.yml") {
+			t.Fatalf("expected the golang preset for a Go-only diff, got %v", cfgs)
 		}
 	})
 }

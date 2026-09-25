@@ -1,0 +1,110 @@
+## Curated Go security rules bundled with sacr.
+## Small on purpose: only patterns that are wrong in essentially every context.
+## Runtime CVEs in dependencies are govulncheck's job, not this file's.
+## To override, set SACR_SEMGREP_CONFIG=<path>.
+## To disable presets entirely, set SACR_DISABLE_SEMGREP_PRESETS=1.
+rules:
+  - id: go-weak-hash-for-auth
+    message: md5/sha1 are broken for passwords and signatures. Use bcrypt/argon2 for passwords, sha256+ elsewhere.
+    severity: ERROR
+    languages: [go]
+    pattern-either:
+      - pattern: md5.Sum(...)
+      - pattern: md5.New()
+      - pattern: sha1.Sum(...)
+      - pattern: sha1.New()
+    metadata:
+      category: security
+      cwe: CWE-328
+
+  - id: go-tls-insecure-skip-verify
+    message: InsecureSkipVerify disables certificate validation and enables MITM. Pin or trust a CA instead.
+    severity: ERROR
+    languages: [go]
+    pattern: |
+      tls.Config{..., InsecureSkipVerify: true, ...}
+    metadata:
+      category: security
+      cwe: CWE-295
+
+  - id: go-sql-string-format
+    message: SQL built with fmt.Sprintf/concatenation is injectable. Pass values as query arguments.
+    severity: ERROR
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $Q := fmt.Sprintf("...", ...)
+              ...
+              $DB.$M($Q, ...)
+          - pattern: $DB.$M(fmt.Sprintf("...", ...), ...)
+          - pattern: $DB.$M("..." + $X, ...)
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(Query|QueryRow|Exec|QueryContext|QueryRowContext|ExecContext|Prepare|PrepareContext)$
+    metadata:
+      category: security
+      cwe: CWE-89
+
+  - id: go-exec-command-variable
+    message: exec.Command with a non-literal program or shell string is a command-injection vector. Use a fixed binary and pass arguments separately.
+    severity: WARNING
+    languages: [go]
+    pattern-either:
+      - pattern: exec.Command("sh", "-c", $CMD, ...)
+      - pattern: exec.Command("bash", "-c", $CMD, ...)
+      - pattern: exec.CommandContext($CTX, "sh", "-c", $CMD, ...)
+      - pattern: exec.CommandContext($CTX, "bash", "-c", $CMD, ...)
+    metadata:
+      category: security
+      cwe: CWE-78
+
+  - id: go-path-join-request-input
+    message: filepath.Join with request-controlled input allows path traversal. Clean the value and verify it stays under the root.
+    severity: ERROR
+    languages: [go]
+    pattern-either:
+      - pattern: filepath.Join(..., $R.URL.Query().Get(...), ...)
+      - pattern: filepath.Join(..., $R.FormValue(...), ...)
+      - pattern: filepath.Join(..., $R.PathValue(...), ...)
+      - pattern: |
+          $NAME := $R.URL.Query().Get(...)
+          ...
+          filepath.Join(..., $NAME, ...)
+      - pattern: |
+          $NAME := $R.FormValue(...)
+          ...
+          filepath.Join(..., $NAME, ...)
+    metadata:
+      category: security
+      cwe: CWE-22
+
+  - id: go-math-rand-for-secret
+    message: math/rand is predictable. Use crypto/rand for tokens, keys, nonces and session ids.
+    severity: WARNING
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: $TOKEN := rand.Int(...)
+          - pattern: $TOKEN := rand.Intn(...)
+          - pattern: $TOKEN := rand.Int63(...)
+          - pattern: $TOKEN = rand.Int(...)
+          - pattern: $TOKEN = rand.Intn(...)
+      - pattern-inside: |
+          import "math/rand"
+          ...
+      - metavariable-regex:
+          metavariable: $TOKEN
+          regex: (?i)(token|secret|key|nonce|salt|session|otp|code)
+    metadata:
+      category: security
+      cwe: CWE-338
+
+  - id: go-hardcoded-aws-access-key
+    message: AWS access key id literal in source. Rotate it and load credentials from the environment or IAM.
+    severity: ERROR
+    languages: [go]
+    pattern-regex: '"(AKIA|ASIA)[0-9A-Z]{16}"'
+    metadata:
+      category: security
+      cwe: CWE-798

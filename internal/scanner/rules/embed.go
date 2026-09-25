@@ -16,3 +16,6 @@ var Python []byte
 
 //go:embed ruby.yml
 var Ruby []byte
+
+//go:embed golang.yml
+var Go []byte
