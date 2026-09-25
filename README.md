@@ -81,7 +81,7 @@ Per-feature detail: [capabilities docs](https://shubam-disseqt.github.io/shubam-
 ```mermaid
 flowchart LR
   subgraph Offline["Index (always on)"]
-    IX0["sacr index"] --> IX1[(SQLite / Postgres)]
+    IX0["sacr index"] --> IX1[(SQLite)]
   end
 
   subgraph Input

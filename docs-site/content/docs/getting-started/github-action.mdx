@@ -47,6 +47,7 @@ That's it. Three lines of `with:` and every PR gets an inline review.
 | `min-severity` | `MEDIUM` | `LOW` \| `MEDIUM` \| `HIGH` \| `CRITICAL` |
 | `format` | `github` | `stdout` \| `json` \| `github` \| `sarif` |
 | `image` | `ghcr.io/shubam-disseqt/sacr:latest` | Pin to a version tag in production. |
+| `db-url` | *(unset → per-job index inside the container)* | `SACR_DB_URL` override. Use `sqlite:////workspace/<dir>/index.db` plus `actions/cache` to persist across runs. |
 
 ## Pinning in production
 
@@ -69,6 +70,29 @@ with:
   model: claude-sonnet-4-6
   api-key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
+
+## Persist the index across runs
+
+The container's home is ephemeral, so by default every job re-summarizes the
+PR's changed files (a few cheap-tier calls). To carry the index between runs,
+cache a directory under the workspace and point `db-url` at it. The container
+runs as uid 1000, so the cached directory must be writable by it.
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: .sacr-cache
+    key: sacr-index-${{ github.repository }}
+- run: mkdir -p .sacr-cache && chmod a+rwX .sacr-cache
+- uses: shubam-disseqt/shubam-ai-code-reviewer@v1
+  with:
+    pr-number: ${{ github.event.pull_request.number }}
+    api-key: ${{ secrets.OPENAI_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    db-url: sqlite:////workspace/.sacr-cache/index.db
+```
+
+Add `.sacr-cache/` to the repo's `.gitignore`.
 
 ## What the action does under the hood
 

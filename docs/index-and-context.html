@@ -52,28 +52,10 @@
       <li><strong>Manifests.</strong> <code>go.mod</code>, <code>package.json</code>, <code>Cargo.toml</code>, and similar dependency files, so the reviewer knows what's in scope without re-parsing them.</li>
     </ul>
 
-    <h2 id="storage">SQLite vs Postgres</h2>
-    <p><code>SACR_DB_URL</code> overrides the default location and accepts two DSN shapes:</p>
-    <table>
-      <thead><tr><th>DSN</th><th>Backend</th><th>When to use</th></tr></thead>
-      <tbody>
-        <tr>
-          <td><code>sqlite:///path/to/index.db</code></td>
-          <td>Local SQLite file</td>
-          <td>Single-machine, one-repo case. CI runners that keep a persistent cache volume. The default choice.</td>
-        </tr>
-        <tr>
-          <td><code>postgres://user:pass@host:5432/db?sslmode=require</code></td>
-          <td>Postgres</td>
-          <td>Shared index across many reviewers &mdash; team CI where every runner should reuse the same summaries. Higher operational cost.</td>
-        </tr>
-      </tbody>
-    </table>
-    <p>The schema is identical either way. Migration paths from SQLite to Postgres are one-shot dumps and imports; there is no built-in migration tool because most teams settle on one or the other and stay there.</p>
-
-    <div class="note">
-      <strong>Postgres note.</strong> Point every reviewer at the same database. Concurrent <code>sacr index</code> runs are safe &mdash; the indexer uses row-level insert-or-update, not table locks &mdash; but you'll pay the LLM cost multiple times if two reviewers race on the same fresh file. In practice, run <code>sacr index --repo .</code> from one scheduled job and let reviews only read from the shared DB.
-    </div>
+    <h2 id="storage">Storage</h2>
+    <p>One SQLite file per repo, <code>~/.sacr/index/&lt;sha256(abs repo path)[:16]&gt;.db</code>. <code>SACR_DB_URL</code> relocates it:</p>
+    <pre><code>export SACR_DB_URL="sqlite:///path/to/index.db"</code></pre>
+    <p>Only the <code>sqlite:///</code> scheme is implemented. A <code>postgres://</code> DSN is rejected with a clear error; a shared backend is not planned until a team needs one.</p>
 
     <h2 id="indexing">Running the indexer</h2>
     <pre><code># pre-warm the whole repo (uses the per-repo default DB; set SACR_DB_URL to relocate)
@@ -113,7 +95,6 @@ sacr index --repo . --full</code></pre>
       <li><strong>Index looks empty after a run.</strong> Check that the walker's filters didn't skip everything. <code>sacr index -v</code> logs per-file decisions.</li>
       <li><strong>Cross-file suggestions still weak.</strong> The symbol map is heuristic and language-specific. If a repo uses non-standard extensions, extend the file-type detector.</li>
       <li><strong>First review of a repo is slower.</strong> Expected &mdash; every changed file is summarized once. Run <code>sacr index --repo .</code> to pre-warm.</li>
-      <li><strong>Postgres connection errors.</strong> Verify <code>sslmode</code> matches what your Postgres server expects. Most managed Postgres accepts <code>sslmode=require</code>.</li>
     </ul>
 
     <footer>
