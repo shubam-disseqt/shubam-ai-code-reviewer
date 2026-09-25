@@ -215,13 +215,15 @@ func checkGit(ctx context.Context) doctorCheck {
 	return c
 }
 
-// checkDBURL verifies the index store's Ping when SACR_DB_URL is set.
+// checkDBURL verifies the index store opens and pings. The index is always
+// on: SACR_DB_URL overrides the per-repo default under ~/.sacr/index/.
 func checkDBURL(ctx context.Context) doctorCheck {
 	c := doctorCheck{Name: "index db"}
-	dsn := os.Getenv("SACR_DB_URL")
-	if dsn == "" {
-		c.Status = "skip"
-		c.Detail = "SACR_DB_URL not set (JIT context mode)"
+	dsn, err := index.ResolveDSN(".")
+	if err != nil {
+		c.Status = "fail"
+		c.Detail = err.Error()
+		c.Suggestion = "set SACR_DB_URL to an explicit sqlite:///path"
 		return c
 	}
 	store, err := index.NewStore(ctx, dsn)

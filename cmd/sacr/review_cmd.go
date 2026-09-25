@@ -178,15 +178,24 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	}
 	metrics.FilesReviewed = len(kept)
 
-	// 3) index store (optional)
-	store, err := openStore(ctx)
+	// 3) llm tiers — resolved first so index summaries run on the cheap tier.
+	tiers, err := newLLMTiers()
+	if err != nil {
+		return fmt.Errorf("llm: %w", err)
+	}
+	tiersLogger := logutil.WithStage(logger, "tiers")
+	for _, note := range tiers.Notes {
+		tiersLogger.Info(note)
+	}
+
+	// 3.1) index store — always on. Changed files the store hasn't seen are
+	// summarized now so this review already gets indexed context.
+	store, err := openStore(ctx, opts.Repo)
 	if err != nil {
 		return fmt.Errorf("index store: %w", err)
 	}
-	if store != nil {
-		defer store.Close()
-		maybeSpawnWarmer(ctx, store, opts.Repo, kept, logger)
-	}
+	defer store.Close()
+	indexMissing(ctx, store, tiers.Cheap, tiers.CheapModel, opts.Repo, kept, logger)
 
 	// 3.5) deterministic scanners — best-effort, tolerant of missing
 	// binaries. Findings tagged Source="scanner:<tool>" enter the same
@@ -197,16 +206,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	metrics.ScannerFindings = len(scannerFindings)
 
 	// 3.6) summarizer + labeler (parallel, cheap tier). Best-effort — a
-	// failure here logs and continues with zero values. We resolve tiers
-	// early so the errgroup can dispatch alongside the main LLM setup.
-	tiers, err := newLLMTiers()
-	if err != nil {
-		return fmt.Errorf("llm: %w", err)
-	}
-	tiersLogger := logutil.WithStage(logger, "tiers")
-	for _, note := range tiers.Notes {
-		tiersLogger.Info(note)
-	}
+	// failure here logs and continues with zero values.
 	summary, labels := runCheapAgents(ctx, tiers, kept, opts.Verbose, logger)
 
 	// 4) rules
@@ -455,16 +455,6 @@ func applySelector(diffs []model.Diff) []selector.Decision {
 	return selector.Select(diffs, opts)
 }
 
-// openStore opens the index Store if SACR_DB_URL is set. Returns (nil,nil)
-// otherwise, which signals JIT-context mode downstream.
-func openStore(ctx context.Context) (index.Store, error) {
-	dsn := os.Getenv("SACR_DB_URL")
-	if dsn == "" {
-		return nil, nil
-	}
-	return index.NewStore(ctx, dsn)
-}
-
 // loadRules loads the org rules repo (or dir) named by SACR_ORG_RULES_REPO
 // and returns the rendered prompt block for the paths kept in this run.
 func loadRules(ctx context.Context, kept []model.Diff) (string, error) {
@@ -490,8 +480,8 @@ func loadRules(ctx context.Context, kept []model.Diff) (string, error) {
 	return rules.RenderForPrompt(selected), nil
 }
 
-// buildContext produces the markdown "codebase context" block. Store may be
-// nil, in which case reviewctx falls back to JIT extraction.
+// buildContext produces the markdown "codebase context" block. reviewctx
+// augments the indexed rows with JIT extraction when the index is thin.
 func buildContext(ctx context.Context, repo string, kept []model.Diff, store index.Store) (string, error) {
 	newFileContent := make(map[string]string, len(kept))
 	changed := changedPathsFromDiffs(kept)
@@ -523,22 +513,6 @@ func changedPathsFromDiffs(kept []model.Diff) []string {
 		paths = append(paths, p)
 	}
 	return paths
-}
-
-// maybeSpawnWarmer bridges the review flow to the index warmer: enumerate
-// changed paths, check the store, if any are missing spawn a detached
-// `sacr index --paths ...` and continue. The current review still uses
-// JIT for the missing files (that's reviewctx.Build's built-in fallback);
-// the NEXT review of the same files reads real summaries. All errors are
-// non-fatal.
-func maybeSpawnWarmer(ctx context.Context, store index.Store, repo string, kept []model.Diff, logger *slog.Logger) {
-	paths := changedPathsFromDiffs(kept)
-	missing, err := missingSummaryPaths(ctx, store, paths)
-	if err != nil {
-		logutil.WithStage(logger, "warmer").Warn("skipping", "err", err.Error())
-		return
-	}
-	spawnIndexWarmer(repo, missing, logger)
 }
 
 // newSession creates (or resumes) a session file under SACR_SESSION_DIR.

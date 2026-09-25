@@ -1,26 +1,28 @@
 ---
 title: Index and Context
-description: How sacr assembles the codebase-context block for each review — indexed mode vs JIT mode.
+description: How sacr assembles the codebase-context block for each review from the always-on per-repo index.
 ---
 
 The reviewer needs to know more than the diff: what the changed
 function calls, who calls it, what conventions the repo enforces. That
 signal comes from one of two paths.
 
-## Two modes, one output
+## One index, always on
 
-- **Indexed mode.** `SACR_DB_URL` is set. A persistent database holds
-  per-file summaries, symbol maps, and conventions extracted from a
-  previous `sacr index` run. The reviewer pulls the relevant rows and
-  stitches them into the prompt in milliseconds.
-- **JIT (just-in-time) mode.** No `SACR_DB_URL`. The reviewer's tool
-  loop uses `file_read`, `file_find`, and `code_search` to fetch
-  context on demand while the LLM is running. Fewer moving parts,
-  higher token cost per run, weaker cross-file signal.
+Every repo gets its own SQLite index at
+`~/.sacr/index/<sha256(abs repo path)[:16]>.db`. `sacr review` opens it
+on every run — there is no flag to turn it off and no setup step.
 
-The prompt shape is identical in both modes — the review loop cannot
-tell them apart. Indexed mode is preferred for anything ongoing; JIT
-is fine for one-shot local runs.
+During a review, stage 3 checks which changed files have no summary row
+yet and summarizes them right there on the cheap tier, before the
+reviewer sees the diff. The reviewer then pulls per-file summaries,
+symbol maps, and blast-radius rows from the index and stitches them into
+the prompt. Where the index is still thin (files the PR doesn't touch,
+fresh clone), the tool loop's `file_read`, `file_find`, and `code_search`
+fill the gaps on demand.
+
+`sacr index --repo .` pre-warms the whole repo so cross-file context is
+complete from the first review. It is a speed-up, not a prerequisite.
 
 ## What gets indexed
 
@@ -44,7 +46,7 @@ and binary blobs are skipped.
 
 ## SQLite vs Postgres
 
-`SACR_DB_URL` accepts two DSN shapes:
+`SACR_DB_URL` overrides the default location and accepts two DSN shapes:
 
 | DSN | Backend | When to use |
 |---|---|---|
@@ -68,8 +70,7 @@ there.
 ## Running the indexer
 
 ```bash
-# first time — index everything
-export SACR_DB_URL="sqlite:///$HOME/.sacr/index.db"
+# pre-warm the whole repo (uses the per-repo default DB; set SACR_DB_URL to relocate)
 sacr index --repo .
 
 # subsequent runs — incremental (only re-summarizes changed files)
@@ -84,21 +85,12 @@ file bytes haven't changed since the last successful summary, the row
 is reused. This is what makes a scheduled indexer cheap after the
 first run.
 
-## JIT context in practice
+## CI containers
 
-When `SACR_DB_URL` is unset, `sacr review` still works. The reviewer's
-tool loop:
-
-1. Sees the diff first — nothing else.
-2. Calls `file_read` to inspect files the diff references, or
-   `code_search` to find callers.
-3. Iterates until it has enough context to comment, or hits the
-   tool-call budget (`MaxToolRequestTimes`, default 100).
-
-JIT mode is genuinely useful for exploratory runs and for repos too
-small to justify a database. On large repos, expect noticeably higher
-token cost per review and less consistent cross-file findings — the
-reviewer only sees what it thought to fetch.
+The GitHub Action runs `sacr` in a fresh container, so the default index
+lives and dies with the job. Only the PR's changed files are summarized
+each run — a few cheap-tier calls. To carry the index across runs, mount
+a cache volume and point `SACR_DB_URL` at a file on it.
 
 ## Cost model
 
@@ -116,8 +108,8 @@ Two distinct model roles, priced separately:
 - **Cross-file suggestions still weak.** The symbol map is heuristic
   and language-specific. If a repo uses non-standard extensions,
   extend the file-type detector.
-- **Review is slow without an index.** Expected — JIT mode does more
-  tool calls. Set up an index and re-run.
+- **First review of a repo is slower.** Expected — every changed file
+  is summarized once. Run `sacr index --repo .` to pre-warm.
 - **Postgres connection errors.** Verify `sslmode` matches what your
   Postgres server expects. Most managed Postgres accepts
   `sslmode=require`.

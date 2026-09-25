@@ -69,20 +69,30 @@ func TestRulesCacheDirNonEmpty(t *testing.T) {
 	}
 }
 
-func TestOpenStoreNoDSN(t *testing.T) {
+// With SACR_DB_URL unset the index still opens, at the per-repo default
+// under $HOME/.sacr/index/. There is no JIT-only mode.
+func TestOpenStoreNoDSNUsesDefault(t *testing.T) {
 	t.Setenv("SACR_DB_URL", "")
-	store, err := openStore(context.Background())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	store, err := openStore(context.Background(), t.TempDir())
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if store != nil {
-		t.Errorf("expected nil store, got %T", store)
+	defer store.Close()
+	if err := store.Ping(context.Background()); err != nil {
+		t.Errorf("ping: %v", err)
+	}
+	matches, _ := filepath.Glob(filepath.Join(home, ".sacr", "index", "*.db"))
+	if len(matches) != 1 {
+		t.Errorf("expected one db under ~/.sacr/index, got %v", matches)
 	}
 }
 
 func TestOpenStoreMemory(t *testing.T) {
 	t.Setenv("SACR_DB_URL", "sqlite:///:memory:")
-	store, err := openStore(context.Background())
+	store, err := openStore(context.Background(), ".")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -97,7 +107,7 @@ func TestOpenStoreMemory(t *testing.T) {
 
 func TestOpenStoreBadDSN(t *testing.T) {
 	t.Setenv("SACR_DB_URL", "mysql://foo")
-	if _, err := openStore(context.Background()); err == nil {
+	if _, err := openStore(context.Background(), "."); err == nil {
 		t.Error("expected error for unsupported DSN scheme")
 	}
 }

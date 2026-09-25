@@ -136,6 +136,7 @@ func TestReviewE2E_WorkspaceMode_ProducesJSON(t *testing.T) {
 	fakeHome := t.TempDir()
 	env := []string{
 		"HOME=" + fakeHome,
+		"USERPROFILE=" + fakeHome,   // windows home; the default index DB lives under it
 		"PATH=" + os.Getenv("PATH"), // git still needs to run inside the subprocess
 		"SACR_LLM_URL=" + srv.URL,
 		"SACR_LLM_TOKEN=sk-ant-test",
@@ -143,7 +144,7 @@ func TestReviewE2E_WorkspaceMode_ProducesJSON(t *testing.T) {
 		"ANTHROPIC_API_KEY=sk-ant-test",
 		"ANTHROPIC_MODEL=claude-sonnet-4-6",
 		"SACR_SESSION_DIR=" + sessionDir,
-		"SACR_DB_URL=", // no index store
+		"SACR_DB_URL=", // default per-repo index under the scrubbed HOME
 		"SACR_ORG_RULES_REPO=",
 		"GITHUB_TOKEN=", // skip overlap + gh emitter
 		"GITHUB_REPOSITORY=",

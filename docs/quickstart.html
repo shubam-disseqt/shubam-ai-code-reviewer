@@ -48,11 +48,9 @@
     <h2>Configure a provider</h2>
     <pre><code>export ANTHROPIC_API_KEY=...        # or OPENAI_API_KEY, or use Bedrock via the AWS credential chain</code></pre>
 
-    <h2>Optional: point at an index database</h2>
-    <p>For repo-wide context and cross-PR overlap, provide a Postgres or local SQLite database:</p>
-    <pre><code>export SACR_DB_URL="postgres://user:pass@host:5432/sacr?sslmode=require"
-# or
-export SACR_DB_URL="sqlite:///path/to/index.db"</code></pre>
+    <h2>Index database</h2>
+    <p>The code index is always on. <code>sacr</code> keeps one SQLite file per repo under <code>~/.sacr/index/</code> and fills it as it reviews &mdash; no setup step. To put it somewhere else (a persistent CI volume, for example):</p>
+    <pre><code>export SACR_DB_URL="sqlite:///path/to/index.db"</code></pre>
 
     <h2>Optional: point at an org rules repo</h2>
     <pre><code>export SACR_ORG_RULES_REPO=disseqt/z-review-rules</code></pre>

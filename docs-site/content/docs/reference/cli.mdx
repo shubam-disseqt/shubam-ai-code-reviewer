@@ -152,7 +152,7 @@ Checks performed:
 - `git` binary on `$PATH` and version ≥ 2.30.
 - Repository is a git checkout and has fetched the requested refs.
 - An LLM provider credential is present: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or a resolvable AWS credential chain for Bedrock.
-- `SACR_DB_URL` (if set) is reachable and the schema matches the binary's expected version.
+- The index database (`SACR_DB_URL`, or the per-repo default under `~/.sacr/index/`) opens and answers a ping.
 - `SACR_ORG_RULES_REPO` (if set) is reachable and the YAML parses.
 - `GITHUB_TOKEN` (if `--format github` is intended) has PR read+write scope.
 

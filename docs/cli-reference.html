@@ -202,7 +202,7 @@ $ sacr version --json
       <li><code>git</code> binary on <code>$PATH</code> and version &ge; 2.30.</li>
       <li>Repository is a git checkout and has fetched the requested refs.</li>
       <li>An LLM provider credential is present: <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, or a resolvable AWS credential chain for Bedrock.</li>
-      <li><code>SACR_DB_URL</code> (if set) is reachable and the schema matches the binary's expected version.</li>
+      <li>The index database (<code>SACR_DB_URL</code>, or the per-repo default under <code>~/.sacr/index/</code>) opens and answers a ping.</li>
       <li><code>SACR_ORG_RULES_REPO</code> (if set) is reachable and the YAML parses.</li>
       <li><code>GITHUB_TOKEN</code> (if <code>--format github</code> is intended) has PR read+write scope.</li>
     </ul>
