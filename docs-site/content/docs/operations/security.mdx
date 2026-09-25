@@ -37,7 +37,7 @@ The list is short by design. Every off-machine egress is enumerated below.
 | Destination | What leaves | Why | Optional? |
 |-------------|-------------|-----|-----------|
 | LLM provider (Anthropic / OpenAI / AWS Bedrock) | Diff hunks, matched org rules, requested file excerpts, prior tool outputs | The review itself — producing comments | No (required to run `review`). Choice of provider is yours. |
-| Index database (Postgres or SQLite) | Repo file content chunks, embeddings, path metadata | Persistent index for repo-wide context | No network by default — a local SQLite file under `~/.sacr/index/`. Only leaves the machine if you point `SACR_DB_URL` at a remote DSN. |
+| Index database (SQLite) | Repo file content chunks, embeddings, path metadata | Persistent index for repo-wide context | No network by default — a local SQLite file under `~/.sacr/index/`. Only leaves the machine if you point `SACR_DB_URL` at a remote DSN. |
 | Org rules repo (GitHub HTTPS or SSH) | Nothing outbound — read-only clone | Fetch team rules YAML | Yes (unset `SACR_ORG_RULES_REPO`) |
 | GitHub API | PR number, comment body + position; PR listings for overlap | `--format github` and `sacr overlap` | Yes (unset `GITHUB_TOKEN`) |
 

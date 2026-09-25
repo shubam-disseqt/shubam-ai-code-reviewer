@@ -35,7 +35,7 @@ Phase 9 hardening).
     `internal/chunker/` (100%), `internal/conventions/` (91.9%)
 - **Phase 4b** (index core) — `internal/index/*` (83.9%),
   `internal/manifests/*` (90.9%), `internal/extract/*` (93.2%).
-  `sacr index --repo .` produces an index in SQLite or Postgres.
+  `sacr index --repo .` produces a SQLite index.
 - **Phase 5** (overlap) — `internal/overlap/*` (96.4%),
   `internal/gh/*` (87.8%). `sacr overlap` surfaces candidate
   overlapping PRs.
@@ -193,3 +193,5 @@ non-goals section that owns these.
 - Cross-repo dependency graph
 - Multi-language docs (English only for launch)
 - VSCode / JetBrains editor extension
+- Postgres index backend — deferred until a shared-index user exists;
+  `NewStore` rejects `postgres://` DSNs explicitly

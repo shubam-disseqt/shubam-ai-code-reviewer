@@ -40,6 +40,10 @@ inputs:
     description: Override the sacr image (tag or full ref)
     required: false
     default: ghcr.io/shubam-disseqt/sacr:latest
+  db-url:
+    description: SACR_DB_URL override. Point at sqlite:////workspace/<dir>/index.db to persist the index with actions/cache; empty uses a per-job default inside the container
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -64,15 +68,19 @@ runs:
         SACR_PROVIDER: ${{ inputs.provider }}
         SACR_MODEL: ${{ inputs.model }}
         SACR_CHEAP_MODEL: ${{ inputs.cheap-model }}
+        SACR_DB_URL: ${{ inputs.db-url }}
       run: |
         set -euo pipefail
+        if [ -n "${SACR_DB_URL}" ] && [[ "${SACR_DB_URL}" != sqlite:////workspace/* ]]; then
+          echo "::warning::db-url is not under /workspace; only the workspace is mounted into the container, so the index will not persist between jobs"
+        fi
         docker run --rm \
           -v "${GITHUB_WORKSPACE}:/workspace" \
           -w /workspace \
           -e OPENAI_API_KEY -e ANTHROPIC_API_KEY -e DEEPSEEK_API_KEY \
           -e AWS_BEARER_TOKEN_BEDROCK -e AWS_REGION \
           -e GITHUB_TOKEN -e GITHUB_REPOSITORY \
-          -e SACR_PROVIDER -e SACR_MODEL -e SACR_CHEAP_MODEL \
+          -e SACR_PROVIDER -e SACR_MODEL -e SACR_CHEAP_MODEL -e SACR_DB_URL \
           "${{ inputs.image }}" \
           review \
             --pr "${{ inputs.pr-number }}" \

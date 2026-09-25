@@ -36,7 +36,7 @@
 
   <main>
     <h1>GitHub Action</h1>
-    <p class="lede">Drop the <code>shubam-disseqt/shubam-ai-code-reviewer</code> action into a workflow to run <code>sacr review</code> on every pull request. Composite action &mdash; installs the CLI and calls it in the same job.</p>
+    <p class="lede">Drop the <code>shubam-disseqt/shubam-ai-code-reviewer</code> action into a workflow to run <code>sacr review</code> on every pull request. Composite action &mdash; runs the published Docker image against the checked-out workspace.</p>
 
     <h2 id="minimal">Minimal workflow</h2>
     <pre><code># .github/workflows/review.yml
@@ -57,62 +57,28 @@ jobs:
         with:
           fetch-depth: 0        # required so the PR base ref is available
 
-      - uses: shubam-disseqt/shubam-ai-code-reviewer@v0
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}</code></pre>
+      - uses: shubam-disseqt/shubam-ai-code-reviewer@v1
+        with:
+          pr-number: ${{ github.event.pull_request.number }}
+          api-key: ${{ secrets.OPENAI_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}</code></pre>
 
-    <p>That's it for the default path: pull request event, Anthropic provider, comments posted inline on the PR. Everything else is a knob.</p>
+    <p>That's it. Three lines of <code>with:</code> and every PR gets an inline review.</p>
 
     <h2 id="inputs">Inputs</h2>
-    <p>All inputs are optional. Sensible defaults keep the minimal workflow above one env var wide.</p>
     <table>
-      <thead><tr><th>Input</th><th>Purpose</th><th>Default</th></tr></thead>
+      <thead><tr><th>Input</th><th>Default</th><th>Notes</th></tr></thead>
       <tbody>
-        <tr>
-          <td><code>version</code></td>
-          <td>sacr version to install. Empty means latest release.</td>
-          <td>latest</td>
-        </tr>
-        <tr>
-          <td><code>provider</code></td>
-          <td><code>anthropic | openai | bedrock | deepseek | openai-responses</code></td>
-          <td><code>anthropic</code></td>
-        </tr>
-        <tr>
-          <td><code>model</code></td>
-          <td>Model name, e.g. <code>claude-sonnet-4-6</code>.</td>
-          <td>provider default</td>
-        </tr>
-        <tr>
-          <td><code>from</code></td>
-          <td>Base ref for the diff.</td>
-          <td>PR base ref (<code>GITHUB_BASE_REF</code>)</td>
-        </tr>
-        <tr>
-          <td><code>to</code></td>
-          <td>Head ref for the diff.</td>
-          <td>PR head ref (<code>GITHUB_HEAD_REF</code>)</td>
-        </tr>
-        <tr>
-          <td><code>format</code></td>
-          <td><code>stdout | json | github</code>.</td>
-          <td><code>github</code></td>
-        </tr>
-        <tr>
-          <td><code>db-url</code></td>
-          <td><code>SACR_DB_URL</code> passthrough for a persistent index.</td>
-          <td>per-repo SQLite inside the container (rebuilt from changed files each run)</td>
-        </tr>
-        <tr>
-          <td><code>rules-repo</code></td>
-          <td><code>SACR_ORG_RULES_REPO</code> passthrough &mdash; <code>owner/repo[@ref]</code>.</td>
-          <td>none</td>
-        </tr>
-        <tr>
-          <td><code>extra-args</code></td>
-          <td>Additional flags spliced into the <code>sacr review</code> call.</td>
-          <td>&mdash;</td>
-        </tr>
+        <tr><td><code>pr-number</code></td><td><em>(required)</em></td><td>Usually <code>${{ github.event.pull_request.number }}</code>.</td></tr>
+        <tr><td><code>api-key</code></td><td><em>(required)</em></td><td>Routed to the provider's env var.</td></tr>
+        <tr><td><code>github-token</code></td><td><em>(required)</em></td><td><code>secrets.GITHUB_TOKEN</code> is enough for public repos.</td></tr>
+        <tr><td><code>provider</code></td><td><code>openai</code></td><td><code>openai | anthropic | deepseek | bedrock</code></td></tr>
+        <tr><td><code>model</code></td><td><code>gpt-4o-mini</code></td><td>Main-tier model.</td></tr>
+        <tr><td><code>cheap-model</code></td><td><em>(unset &rarr; falls back to <code>model</code>)</em></td><td>Cheap-tier model for triage passes.</td></tr>
+        <tr><td><code>min-severity</code></td><td><code>MEDIUM</code></td><td><code>LOW | MEDIUM | HIGH | CRITICAL</code></td></tr>
+        <tr><td><code>format</code></td><td><code>github</code></td><td><code>stdout | json | github | sarif</code></td></tr>
+        <tr><td><code>image</code></td><td><code>ghcr.io/shubam-disseqt/sacr:latest</code></td><td>Pin to a version tag in production.</td></tr>
+        <tr><td><code>db-url</code></td><td><em>(unset &rarr; per-job index inside the container)</em></td><td><code>SACR_DB_URL</code> override. Use <code>sqlite:////workspace/&lt;dir&gt;/index.db</code> plus <code>actions/cache</code> to persist across runs.</td></tr>
       </tbody>
     </table>
 
@@ -122,65 +88,56 @@ jobs:
   contents: read           # read the repo
   pull-requests: write     # post the review as inline comments
   security-events: write   # optional: upload SARIF to Code Scanning</code></pre>
-
-    <p>If you also want the cross-PR overlap surface, that already reads via <code>pull-requests: read</code>, which <code>write</code> subsumes. Nothing extra to add. <code>security-events: write</code> is only needed when you opt into SARIF upload &mdash; see <a href="/sarif.html">SARIF output</a>.</p>
-
-    <h2 id="code-scanning">Code Scanning integration</h2>
-    <p>Set <code>SACR_UPLOAD_SARIF=1</code> to upload scanner findings (gitleaks / semgrep / govulncheck) to GitHub Code Scanning in the same run that posts inline comments. Scanner-sourced comments are routed to SARIF only; LLM comments continue to land inline. See <a href="/sarif.html">SARIF output</a> for the severity mapping and fingerprint semantics.</p>
-    <pre><code>- uses: shubam-disseqt/shubam-ai-code-reviewer@v0
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-    SACR_UPLOAD_SARIF: "1"</code></pre>
-
-    <div class="note">
-      <strong>Forked PRs.</strong> By default, GitHub gives fork PRs a read-only token &mdash; the action cannot post comments. Configure workflow_run or pull_request_target patterns carefully if you need reviews on fork PRs, and read the <a href="https://securitylab.github.com/research/github-actions-preventing-pwn-requests/">preventing pwn-requests</a> guide first. Do not blindly copy <code>pull_request_target</code> patterns.
-    </div>
+    <p>Cross-PR overlap reads via <code>pull-requests: read</code>, which <code>write</code> subsumes. <code>security-events: write</code> is only needed when you opt into SARIF upload &mdash; see <a href="/sarif.html">SARIF output</a>.</p>
 
     <h2 id="secrets">Secrets</h2>
-    <p>The action needs exactly one secret in the minimal case: the LLM provider's API key. Set it under <strong>Settings &rarr; Secrets and variables &rarr; Actions</strong>.</p>
+    <p>One secret in the minimal case: the LLM provider's API key, passed as <code>api-key</code>. The action routes it to the right env var for the chosen <code>provider</code>:</p>
     <table>
-      <thead><tr><th>Provider</th><th>Secret</th></tr></thead>
+      <thead><tr><th>Provider</th><th>Env var set inside the container</th></tr></thead>
       <tbody>
-        <tr><td><code>anthropic</code></td><td><code>ANTHROPIC_API_KEY</code></td></tr>
         <tr><td><code>openai</code></td><td><code>OPENAI_API_KEY</code></td></tr>
-        <tr><td><code>openai-responses</code></td><td><code>OPENAI_RESPONSES_API_KEY</code></td></tr>
+        <tr><td><code>anthropic</code></td><td><code>ANTHROPIC_API_KEY</code></td></tr>
         <tr><td><code>deepseek</code></td><td><code>DEEPSEEK_API_KEY</code></td></tr>
-        <tr><td><code>bedrock</code></td><td>AWS credential env: <code>AWS_ROLE_ARN</code> via OIDC, or <code>AWS_ACCESS_KEY_ID</code>/<code>AWS_SECRET_ACCESS_KEY</code>.</td></tr>
+        <tr><td><code>bedrock</code></td><td><code>AWS_BEARER_TOKEN_BEDROCK</code></td></tr>
       </tbody>
     </table>
 
-    <h2 id="pinning">Pinning versions</h2>
-    <p>Composite actions pin best by SHA. If you need reproducible reviews across PRs, replace the tag with a commit SHA:</p>
-    <pre><code>- uses: shubam-disseqt/shubam-ai-code-reviewer@&lt;40-char-sha&gt;
+    <h2 id="pinning">Pinning in production</h2>
+    <pre><code>- uses: shubam-disseqt/shubam-ai-code-reviewer@v1
   with:
-    version: v0.1.0             # pin the CLI too</code></pre>
-    <p>Renovate and Dependabot both understand this form and will PR updates on release.</p>
+    pr-number: ${{ github.event.pull_request.number }}
+    image: ghcr.io/shubam-disseqt/sacr:v1.0.0
+    api-key: ${{ secrets.OPENAI_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}</code></pre>
+    <p>Pinning the image plus a version tag on the action (or a full commit SHA) is the safe combination for compliance-sensitive repos. Renovate and Dependabot understand both forms.</p>
 
     <h2 id="patterns">Common patterns</h2>
 
-    <h3>Shared index database</h3>
-    <p>Point every reviewer at the same Postgres so summaries are computed once. Populate the DB from a scheduled indexer job, not from the review workflow itself.</p>
-    <pre><code>- uses: shubam-disseqt/shubam-ai-code-reviewer@v0
-  with:
-    db-url: ${{ secrets.SACR_DB_URL }}
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}</code></pre>
+    <h3>Switch provider</h3>
+    <pre><code>with:
+  provider: anthropic
+  model: claude-sonnet-4-6
+  api-key: ${{ secrets.ANTHROPIC_API_KEY }}</code></pre>
 
-    <h3>Org rules from a separate repo</h3>
-    <pre><code>- uses: shubam-disseqt/shubam-ai-code-reviewer@v0
+    <h3>Persist the index across runs</h3>
+    <p>The container's home is ephemeral, so by default every job re-summarizes the PR's changed files (a few cheap-tier calls). To carry the index between runs, cache a directory under the workspace and point <code>db-url</code> at it. The container runs as uid 1000, so the cached directory must be writable by it. Add <code>.sacr-cache/</code> to the repo's <code>.gitignore</code>.</p>
+    <pre><code>- uses: actions/cache@v4
   with:
-    rules-repo: disseqt/z-review-rules@main
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-    SACR_ORG_RULES_TOKEN: ${{ secrets.RULES_REPO_READ_TOKEN }}</code></pre>
+    path: .sacr-cache
+    key: sacr-index-${{ github.repository }}
+- run: mkdir -p .sacr-cache &amp;&amp; chmod a+rwX .sacr-cache
+- uses: shubam-disseqt/shubam-ai-code-reviewer@v1
+  with:
+    pr-number: ${{ github.event.pull_request.number }}
+    api-key: ${{ secrets.OPENAI_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    db-url: sqlite:////workspace/.sacr-cache/index.db</code></pre>
 
-    <h3>Block merge on blocker findings</h3>
-    <p>Review exit code <code>3</code> means &ldquo;completed, found a blocker.&rdquo; Wire that to a required check:</p>
-    <pre><code>- uses: shubam-disseqt/shubam-ai-code-reviewer@v0
-  env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-# The step fails (exit 3) if any comment has severity: blocker.
-# Mark this job as a required status check to block merges.</code></pre>
+    <h3>Code Scanning</h3>
+    <p>Set <code>SACR_UPLOAD_SARIF=1</code> in the step's <code>env:</code> to upload scanner findings (gitleaks / semgrep / govulncheck) to GitHub Code Scanning in the same run. Scanner-sourced comments route to SARIF only; LLM comments still land inline. See <a href="/sarif.html">SARIF output</a>.</p>
+
+    <h3>Block merge on critical findings</h3>
+    <p>Review exit code <code>3</code> means &ldquo;completed, found a CRITICAL finding.&rdquo; Mark the review job as a required status check and merges are blocked until it clears.</p>
 
     <h3>Cost-limit runs</h3>
     <p>Skip AI review on trivial changes (docs, generated files) by gating the whole job on a paths filter:</p>
@@ -190,6 +147,10 @@ jobs:
       - '**/*.md'
       - '**/docs/**'
       - '**/*.gen.go'</code></pre>
+
+    <div class="note">
+      <strong>Forked PRs.</strong> <code>secrets.*</code> are not available on <code>pull_request</code> runs from forks, and the token is read-only. Use <code>pull_request_target</code> only if you understand the privilege-escalation risk (never <code>checkout</code> untrusted refs on that trigger), or gate the job on <code>github.event.pull_request.head.repo.full_name == github.repository</code>.
+    </div>
 
     <h2 id="troubleshooting">When it doesn't post comments</h2>
     <p>The two most common causes:</p>
