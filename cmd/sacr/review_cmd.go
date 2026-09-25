@@ -189,13 +189,16 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	}
 
 	// 3.1) index store — always on. Changed files the store hasn't seen are
-	// summarized now so this review already gets indexed context.
+	// summarized now so this review already gets indexed context. Files
+	// outside the diff that import a changed package are indexed too, so
+	// the store holds the edges blast radius needs.
 	store, err := openStore(ctx, opts.Repo)
 	if err != nil {
 		return fmt.Errorf("index store: %w", err)
 	}
 	defer store.Close()
-	indexMissing(ctx, store, tiers.Cheap, tiers.CheapModel, opts.Repo, kept, logger)
+	importers := findGoImporters(ctx, opts.Repo, changedPathsFromDiffs(kept))
+	indexMissing(ctx, store, tiers.Cheap, tiers.CheapModel, opts.Repo, kept, importerPaths(importers), logger)
 
 	// 3.5) deterministic scanners — best-effort, tolerant of missing
 	// binaries. Findings tagged Source="scanner:<tool>" enter the same
@@ -233,7 +236,7 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	}
 
 	// 5) context
-	reviewCtx, err := buildContext(ctx, opts.Repo, kept, store)
+	reviewCtx, err := buildContext(ctx, opts.Repo, kept, store, importers)
 	if err != nil {
 		logutil.WithStage(logger, "context").Warn("continuing without context", "err", err.Error())
 		reviewCtx = ""
@@ -481,8 +484,10 @@ func loadRules(ctx context.Context, kept []model.Diff) (string, error) {
 }
 
 // buildContext produces the markdown "codebase context" block. reviewctx
-// augments the indexed rows with JIT extraction when the index is thin.
-func buildContext(ctx context.Context, repo string, kept []model.Diff, store index.Store) (string, error) {
+// augments the indexed rows with JIT extraction when the index is thin;
+// the deterministic importer list is appended so untouched callers are
+// visible even on a fresh index.
+func buildContext(ctx context.Context, repo string, kept []model.Diff, store index.Store, importers []Importer) (string, error) {
 	newFileContent := make(map[string]string, len(kept))
 	changed := changedPathsFromDiffs(kept)
 	for _, d := range kept {
@@ -494,12 +499,31 @@ func buildContext(ctx context.Context, repo string, kept []model.Diff, store ind
 			newFileContent[p] = d.NewFileContent
 		}
 	}
-	return reviewctx.Build(ctx, reviewctx.Options{
+	out, err := reviewctx.Build(ctx, reviewctx.Options{
 		RepoRoot:       repo,
 		ChangedPaths:   changed,
 		NewFileContent: newFileContent,
 		Store:          store,
 	})
+	if err != nil {
+		return "", err
+	}
+	if block := renderImporters(importers); block != "" {
+		if out == "" {
+			out = "## Codebase context\n\n"
+		}
+		out = strings.TrimRight(out, "\n") + "\n\n" + block
+	}
+	return out, nil
+}
+
+// importerPaths flattens importers to their repo-relative paths.
+func importerPaths(imps []Importer) []string {
+	out := make([]string, 0, len(imps))
+	for _, im := range imps {
+		out = append(out, im.Path)
+	}
+	return out
 }
 
 // changedPathsFromDiffs extracts new (or fallback old) paths from a diff slice.

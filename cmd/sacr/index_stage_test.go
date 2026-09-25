@@ -107,7 +107,7 @@ func TestIndexMissingSummarizesUnseenFilesOnly(t *testing.T) {
 	}
 	var buf bytes.Buffer
 
-	indexMissing(context.Background(), store, stub, "cheap-model", repo, kept, testLogger(&buf))
+	indexMissing(context.Background(), store, stub, "cheap-model", repo, kept, nil, testLogger(&buf))
 
 	if stub.lastReq.Model != "cheap-model" {
 		t.Errorf("summaries must run on the cheap tier, got model %q", stub.lastReq.Model)
@@ -134,7 +134,7 @@ func TestIndexMissingNoopWhenAllPresent(t *testing.T) {
 	stub := &stubLLM{err: errors.New("must not be called")}
 	var buf bytes.Buffer
 
-	indexMissing(context.Background(), store, stub, "m", t.TempDir(), []model.Diff{{NewPath: "a.go"}}, testLogger(&buf))
+	indexMissing(context.Background(), store, stub, "m", t.TempDir(), []model.Diff{{NewPath: "a.go"}}, nil, testLogger(&buf))
 
 	if len(stub.lastReq.Messages) != 0 {
 		t.Error("LLM called although every file already had a summary")
@@ -150,9 +150,23 @@ func TestIndexMissingLLMFailureIsNonFatal(t *testing.T) {
 	stub := &stubLLM{err: errors.New("provider down")}
 	var buf bytes.Buffer
 
-	indexMissing(context.Background(), newTestStore(t), stub, "m", repo, []model.Diff{{NewPath: "new.go"}}, testLogger(&buf))
+	indexMissing(context.Background(), newTestStore(t), stub, "m", repo, []model.Diff{{NewPath: "new.go"}}, nil, testLogger(&buf))
 
 	if !strings.Contains(buf.String(), "indexed 0 file(s)") {
 		t.Errorf("stage must report and continue, got %q", buf.String())
+	}
+}
+
+func TestIndexMissingIndexesExtraImporters(t *testing.T) {
+	repo := t.TempDir()
+	writeRepoFile(t, repo, "caller.go")
+	store := newTestStore(t, "changed.go")
+	stub := &stubLLM{response: `{"files":[{"path":"caller.go","language":"go","summary":"stubbed"}]}`}
+	var buf bytes.Buffer
+
+	indexMissing(context.Background(), store, stub, "m", repo, []model.Diff{{NewPath: "changed.go"}}, []string{"caller.go"}, testLogger(&buf))
+
+	if _, err := store.GetSummary(context.Background(), "caller.go"); err != nil {
+		t.Errorf("importer should be indexed alongside the diff: %v", err)
 	}
 }

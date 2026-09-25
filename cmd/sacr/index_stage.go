@@ -47,19 +47,21 @@ func missingSummaryPaths(ctx context.Context, store index.Store, changed []strin
 	return missing, nil
 }
 
-// indexMissing summarizes changed files the store has never seen, so this
-// review (not the next one) gets indexed context. Deleted files are skipped;
-// their rows are pruned by `sacr index`. Best-effort: failures log and the
-// review continues on whatever the store already holds.
-func indexMissing(ctx context.Context, store index.Store, client llm.LLMClient, modelName, repo string, kept []model.Diff, logger *slog.Logger) {
+// indexMissing summarizes changed files (plus extra, e.g. their importers)
+// the store has never seen, so this review (not the next one) gets indexed
+// context. Deleted files are skipped; their rows are pruned by `sacr index`.
+// Best-effort: failures log and the review continues on whatever the store
+// already holds.
+func indexMissing(ctx context.Context, store index.Store, client llm.LLMClient, modelName, repo string, kept []model.Diff, extra []string, logger *slog.Logger) {
 	log := logutil.WithStage(logger, "index")
-	live := make([]string, 0, len(kept))
+	live := make([]string, 0, len(kept)+len(extra))
 	for _, d := range kept {
 		if d.IsDeleted || d.NewPath == "" || d.NewPath == "/dev/null" {
 			continue
 		}
 		live = append(live, d.NewPath)
 	}
+	live = append(live, extra...)
 	missing, err := missingSummaryPaths(ctx, store, live)
 	if err != nil {
 		log.Warn("skipping", "err", err.Error())
