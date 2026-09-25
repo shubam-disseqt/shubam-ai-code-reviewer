@@ -348,7 +348,15 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	// (owner, repo, pr); unchanged file → carry, matching fp → keep,
 	// touched file with no match → resolved (dropped).
 	owner, repo := ownerRepoFromEnv()
-	carry := runCarryover(comments, changedPathsFromDiffs(kept), owner, repo, opts.PR, logger)
+	ghClient, _ := newGithubClient()
+	var existing []gh.ExistingComment
+	if ghClient != nil && opts.PR > 0 {
+		var lerr error
+		if existing, lerr = ghClient.ListReviewComments(ctx, owner, repo, opts.PR); lerr != nil {
+			logutil.WithStage(logger, "findings").Warn("could not list PR comments for carry-over", "err", lerr.Error())
+		}
+	}
+	carry := runCarryover(comments, changedPathsFromDiffs(kept), owner, repo, opts.PR, existing, logger)
 	comments = carry.Comments
 	metrics.CarriedFindings = carry.Counts.Carried
 	metrics.ResolvedFindings = carry.Counts.Resolved
@@ -370,7 +378,6 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts *reviewOpts) error 
 	pkgDiagram := computeDepGraph(opts.Repo, kept)
 
 	// 13) emit
-	ghClient, _ := newGithubClient()
 	// GitHub's PR-comment API rejects an empty commit_id. Resolve the head
 	// SHA locally from the range's --to ref (or HEAD if unset). This
 	// assumes the operator pushed the same commit to the PR head — true

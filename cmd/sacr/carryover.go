@@ -6,9 +6,11 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/findings"
 	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/fingerprint"
+	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/gh"
 	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/logutil"
 	"github.com/shubam-disseqt/shubam-ai-code-reviewer/internal/model"
 )
@@ -26,11 +28,14 @@ type carryoverResult struct {
 }
 
 // runCarryover reconciles fresh review comments against persisted findings
-// for (owner, repo, pr) and returns the merged comment stream. Best-effort:
-// any failure returns the fresh comments unchanged and logs via `logger`.
+// for (owner, repo, pr) and returns the merged comment stream. When no
+// local findings file exists (ephemeral CI runners), the previous state is
+// rebuilt from the fingerprint markers sacr left on the PR's existing
+// comments. Best-effort: any failure returns the fresh comments unchanged
+// and logs via `logger`.
 //
 // Skipped when pr == 0 (workspace / local mode has no stable identity).
-func runCarryover(comments []model.LlmComment, changedPaths []string, owner, repo string, pr int, logger *slog.Logger) carryoverResult {
+func runCarryover(comments []model.LlmComment, changedPaths []string, owner, repo string, pr int, existing []gh.ExistingComment, logger *slog.Logger) carryoverResult {
 	res := carryoverResult{Comments: comments}
 	if pr == 0 || owner == "" || repo == "" {
 		return res
@@ -48,6 +53,11 @@ func runCarryover(comments []model.LlmComment, changedPaths []string, owner, rep
 	if err != nil {
 		log.Warn("skipping carry-over", "err", err.Error())
 		return res
+	}
+	if len(previous) == 0 {
+		if previous = findingsFromPRComments(existing); len(previous) > 0 {
+			log.Info(fmt.Sprintf("recovered %d finding(s) from PR comment markers", len(previous)), "recovered", len(previous))
+		}
 	}
 
 	fresh := make([]findings.Finding, 0, len(comments))
@@ -73,11 +83,13 @@ func runCarryover(comments []model.LlmComment, changedPaths []string, owner, rep
 		log.Warn("save failed", "err", err.Error())
 	}
 
-	// Legacy grep pattern "N carried, N resolved, N new" preserved in the
-	// message; structured attrs surface the same counts for JSON mode.
+	// Legacy grep pattern "N carried, ..., N resolved, N new" preserved in
+	// the message; structured attrs surface the same counts for JSON mode.
+	// "kept" = same finding, same file, still present on a touched file.
 	log.Info(
-		fmt.Sprintf("%d carried, %d resolved, %d new", counts.Carried, counts.Resolved, counts.New),
+		fmt.Sprintf("%d carried, %d kept, %d resolved, %d new", counts.Carried, counts.Kept, counts.Resolved, counts.New),
 		"carried", counts.Carried,
+		"kept", counts.Kept,
 		"resolved", counts.Resolved,
 		"new", counts.New,
 	)
@@ -92,6 +104,28 @@ func runCarryover(comments []model.LlmComment, changedPaths []string, owner, rep
 	}
 	res.Counts = counts
 	return res
+}
+
+// findingsFromPRComments rebuilds the previous findings set from the
+// `<!-- sacr:fp:HEX -->` markers on comments already posted to the PR. Only
+// the fingerprint and path matter to Reconcile; the rest is placeholder.
+func findingsFromPRComments(existing []gh.ExistingComment) []findings.Finding {
+	now := time.Now().UTC()
+	var out []findings.Finding
+	for _, e := range existing {
+		fp := extractSacrFingerprint(e.Body)
+		if fp == "" {
+			continue
+		}
+		out = append(out, findings.Finding{
+			Fingerprint: fp,
+			Comment:     model.LlmComment{Path: e.Path, StartLine: e.Line, EndLine: e.Line},
+			State:       findings.StateKeep,
+			FirstSeen:   now,
+			LastSeen:    now,
+		})
+	}
+	return out
 }
 
 // symbolFor returns a stable per-comment symbol. LlmComment doesn't carry
