@@ -182,7 +182,7 @@ func TestResolveDiffsWorkspaceMode(t *testing.T) {
 }
 
 func TestBuildContextEmptyKept(t *testing.T) {
-	got, err := buildContext(context.Background(), filepath.Join(t.TempDir()), nil, nil)
+	got, err := buildContext(context.Background(), filepath.Join(t.TempDir()), nil, nil, nil)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
